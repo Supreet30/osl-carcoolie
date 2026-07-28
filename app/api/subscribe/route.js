@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 
 const EMAIL_RE = /^[^\s@,"]+@[^\s@,"]+\.[^\s@,"]+$/;
+const MAX_EMAIL_LENGTH = 254; // RFC 5321 limit
 const GOOGLE_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzyBglPo_To1ocv8AbkxoPpOeQZZ6QhSMW2WO8jlN9wFlaymzCSRMLAHbiXH866C-Bk/exec";
 
 export async function POST(request) {
   const { email } = await request.json();
 
-  if (typeof email !== "string" || !EMAIL_RE.test(email)) {
+  if (
+    typeof email !== "string" ||
+    email.length > MAX_EMAIL_LENGTH ||
+    !EMAIL_RE.test(email)
+  ) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
 
