@@ -36,8 +36,8 @@ export default function NewsletterBar() {
 
   return (
     <>
-      <section className="bg-[#0b1e42] border-b-4 border-red-600 px-6 py-6 md:px-16 md:py-7">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 md:flex-row md:justify-between">
+      <section className="flex flex-1 items-center bg-[#0b1e42] border-b-4 border-red-600 px-6 py-10 md:px-16 md:py-14">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:flex-row md:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border-2 border-red-400 bg-red-600">
               <svg

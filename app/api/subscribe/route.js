@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { mkdir, appendFile, access as fsAccess } from "fs/promises";
+import { mkdir, appendFile, readFile, access as fsAccess } from "fs/promises";
 import path from "path";
 import { put, head } from "@vercel/blob";
 
@@ -51,6 +51,42 @@ async function appendToLocalFile(row) {
   }
 
   await appendFile(CSV_PATH, fileExists ? row : CSV_HEADER + row, "utf8");
+}
+
+async function readFromBlob() {
+  try {
+    const blob = await head(BLOB_PATHNAME);
+    return await (await fetch(blob.url)).text();
+  } catch {
+    return CSV_HEADER;
+  }
+}
+
+async function readFromLocalFile() {
+  try {
+    return await readFile(CSV_PATH, "utf8");
+  } catch {
+    return CSV_HEADER;
+  }
+}
+
+export async function GET(request) {
+  const secret = request.nextUrl.searchParams.get("secret");
+
+  if (!process.env.SUBSCRIBERS_SECRET || secret !== process.env.SUBSCRIBERS_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const csv = process.env.BLOB_READ_WRITE_TOKEN
+    ? await readFromBlob()
+    : await readFromLocalFile();
+
+  return new NextResponse(csv, {
+    headers: {
+      "Content-Type": "text/csv",
+      "Content-Disposition": 'attachment; filename="subscribers.csv"',
+    },
+  });
 }
 
 export async function POST(request) {

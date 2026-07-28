@@ -7,10 +7,10 @@ export default function Home() {
       <Image
         src="/landing-page.png"
         alt="OSL Car Coolie - Website Coming Soon"
-        width={720}
-        height={412}
+        width={2620}
+        height={1024}
         priority
-        className="h-auto w-full"
+        className="w-full h-auto shrink-0"
       />
       <NewsletterBar />
     </div>
