@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const EMAIL_RE = /^[^\s@,"]+@[^\s@,"]+\.[^\s@,"]+$/;
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbw-jkhXWIQ-0sY0z7gVdHDmcjl77j9G4PjcaHYPRJjp6FIcl29BmbO-whgaVBLDcxjG/exec";
+  "https://script.google.com/macros/s/AKfycbzyBglPo_To1ocv8AbkxoPpOeQZZ6QhSMW2WO8jlN9wFlaymzCSRMLAHbiXH866C-Bk/exec";
 
 export async function POST(request) {
   const { email } = await request.json();
