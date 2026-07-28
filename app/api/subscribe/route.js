@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { mkdir, appendFile, readFile, access as fsAccess } from "fs/promises";
 import path from "path";
-import { put, head } from "@vercel/blob";
+import { put, get, BlobPreconditionFailedError } from "@vercel/blob";
 
 const EMAIL_RE = /^[^\s@,"]+@[^\s@,"]+\.[^\s@,"]+$/;
 const CSV_HEADER = "email,submitted_at\n";
 const BLOB_PATHNAME = "subscribers.csv";
+const MAX_WRITE_ATTEMPTS = 3;
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const CSV_PATH = path.join(DATA_DIR, "subscribers.csv");
@@ -18,25 +19,40 @@ function toRow(email) {
   return [escapeCsvField(email), escapeCsvField(new Date().toISOString())].join(",") + "\n";
 }
 
-// Production (Vercel): the filesystem is read-only/ephemeral per request,
-// so persist the CSV as a Vercel Blob instead of a local file.
+function streamToText(stream) {
+  return new Response(stream).text();
+}
+
+// Production (Vercel): the filesystem is read-only/ephemeral per request, so
+// persist the CSV as a private Vercel Blob instead of a local file. Reads
+// bypass the CDN cache (useCache: false) and writes use ifMatch on the
+// blob's ETag so two simultaneous submissions can't silently clobber one
+// another — a conflicting write retries with the freshly-read content.
 async function appendToBlob(row) {
-  let existing = CSV_HEADER;
-  try {
-    const blob = await head(BLOB_PATHNAME);
-    existing = await (await fetch(blob.url)).text();
-  } catch {
-    // no blob yet, start fresh with just the header
+  for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt++) {
+    const existing = await get(BLOB_PATHNAME, { access: "private", useCache: false });
+    const currentText = existing ? await streamToText(existing.stream) : CSV_HEADER;
+    const etag = existing?.blob.etag;
+
+    const updated = currentText.endsWith("\n") ? currentText + row : `${currentText}\n${row}`;
+
+    try {
+      await put(BLOB_PATHNAME, updated, {
+        access: "private",
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: "text/csv",
+        ...(etag ? { ifMatch: etag } : {}),
+      });
+      return;
+    } catch (err) {
+      const isLastAttempt = attempt === MAX_WRITE_ATTEMPTS - 1;
+      if (err instanceof BlobPreconditionFailedError && !isLastAttempt) {
+        continue; // someone else wrote in between; retry with fresh content
+      }
+      throw err;
+    }
   }
-
-  const updated = existing.endsWith("\n") ? existing + row : `${existing}\n${row}`;
-
-  await put(BLOB_PATHNAME, updated, {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "text/csv",
-  });
 }
 
 // Local dev: no Blob token available, so fall back to a file on disk.
@@ -54,12 +70,8 @@ async function appendToLocalFile(row) {
 }
 
 async function readFromBlob() {
-  try {
-    const blob = await head(BLOB_PATHNAME);
-    return await (await fetch(blob.url)).text();
-  } catch {
-    return CSV_HEADER;
-  }
+  const existing = await get(BLOB_PATHNAME, { access: "private", useCache: false });
+  return existing ? await streamToText(existing.stream) : CSV_HEADER;
 }
 
 async function readFromLocalFile() {
@@ -96,12 +108,28 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
 
+  // On Vercel the filesystem is read-only, so a local-file write would only
+  // fail there if no Blob store is connected yet. Catch that case explicitly
+  // instead of letting it crash into a generic 500.
+  if (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error("BLOB_READ_WRITE_TOKEN is missing: connect a Blob store to this project in the Vercel dashboard (Storage -> Create Database -> Blob).");
+    return NextResponse.json(
+      { error: "Email storage isn't configured yet. Please try again later." },
+      { status: 503 }
+    );
+  }
+
   const row = toRow(email);
 
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    await appendToBlob(row);
-  } else {
-    await appendToLocalFile(row);
+  try {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      await appendToBlob(row);
+    } else {
+      await appendToLocalFile(row);
+    }
+  } catch (err) {
+    console.error("Failed to save subscriber email:", err);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });
