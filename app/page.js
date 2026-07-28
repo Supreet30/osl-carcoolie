@@ -10,7 +10,7 @@ export default function Home() {
         width={2620}
         height={1024}
         priority
-        className="w-full h-auto shrink-0"
+        className="w-full h-auto shrink-0 grow-0"
       />
       <NewsletterBar />
     </div>
