@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Continuous logo-strip scroll (Our Partners section). The track renders
+   the logo list twice back to back and slides exactly -50%, so the loop
+   seam is invisible. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
