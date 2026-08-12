@@ -64,3 +64,19 @@ body {
     transform: translateX(0);
   }
 }
+
+/* Meet The Team carousel (team page) — cards slide in from whichever side
+   matches the arrow that was pressed. --team-slide-from is set inline per
+   click direction, and the key includes the rotation offset so React
+   remounts every card and replays this on each click. Transform-only (no
+   opacity dip) — animating opacity here made all 5 cards flash to
+   invisible in sync on every click, which read as a flicker rather than a
+   slide. */
+@keyframes teamSlide {
+  from {
+    transform: translateX(var(--team-slide-from, 24px));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
