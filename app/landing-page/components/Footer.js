@@ -2,23 +2,27 @@ import Image from "next/image";
 import Link from "next/link";
 import { Globe, Share2 } from "lucide-react";
 
+// Absolute (not bare-hash) hrefs — this Footer is shared across routes
+// (landing page + contact page), so section links must route back to
+// /landing-page's anchors rather than trying to scroll within whatever
+// page currently renders the Footer.
 const LINK_GROUPS = [
   {
     title: "Services",
     links: [
-      { label: "Enclosed Transport", href: "#services" },
-      { label: "Open Carrier", href: "#services" },
-      { label: "Dealer Logistics", href: "#services" },
-      { label: "Auction Transport", href: "#services" },
+      { label: "Enclosed Transport", href: "/landing-page#services" },
+      { label: "Open Carrier", href: "/landing-page#services" },
+      { label: "Dealer Logistics", href: "/landing-page#services" },
+      { label: "Auction Transport", href: "/landing-page#services" },
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "About Us", href: "#about" },
+      { label: "About Us", href: "/landing-page#about" },
       { label: "Careers", href: "#" },
-      { label: "Blog", href: "#blogs" },
-      { label: "Contact", href: "#contact" },
+      { label: "Blog", href: "/landing-page#blogs" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {

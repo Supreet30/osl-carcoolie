@@ -36,3 +36,17 @@ body {
     transform: translateX(-50%);
   }
 }
+
+/* Content crossfade when a service card's details swap in (Explore Services
+   section on the services page) — keyed by service title so React remounts
+   and replays this on every selection change. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

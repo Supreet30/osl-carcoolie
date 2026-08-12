@@ -3,13 +3,44 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Truck } from "lucide-react";
 
+// Absolute (not bare-hash) hrefs — this Navbar is shared across routes
+// (landing page + contact page), so section links must route back to
+// /landing-page's anchors rather than trying to scroll within whatever
+// page currently renders the Navbar.
 const NAV_LINKS = [
-  { label: "Home", href: "#home" },
-  { label: "Services", href: "#services", chevron: true },
-  { label: "Resources", href: "#resources", chevron: true, dropdown: true },
-  { label: "About Us", href: "#about" },
-  { label: "Blogs", href: "#blogs" },
+  { label: "Home", href: "/landing-page#home" },
+  { label: "Services", href: "/services", chevron: true, dropdown: "services" },
+  { label: "Resources", href: "/landing-page#resources", chevron: true, dropdown: "resources" },
+  { label: "About Us", href: "/about-us" },
+  { label: "Blogs", href: "/landing-page#blogs" },
+];
+
+const SERVICES_HEADING = {
+  label: "Services",
+  description: "Choose the right transport for your vehicle",
+};
+
+const SERVICES_GROUPS = [
+  {
+    heading: "For Business to Customers",
+    links: [
+      { label: "Enclosed Car Carrier", href: "/services" },
+      { label: "Open Car Carrier", href: "/services" },
+      { label: "Full Truck Car Carrier", href: "/services" },
+      { label: "Half Truck Car Carrier", href: "/services" },
+    ],
+  },
+  {
+    heading: "For Business to Business",
+    links: [
+      { label: "Dealer Stock Transfer", href: "/services" },
+      { label: "Manufacturer Plant Dispatch", href: "/services" },
+      { label: "Fleet Relocation", href: "/services" },
+      { label: "Bulk Vehicle Logistics", href: "/services" },
+    ],
+  },
 ];
 
 const RESOURCES_HEADING = {
@@ -27,7 +58,7 @@ const RESOURCE_ITEMS = [
   {
     label: "Blogs",
     description: "Latest updates, tips & industry insights",
-    href: "#blogs",
+    href: "/landing-page#blogs",
     icon: (
       <>
         <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z" strokeLinejoin="round" />
@@ -39,7 +70,7 @@ const RESOURCE_ITEMS = [
   {
     label: "Case Studies",
     description: "Real stories. Real results.",
-    href: "#case-studies",
+    href: "/landing-page#case-studies",
     icon: (
       <>
         <rect x="3.5" y="7.5" width="17" height="12" rx="1.8" strokeLinejoin="round" />
@@ -133,7 +164,66 @@ function ResourcesDropdown() {
             <p className="mt-0.5 text-xs text-slate-500">Get a free quote in less than 2 minutes.</p>
           </div>
           <Link
-            href="#contact"
+            href="/contact"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-600 px-3.5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-red-700"
+          >
+            Get Free Quote
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServicesDropdown() {
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-full z-40 w-140 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+      <div className="mx-auto -mb-2.25 h-4 w-4 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
+      <div className="rounded-[28px] bg-white p-6 shadow-2xl ring-1 ring-slate-900/5">
+        <div className="flex items-center gap-4 pb-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+            <Truck className="h-5 w-5" strokeWidth={1.8} />
+          </span>
+          <span>
+            <span className="block text-base font-extrabold text-[#0b1e42]">
+              {SERVICES_HEADING.label}
+            </span>
+            <span className="block text-sm text-slate-500">{SERVICES_HEADING.description}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6 border-t border-slate-100 pt-4">
+          {SERVICES_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <p className="px-2 text-xs font-extrabold uppercase tracking-wide text-[#0b1e42]">
+                {group.heading}
+              </p>
+              <ul className="mt-1">
+                {group.links.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="block rounded-xl px-2 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-red-600"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-red-50 p-3">
+          <div className="flex-1">
+            <p className="text-sm font-extrabold leading-snug text-[#0b1e42]">
+              Need help transporting your vehicle?
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">Get a free quote in less than 2 minutes.</p>
+          </div>
+          <Link
+            href="/contact"
             className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-600 px-3.5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-red-700"
           >
             Get Free Quote
@@ -151,7 +241,7 @@ export default function Navbar() {
   return (
     <header className="absolute inset-x-0 top-0 z-30 px-4 pt-4 sm:px-6 sm:pt-6">
       <nav className="mx-auto flex max-w-6xl items-center justify-between rounded-full bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur sm:px-6">
-        <Link href="#home" className="shrink-0">
+        <Link href="/landing-page#home" className="shrink-0">
           <Image
             src="/carcoolie_logo.png"
             alt="Car Coolie"
@@ -172,13 +262,14 @@ export default function Navbar() {
                 {link.label}
                 {link.chevron && <ChevronDown className="h-4 w-4" />}
               </Link>
-              {link.dropdown && <ResourcesDropdown />}
+              {link.dropdown === "resources" && <ResourcesDropdown />}
+              {link.dropdown === "services" && <ServicesDropdown />}
             </li>
           ))}
         </ul>
 
         <Link
-          href="#contact"
+          href="/contact"
           className="hidden shrink-0 rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 md:inline-block"
         >
           Contact Us
@@ -223,7 +314,7 @@ export default function Navbar() {
             ))}
           </ul>
           <Link
-            href="#contact"
+            href="/contact"
             onClick={() => setOpen(false)}
             className="mt-3 block rounded-full bg-red-600 px-6 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-red-700"
           >
