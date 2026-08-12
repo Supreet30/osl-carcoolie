@@ -10,11 +10,10 @@ import { Truck } from "lucide-react";
 // /landing-page's anchors rather than trying to scroll within whatever
 // page currently renders the Navbar.
 const NAV_LINKS = [
-  { label: "Home", href: "/landing-page#home" },
+  { label: "Home", href: "/landing-page" },
   { label: "Services", href: "/services", chevron: true, dropdown: "services" },
-  { label: "Resources", href: "/landing-page#resources", chevron: true, dropdown: "resources" },
+  { label: "Resources", href: "/resources", chevron: true, dropdown: "resources" },
   { label: "About Us", href: "/about-us" },
-  { label: "Blogs", href: "/landing-page#blogs" },
 ];
 
 const SERVICES_HEADING = {
@@ -58,7 +57,7 @@ const RESOURCE_ITEMS = [
   {
     label: "Blogs",
     description: "Latest updates, tips & industry insights",
-    href: "/landing-page#blogs",
+    href: "/blog",
     icon: (
       <>
         <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z" strokeLinejoin="round" />
@@ -70,7 +69,7 @@ const RESOURCE_ITEMS = [
   {
     label: "Case Studies",
     description: "Real stories. Real results.",
-    href: "/landing-page#case-studies",
+    href: "/case-studies",
     icon: (
       <>
         <rect x="3.5" y="7.5" width="17" height="12" rx="1.8" strokeLinejoin="round" />
