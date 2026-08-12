@@ -50,3 +50,17 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Auto-advancing blog/case-study/visual item in the Explore Resources
+   section — each new item enters from the right as the previous one is
+   replaced, keyed by item index so React remounts and replays this. */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
