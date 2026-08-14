@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Truck } from "lucide-react";
@@ -116,7 +116,7 @@ function ChevronRight({ className }) {
 
 function ResourcesDropdown() {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-full z-40 w-95 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+    <div className="pointer-events-none absolute left-1/2 top-10 z-40 w-95 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
       <div className="mx-auto -mb-2.25 h-4 w-4 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
       <div className="rounded-[28px] bg-white p-3 shadow-2xl ring-1 ring-slate-900/5">
         <div className="flex items-center gap-4 px-2 pb-4 pt-2">
@@ -177,7 +177,7 @@ function ResourcesDropdown() {
 
 function ServicesDropdown() {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-full z-40 w-140 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+    <div className="pointer-events-none absolute left-1/2 top-10 z-40 w-140 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
       <div className="mx-auto -mb-2.25 h-4 w-4 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
       <div className="rounded-[28px] bg-white p-6 shadow-2xl ring-1 ring-slate-900/5">
         <div className="flex items-center gap-4 pb-4">
@@ -236,22 +236,53 @@ function ServicesDropdown() {
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    lastScrollY.current = window.scrollY;
+
+    function handleScroll() {
+      const currentY = window.scrollY;
+      const delta = currentY - lastScrollY.current;
+
+      if (currentY < 80) {
+        // Always show near the top of the page.
+        setVisible(true);
+      } else if (delta > 4) {
+        // Scrolling down — hide.
+        setVisible(false);
+      } else if (delta < -4) {
+        // Scrolling up — reveal.
+        setVisible(true);
+      }
+
+      lastScrollY.current = currentY;
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <header className="absolute inset-x-0 top-0 z-30 px-4 pt-4 sm:px-6 sm:pt-6">
+    <header
+      className={`fixed inset-x-0 top-0 z-30 px-4 pt-4 transition-transform duration-300 sm:px-6 sm:pt-6 ${
+        visible ? "translate-y-0" : "-translate-y-full"
+      }`}
+    >
       <nav className="mx-auto flex max-w-6xl items-center justify-between rounded-full bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur sm:px-6">
         <Link href="/landing-page#home" className="shrink-0">
           <Image
             src="/carcoolie_logo.png"
             alt="Car Coolie"
-            width={150}
-            height={46}
+            width={230}
+            height={70}
             priority
-            className="h-9 w-auto sm:h-10"
+            className="h-14 w-auto sm:h-16"
           />
         </Link>
 
-        <ul className="hidden items-center gap-8 text-base font-medium text-slate-800 md:flex">
+        <ul className="hidden items-center gap-8 text-lg font-medium text-slate-800 md:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.href} className={link.dropdown ? "group relative" : undefined}>
               <Link
@@ -269,7 +300,7 @@ export default function Navbar() {
 
         <Link
           href="/contact"
-          className="hidden shrink-0 rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 md:inline-block"
+          className="hidden shrink-0 rounded-full bg-red-600 px-6 py-2.5 text-lg font-semibold text-white transition-colors hover:bg-red-700 md:inline-block"
         >
           Contact Us
         </Link>
