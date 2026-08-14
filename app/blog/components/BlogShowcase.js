@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   BookOpen,
   Building2,
@@ -12,6 +13,7 @@ import {
   Tag,
   TrendingUp,
 } from "lucide-react";
+import { BLOG_POSTS } from "../posts";
 
 const CATEGORIES = [
   { id: "all", label: "All Posts", icon: LayoutGrid },
@@ -48,67 +50,10 @@ const HIGHLIGHTS = [
   },
 ];
 
-// Same reasoning as HIGHLIGHTS — the screenshot's second row of four cards
-// was an exact duplicate of the first row, so all 8 slots here get distinct
-// dummy articles instead of repeating four twice.
-const ARTICLES = [
-  {
-    category: "Industry Insights",
-    tag: "Industry",
-    title: "Top 5 Benefits of Using Professional Car Transport Services",
-    date: "May 20, 2025",
-    image: "/servicehero.png",
-  },
-  {
-    category: "Car Care",
-    tag: "Guides",
-    title: "How to Prepare Your Car for Long-Distance Transport",
-    date: "May 18, 2025",
-    image: "/contact-hero-truck.png",
-  },
-  {
-    category: "Company Update",
-    tag: "Company",
-    title: "CarCoolie Expands Services to 28+ States Across India",
-    date: "May 15, 2025",
-    image: "/core.jpg",
-  },
-  {
-    category: "Tips & Advice",
-    tag: "Guides",
-    title: "Common Myths About Car Transport – Busted!",
-    date: "May 12, 2025",
-    image: "/servicehero.png",
-  },
-  {
-    category: "Industry Insights",
-    tag: "Industry",
-    title: "Open vs Enclosed Transport: Which One Should You Choose?",
-    date: "May 10, 2025",
-    image: "/contact-hero-truck.png",
-  },
-  {
-    category: "Car Care",
-    tag: "Guides",
-    title: "5 Signs You Need a Professional Car Carrier",
-    date: "May 8, 2025",
-    image: "/core.jpg",
-  },
-  {
-    category: "Company Update",
-    tag: "Company",
-    title: "CarCoolie Crosses 75,000 Vehicles Delivered",
-    date: "May 5, 2025",
-    image: "/servicehero.png",
-  },
-  {
-    category: "Tips & Advice",
-    tag: "Guides",
-    title: "Understanding Vehicle Insurance During Transit",
-    date: "May 2, 2025",
-    image: "/contact-hero-truck.png",
-  },
-];
+// Real per-post data (title, image, author, date, body content) lives in
+// ../posts.js so this listing and each /blog/[slug] detail page stay in
+// sync — this view only needs the summary fields.
+const ARTICLES = BLOG_POSTS;
 
 const ARTICLES_PER_PAGE = 4;
 
@@ -245,10 +190,11 @@ export default function BlogShowcase() {
           {visibleArticles.length > 0 ? (
             <>
               <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-                {visibleArticles.map(({ category, tag, title, date, image }) => (
-                  <div
-                    key={title}
-                    className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100"
+                {visibleArticles.map(({ slug, category, tag, title, date, image }) => (
+                  <Link
+                    key={slug}
+                    href={`/blog/${slug}`}
+                    className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-lg"
                   >
                     <div className="relative h-40">
                       <Image
@@ -256,14 +202,14 @@ export default function BlogShowcase() {
                         alt={title}
                         fill
                         sizes="(max-width: 1023px) 50vw, 25vw"
-                        className="object-cover"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                     </div>
                     <div className="p-5">
                       <p className="text-xs font-extrabold uppercase tracking-wide text-red-600">
                         {category}
                       </p>
-                      <h3 className="mt-2 text-sm font-extrabold leading-snug text-[#0b1e42]">
+                      <h3 className="mt-2 text-sm font-extrabold leading-snug text-[#0b1e42] transition-colors group-hover:text-red-600">
                         {title}
                       </h3>
                       <div className="mt-4 flex items-center gap-3 text-[11px] font-medium text-slate-400">
@@ -277,7 +223,7 @@ export default function BlogShowcase() {
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
 

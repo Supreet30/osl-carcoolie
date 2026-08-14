@@ -2,106 +2,11 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Car,
-  ChevronLeft,
-  ChevronRight,
-  Factory,
-  HeartPulse,
-  Landmark,
-  PackageSearch,
-  ShoppingCart,
-  Truck,
-} from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ChevronLeft, ChevronRight, Truck } from "lucide-react";
+import { FEATURED_STUDIES, MORE_CASE_STUDIES } from "../case-studies";
 
 const INDUSTRIES = ["All", "BFSI", "Automotive", "Healthcare", "Retail", "E-commerce", "Manufacturing"];
-
-// Dummy placeholder — swap in real case studies once they exist.
-const FEATURED_STUDIES = [
-  {
-    industry: "Automotive",
-    category: "Automotive Logistics",
-    title: "Premium Car Manufacturer: Streamlining Pan-India Distribution",
-    description:
-      "How we helped one of India's leading luxury car brands reduce their transit damage by 40% and improve last-mile delivery speed across 15 Tier-2 cities using our specialized closed-container fleet.",
-    stats: [
-      { value: "40%", label: "Damage Reduction" },
-      { value: "12%", label: "Cost Savings" },
-      { value: "15+", label: "New Hubs Active" },
-    ],
-    image: "/contact-hero-truck.png",
-  },
-  {
-    industry: "Automotive",
-    category: "Fleet Relocation",
-    title: "National Dealer Network: Zero-Delay Stock Transfers",
-    description:
-      "Coordinating multi-city dealer stock transfers for a leading two-wheeler brand, cutting average transfer time by a third while keeping every vehicle fully insured in transit.",
-    stats: [
-      { value: "33%", label: "Faster Transfers" },
-      { value: "0", label: "Transit Losses" },
-      { value: "20+", label: "Dealer Hubs" },
-    ],
-    image: "/servicehero.png",
-  },
-  {
-    industry: "BFSI",
-    category: "Enterprise Logistics",
-    title: "Corporate Fleet Client: Scaling Nationwide Relocation",
-    description:
-      "Building a recurring logistics pipeline for a corporate fleet operator, consolidating scattered regional bookings into one predictable, trackable monthly schedule.",
-    stats: [
-      { value: "45%", label: "Cost Efficiency" },
-      { value: "99%", label: "On-Time Rate" },
-      { value: "10+", label: "States Covered" },
-    ],
-    image: "/contact-hero-truck.png",
-  },
-];
-
-// One entry per filter industry, so every pill has something to show in
-// "More Case Studies". The screenshot's second row duplicated the first
-// three cards exactly — read as a placeholder artifact, so this fills all
-// slots with distinct dummy industries instead of repeating them.
-const MORE_CASE_STUDIES = [
-  {
-    category: "BFSI",
-    title: "Leading NBFC Company",
-    description: "Secure vehicle logistics for field teams across 500+ locations.",
-    icon: Landmark,
-  },
-  {
-    category: "Automotive",
-    title: "Auto Dealer Network",
-    description: "Nationwide vehicle relocation for a growing dealership network.",
-    icon: Car,
-  },
-  {
-    category: "Healthcare",
-    title: "Healthcare Group",
-    description: "Transporting emergency and support vehicles across multiple states.",
-    icon: HeartPulse,
-  },
-  {
-    category: "Retail",
-    title: "Retail Chain",
-    description: "Multi-city vehicle movement for store expansions and supply chain.",
-    icon: ShoppingCart,
-  },
-  {
-    category: "E-commerce",
-    title: "Online Marketplace",
-    description: "Last-mile delivery fleet relocation across metro hubs.",
-    icon: PackageSearch,
-  },
-  {
-    category: "Manufacturing",
-    title: "Auto Parts Manufacturer",
-    description: "Just-in-time component and vehicle transfers between plants.",
-    icon: Factory,
-  },
-];
 
 const CASE_STUDIES_PER_PAGE = 3;
 
@@ -234,13 +139,13 @@ export default function CaseStudiesShowcase() {
                   ))}
                 </div>
 
-                <a
-                  href="#"
+                <Link
+                  href={`/case-studies/${featured.slug}`}
                   className="mt-8 inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-red-600 transition-colors hover:text-red-700"
                 >
                   Read Full Story
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </Link>
               </div>
             </div>
           </div>
@@ -262,9 +167,9 @@ export default function CaseStudiesShowcase() {
           {visibleCaseStudies.length > 0 ? (
             <>
               <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleCaseStudies.map(({ category, title, description, icon: Icon }) => (
+                {visibleCaseStudies.map(({ slug, category, title, description, icon: Icon }) => (
                   <div
-                    key={title}
+                    key={slug}
                     className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100"
                   >
                     <div className="relative h-60">
@@ -286,13 +191,13 @@ export default function CaseStudiesShowcase() {
                       </p>
                       <h3 className="mt-2 text-xl font-extrabold text-[#0b1e42]">{title}</h3>
                       <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
-                      <a
-                        href="#"
+                      <Link
+                        href={`/case-studies/${slug}`}
                         className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-red-600 transition-colors hover:text-red-700"
                       >
                         View Case Study
                         <ArrowRight className="h-3.5 w-3.5" />
-                      </a>
+                      </Link>
                     </div>
                   </div>
                 ))}

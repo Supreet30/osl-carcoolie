@@ -4,13 +4,13 @@ import Navbar from "../../landing-page/components/Navbar";
 
 export default function BlogHero() {
   return (
-    <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#0b1220] px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <>
+      <Navbar />
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#0b1220] px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]">
         <Image src="/blog-hero.jpg" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-[#0b1220] via-[#0b1220]/20 to-transparent" />
       </div>
-
-      <Navbar />
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center">
         <div className="max-w-xl">
@@ -75,6 +75,7 @@ export default function BlogHero() {
           <p className="text-xs text-slate-300">Across Every Mile</p>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }

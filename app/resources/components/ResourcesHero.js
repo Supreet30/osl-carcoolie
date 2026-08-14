@@ -3,7 +3,9 @@ import Navbar from "../../landing-page/components/Navbar";
 
 export default function ResourcesHero() {
   return (
-    <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <>
+      <Navbar />
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <Image
           src="/resourcesbg.png"
@@ -14,8 +16,6 @@ export default function ResourcesHero() {
         />
         {/* <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 to-white/40" /> */}
       </div>
-
-      <Navbar />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
         <div className="max-w-lg">
@@ -55,6 +55,7 @@ export default function ResourcesHero() {
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }

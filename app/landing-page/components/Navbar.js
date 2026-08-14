@@ -266,7 +266,7 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-30 px-4 pt-4 transition-transform duration-300 sm:px-6 sm:pt-6 ${
+      className={`fixed inset-x-0 top-0 z-100 px-4 pt-4 transition-transform duration-300 sm:px-6 sm:pt-6 ${
         visible ? "translate-y-0" : "-translate-y-full"
       }`}
     >

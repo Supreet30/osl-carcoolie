@@ -3,7 +3,9 @@ import Navbar from "../../landing-page/components/Navbar";
 
 export default function ServicesHero() {
   return (
-    <section className="relative isolate overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <>
+      <Navbar />
+      <section className="relative isolate overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
@@ -12,7 +14,6 @@ export default function ServicesHero() {
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"
       />
-      <Navbar />
 
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
         <div className="max-w-xl">
@@ -56,6 +57,7 @@ export default function ServicesHero() {
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }

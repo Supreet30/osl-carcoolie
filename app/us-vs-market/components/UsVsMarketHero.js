@@ -5,7 +5,9 @@ import Navbar from "../../landing-page/components/Navbar";
 
 export default function UsVsMarketHero() {
   return (
-    <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <>
+      <Navbar />
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
@@ -18,8 +20,6 @@ export default function UsVsMarketHero() {
         <Image src="/team-hero.png" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-white via-white/40 to-transparent" />
       </div>
-
-      <Navbar />
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center">
         <div className="max-w-2xl">
@@ -46,12 +46,13 @@ export default function UsVsMarketHero() {
               href="#different"
               className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-bold text-[#0b1e42] shadow-lg ring-1 ring-slate-900/10 transition-colors hover:bg-slate-50"
             >
-              See How We're Different
+              See How We&apos;re Different
               <ArrowRight className="h-4 w-4 text-red-600" />
             </Link>
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }

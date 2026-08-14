@@ -3,12 +3,13 @@ import Navbar from "../../landing-page/components/Navbar";
 
 export default function GalleryHero() {
   return (
-    <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-34 sm:pb-20">
+    <>
+      <Navbar />
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-34 sm:pb-20">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
       />
-      <Navbar />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div className="max-w-lg">
@@ -54,6 +55,7 @@ export default function GalleryHero() {
           />
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }

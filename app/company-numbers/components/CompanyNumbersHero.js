@@ -10,7 +10,9 @@ const VALUES = [
 
 export default function CompanyNumbersHero() {
   return (
-    <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <>
+      <Navbar />
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
@@ -23,8 +25,6 @@ export default function CompanyNumbersHero() {
         <Image src="/team-hero.png" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-white via-white/40 to-transparent" />
       </div>
-
-      <Navbar />
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center">
         <div className="max-w-xl">
@@ -56,6 +56,7 @@ export default function CompanyNumbersHero() {
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }
