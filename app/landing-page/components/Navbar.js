@@ -114,9 +114,13 @@ function ChevronRight({ className }) {
   );
 }
 
-function ResourcesDropdown() {
+function ResourcesDropdown({ open }) {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-10 z-40 w-95 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+    <div
+      className={`absolute left-1/2 top-full z-40 w-95 -translate-x-1/2 pt-3 transition-all duration-500 ${
+        open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
       <div className="mx-auto -mb-2.25 h-4 w-4 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
       <div className="rounded-[28px] bg-white p-3 shadow-2xl ring-1 ring-slate-900/5">
         <div className="flex items-center gap-4 px-2 pb-4 pt-2">
@@ -175,9 +179,13 @@ function ResourcesDropdown() {
   );
 }
 
-function ServicesDropdown() {
+function ServicesDropdown({ open }) {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-10 z-40 w-140 -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+    <div
+      className={`absolute left-1/2 top-full z-40 w-140 -translate-x-1/2 pt-3 transition-all duration-500 ${
+        open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
       <div className="mx-auto -mb-2.25 h-4 w-4 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
       <div className="rounded-[28px] bg-white p-6 shadow-2xl ring-1 ring-slate-900/5">
         <div className="flex items-center gap-4 pb-4">
@@ -237,6 +245,7 @@ function ServicesDropdown() {
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(true);
+  const [openDropdown, setOpenDropdown] = useState(null);
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -284,7 +293,12 @@ export default function Navbar() {
 
         <ul className="hidden items-center gap-8 text-lg font-medium text-slate-800 md:flex">
           {NAV_LINKS.map((link) => (
-            <li key={link.href} className={link.dropdown ? "group relative" : undefined}>
+            <li
+              key={link.href}
+              className={link.dropdown ? "relative" : undefined}
+              onMouseEnter={link.dropdown ? () => setOpenDropdown(link.dropdown) : undefined}
+              onMouseLeave={link.dropdown ? () => setOpenDropdown(null) : undefined}
+            >
               <Link
                 href={link.href}
                 className="flex items-center gap-1 transition-colors hover:text-red-600"
@@ -292,8 +306,8 @@ export default function Navbar() {
                 {link.label}
                 {link.chevron && <ChevronDown className="h-4 w-4" />}
               </Link>
-              {link.dropdown === "resources" && <ResourcesDropdown />}
-              {link.dropdown === "services" && <ServicesDropdown />}
+              {link.dropdown === "resources" && <ResourcesDropdown open={openDropdown === "resources"} />}
+              {link.dropdown === "services" && <ServicesDropdown open={openDropdown === "services"} />}
             </li>
           ))}
         </ul>
