@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, MapPin } from "lucide-react";
+import { AlertCircle, ArrowRight } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
+import CityDropdown from "./CityDropdown";
+import { CITIES, getCities } from "../lib/pricing";
 
 const ROUTE_STOPS = [
   { label: "PickUp", tone: "outline-red" },
@@ -21,12 +23,31 @@ function RouteMarker({ tone }) {
 }
 
 export default function B2cHero() {
-  const [pickupPin, setPickupPin] = useState("");
-  const [destinationPin, setDestinationPin] = useState("");
+  const [cities, setCities] = useState(CITIES);
+  const [fromCity, setFromCity] = useState("");
+  const [toCity, setToCity] = useState("");
   const [showEstimate, setShowEstimate] = useState(false);
+  const [cityError, setCityError] = useState("");
+
+  // Loads from Supabase (if configured) so this dropdown always matches
+  // whatever cities the admin panel actually has active — same fetch
+  // EstimateModal itself does when it opens.
+  useEffect(() => {
+    getCities().then(setCities);
+  }, []);
 
   function handleSubmit(event) {
     event.preventDefault();
+
+    if (!fromCity || !toCity) {
+      setCityError("Select both a pickup and destination city.");
+      return;
+    }
+    if (fromCity === toCity) {
+      setCityError("Pickup and destination can't be the same city.");
+      return;
+    }
+    setCityError("");
     setShowEstimate(true);
   }
 
@@ -39,7 +60,7 @@ export default function B2cHero() {
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
       />
 
-      <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
+      <div className="relative mx-auto grid w-full max-w-6xl items-start gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
         <div>
           <p className="text-sm font-bold text-red-600">India-wide car transportation</p>
           <h1 className="mt-3 text-4xl leading-[1.15] font-extrabold tracking-tight sm:text-5xl">
@@ -75,60 +96,76 @@ export default function B2cHero() {
           </div>
         </div>
 
-        <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-100 sm:p-10">
-          <h2 className="text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">Get Your Estimated Quote</h2>
-          <p className="mt-3 text-sm leading-relaxed text-slate-500">
-            Enter your pickup and destination details to get a quick transportation estimate.
-          </p>
+        <div>
+          {/* Invisible twin of the left column's label + heading, so the
+              card below lines up with the left card's top edge instead of
+              floating higher (its own content is much shorter). */}
+          <div aria-hidden className="invisible hidden select-none lg:block">
+            <p className="text-sm font-bold">India-wide car transportation</p>
+            <h1 className="mt-3 text-4xl leading-[1.15] font-extrabold tracking-tight sm:text-5xl">
+              <span className="block">Your Car Our</span>
+              <span className="block">Responsibility</span>
+            </h1>
+          </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-            <label className="block">
-              <span className="text-xs font-bold tracking-wide text-slate-500 uppercase">Source Pin Code</span>
-              <span className="relative mt-2 block">
-                <MapPin className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-red-500" />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={pickupPin}
-                  onChange={(event) => setPickupPin(event.target.value)}
-                  placeholder="Enter pickup PIN code"
-                  className="w-full rounded-full bg-slate-50 py-3.5 pr-4 pl-11 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
-                />
-              </span>
-            </label>
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-100 sm:p-10 lg:mt-12">
+            <h2 className="text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">Get Your Estimated Quote</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-500">
+              Select your pickup and destination city to get a quick transportation estimate.
+            </p>
 
-            <label className="block">
-              <span className="text-xs font-bold tracking-wide text-slate-500 uppercase">Destination Pin Code</span>
-              <span className="relative mt-2 block">
-                <MapPin className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-[#0b1e42]" />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={destinationPin}
-                  onChange={(event) => setDestinationPin(event.target.value)}
-                  placeholder="Enter destination PIN code"
-                  className="w-full rounded-full bg-slate-50 py-3.5 pr-4 pl-11 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
-                />
-              </span>
-            </label>
+            <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
+              {/* Each dropdown excludes whatever's already picked in the
+                  other one — Delhi selected as source means Delhi can't even
+                  be picked as destination, not just rejected on submit. */}
+              <CityDropdown
+                label="Source City"
+                placeholder="Select pickup city"
+                iconClassName="text-red-500"
+                value={fromCity}
+                onChange={setFromCity}
+                cities={cities.filter((city) => city !== toCity)}
+              />
 
-            <button
-              type="submit"
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700"
-            >
-              Get Estimated Quote
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </form>
+              <CityDropdown
+                label="Destination City"
+                placeholder="Select destination city"
+                iconClassName="text-[#0b1e42]"
+                value={toCity}
+                onChange={setToCity}
+                cities={cities.filter((city) => city !== fromCity)}
+              />
 
-          <p className="mt-6 text-center text-xs text-slate-400">
-            Fast estimate&nbsp;&middot;&nbsp;Secure booking&nbsp;&middot;&nbsp;No hidden charges
-          </p>
+              {cityError && (
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  {cityError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700"
+              >
+                Get Estimated Quote
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
+
+            <p className="mt-6 text-center text-xs text-slate-400">
+              Fast estimate&nbsp;&middot;&nbsp;Secure booking&nbsp;&middot;&nbsp;No hidden charges
+            </p>
+          </div>
         </div>
       </div>
       </section>
 
-      <EstimateModal open={showEstimate} onClose={() => setShowEstimate(false)} />
+      <EstimateModal
+        open={showEstimate}
+        onClose={() => setShowEstimate(false)}
+        initialFromCity={fromCity}
+        initialToCity={toCity}
+      />
     </>
   );
 }

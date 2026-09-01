@@ -23,8 +23,12 @@ export default function ContactPage() {
           <div className="mb-10">
             <p className="text-sm font-semibold text-red-600">Contact Us</p>
             <h2 className="mt-2 text-3xl font-extrabold text-[#0b1e42] sm:text-4xl">
-              Send Us a <span className="text-red-600">Message</span>
+              Request Your <span className="text-red-600">Car Transport Quote</span>
             </h2>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-500 sm:text-base">
+              Fill out the form below with your vehicle transport requirement and we&apos;ll respond as
+              soon as possible.
+            </p>
           </div>
 
           <div className="grid gap-10 lg:grid-cols-2 lg:items-stretch">

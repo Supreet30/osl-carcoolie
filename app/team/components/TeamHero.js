@@ -30,12 +30,12 @@ export default function TeamHero() {
         <div className="max-w-xl">
           <p className="text-md font-bold text-red-600">Our Team</p>
           <h1 className="mt-3 text-6xl font-extrabold leading-[1.2] tracking-tight">
-            <span className="block text-[#0b1e42]">The People Powering</span>
-            <span className="block text-red-600">Every Delivery.</span>
+            <span className="block text-[#0b1e42]">Meet The Team Behind</span>
+            <span className="block text-red-600">India&apos;s Vehicle Transport Network</span>
           </h1>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-slate-600">
-            Meet the drivers, coordinators, and support staff who work around the clock to move
-            your vehicle safely — the team behind every CarCoolie delivery.
+            Meet the drivers, coordinators and support staff who work around the clock to move your
+            vehicle safely, the team behind every Car Coolie delivery.
           </p>
           <div className="mt-30 flex flex-wrap items-center gap-8">
             {VALUES.map(({ icon: Icon, prefix, label }) => (

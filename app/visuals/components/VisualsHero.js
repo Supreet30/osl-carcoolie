@@ -26,7 +26,7 @@ export default function VisualsHero() {
           </h1>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-slate-600">
             From car pickups to safe deliveries across India, explore the moments that drive our
-            commitment to trust, care, and perfection.
+            commitment to trust, care and precision.
           </p>
 
           <div className="mt-10 grid grid-cols-3 gap-3">

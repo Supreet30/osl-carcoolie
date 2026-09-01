@@ -1,36 +1,36 @@
 import Link from "next/link";
-import { Zap, Globe, Clock, Shield, BarChart3, Check, ArrowRight } from "lucide-react";
+import { Zap, Network, Clock, Shield, BarChart3, FileCheck, ArrowRight } from "lucide-react";
 
 const FEATURES = [
   {
     icon: Zap,
     title: "Instant Quotes",
-    description: "AI-powered pricing in under 90 seconds, 24/7.",
+    description: "Get an AI-powered car transport quote in under 90 seconds, 24/7.",
   },
   {
-    icon: Globe,
-    title: "150+ Countries",
-    description: "One platform. Every major lane. Worldwide.",
+    icon: Network,
+    title: "Nationwide Network",
+    description: "One platform covering every major vehicle transport lane across India.",
   },
   {
     icon: Clock,
-    title: "99.2% On-Time",
+    title: "99.2% On-Time Delivery",
     description: "Industry-leading reliability, verified monthly.",
   },
   {
     icon: Shield,
     title: "Full Coverage",
-    description: "Every shipment insured from pickup to drop-off.",
+    description: "Every vehicle shipment insured from pickup to drop-off.",
   },
   {
     icon: BarChart3,
     title: "Live Analytics",
-    description: "Dashboards, spend reports, and delay alerts.",
+    description: "Dashboards, spend reports and delay alerts for fleet managers.",
   },
   {
-    icon: Check,
-    title: "Customs Clearance",
-    description: "Docs handled. Duties calculated. No surprises.",
+    icon: FileCheck,
+    title: "Customs & Documentation",
+    description: "Paperwork handled, so there are no surprises.",
   },
 ];
 

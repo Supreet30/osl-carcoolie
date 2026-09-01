@@ -14,12 +14,12 @@ export default function GalleryHero() {
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div className="max-w-lg">
           <h1 className="text-6xl font-extrabold leading-[1.2] tracking-tight">
-            <span className="block text-[#0b1e42]">A Look Into Our</span>
-            <span className="block text-red-600">Journey.</span>
+            <span className="block text-[#0b1e42]">Real Moments From</span>
+            <span className="block text-red-600">India&apos;s Vehicle Transport Network</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
             From car pickups to safe deliveries across India, explore the moments that drive our
-            commitment to trust, care, and perfection.
+            commitment to trust, care and precision in vehicle transport.
           </p>
 
           <div className="mt-8 grid max-w-lg grid-cols-2 gap-10">

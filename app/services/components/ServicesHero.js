@@ -18,13 +18,13 @@ export default function ServicesHero() {
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
         <div className="max-w-xl">
           <h1 className="text-4xl font-extrabold leading-[1.2] tracking-tight sm:text-5xl lg:text-6xl">
-            <span className="text-[#0b1e42]">Safe Car </span>
-            <span className="text-red-600">Transportation </span>
-            <span className="text-[#0b1e42]">Built For </span>
-            <span className="text-red-600">Every Journey.</span>
+            <span className="text-[#0b1e42]">Enclosed And Open </span>
+            <span className="text-red-600">Car Carriers, </span>
+            <span className="text-[#0b1e42]">Tracked In </span>
+            <span className="text-red-600">Real Time</span>
           </h1>
           <p className="mt-8 max-w-md text-base leading-relaxed text-slate-600">
-            Whether you&apos;re relocating, purchasing a new vehicle, or moving luxury cars, CarCoolie
+            Whether you&apos;re relocating, purchasing a new vehicle or moving luxury cars, Car Coolie
             provides secure truck-based vehicle transportation with real-time tracking and nationwide
             coverage.
           </p>

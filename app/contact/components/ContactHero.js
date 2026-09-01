@@ -14,11 +14,11 @@ export default function ContactHero() {
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
         <div className="max-w-lg">
           <h1 className="text-6xl font-extrabold leading-[1.2] tracking-tight text-[#0b1e42]">
-            Get In Touch With <span className="block text-red-600">CarCoolie</span>
+            Talk To India&apos;s <span className="block text-red-600">Vehicle Transport Experts</span>
           </h1>
           <p className="mt-10 max-w-md text-md leading-relaxed text-slate-600">
             Need to transport your vehicle safely anywhere in India? Our logistics experts help with
-            quotations, shipment tracking, pickup scheduling and door-to-door delivery — all handled by
+            quotations, shipment tracking, pickup scheduling and door-to-door delivery, all handled by
             specialized carrier trucks.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">

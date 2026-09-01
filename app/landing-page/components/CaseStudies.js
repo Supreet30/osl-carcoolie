@@ -103,7 +103,7 @@ export default function CaseStudies() {
       <div className="mx-auto max-w-7xl px-6">
         <p className="text-sm font-semibold text-red-600">Case Studies</p>
         <h2 className="mt-3 text-6xl font-extrabold tracking-tight text-[#0b1e42]">
-          Watch Our <span className="text-red-600">Stories.</span>
+          Watch Our Vehicle Logistics <span className="text-red-600">Success Stories</span>
         </h2>
 
         {/*

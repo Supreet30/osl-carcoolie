@@ -43,7 +43,7 @@ export default function JoinUsSection() {
             />
             <div className="relative">
               <h3 className="max-w-xs text-2xl font-extrabold leading-tight text-white sm:text-3xl">
-                Join India&apos;s Fastest Growing Vehicle Logistics Company
+                Build Your Career In Vehicle Transport And Logistics
               </h3>
               <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-300">
                 We&apos;re always looking for passionate automotive lovers and logistics experts to join
@@ -67,11 +67,13 @@ export default function JoinUsSection() {
               onSubmit={handleSubmit}
               className="relative flex min-h-140 w-full flex-col justify-center rounded-3xl bg-white p-8 shadow-2xl ring-1 ring-slate-100 sm:p-10"
             >
-              <h3 className="text-4xl font-extrabold text-[#0b1e42]">
-                Get in <span className="text-red-600">Touch</span>
+              <h3 className="text-3xl font-extrabold leading-tight text-[#0b1e42] sm:text-4xl">
+                Have A Vehicle Transport Requirement?{" "}
+                <span className="text-red-600">Let&apos;s Talk.</span>
               </h3>
               <p className="mt-2 text-sm text-slate-500">
-                Have a specific transport requirement or a question? Our experts are here to help.
+                Have a specific vehicle transport requirement or question? Our logistics experts are
+                here to help with quotes, scheduling and support.
               </p>
 
               {submitted ? (

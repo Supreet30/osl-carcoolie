@@ -76,16 +76,14 @@ export default function LeadershipSection() {
           </span>
         </div>
 
-        <p className="mt-4 text-xs font-bold tracking-[0.2em] text-slate-400">
-          STRONG LEADERSHIP. SHARED VISION.
-        </p>
+        <p className="mt-4 text-xs font-bold tracking-[0.2em] text-slate-400">OUR LEADERSHIP</p>
         <h2 className="mt-2 text-6xl font-extrabold">
-          <span className="text-red-600">Our</span>{" "}
-          <span className="text-[#0b1e42]">Leadership</span>
+          <span className="text-red-600">Strong Leadership.</span>{" "}
+          <span className="text-[#0b1e42]">Shared Vision.</span>
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-500">
-          Built on trust, driven by values, and united by a shared vision. Our leadership is more than
-          a structure – it&apos;s our strength.
+          Built on trust and driven by shared values, our leadership team sets the standard for how
+          Car Coolie approaches vehicle logistics, from operations to customer experience.
         </p>
 
         <div className="mt-24">

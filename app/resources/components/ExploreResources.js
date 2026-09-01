@@ -15,7 +15,7 @@ const CATEGORIES = [
     id: "blogs",
     label: "Blogs",
     singular: "Blog",
-    caption: "Helpful articles, tips & news from the car transport world.",
+    caption: "Helpful articles, tips and news from the car transport and vehicle logistics world.",
     image: "/res-blog.jpg",
     items: [
       {
@@ -40,7 +40,7 @@ const CATEGORIES = [
     id: "case-studies",
     label: "Case Studies",
     singular: "Case Study",
-    caption: "Helpful articles, tips & news from the car transport world.",
+    caption: "Real client outcomes from businesses that trust Car Coolie for fleet and vehicle logistics.",
     image: "/res-cs.jpg",
     items: [
       {
@@ -65,7 +65,7 @@ const CATEGORIES = [
     id: "visuals",
     label: "Visuals",
     singular: "Visual",
-    caption: "Helpful articles, tips & news from the car transport world.",
+    caption: "Photos and videos from real vehicle transport operations across India.",
     image: "/res-visuals.jfif",
     items: [
       {

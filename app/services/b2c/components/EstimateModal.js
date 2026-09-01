@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Calendar,
@@ -18,51 +18,23 @@ import {
   Truck,
   X,
 } from "lucide-react";
+import {
+  ADD_ON_SERVICES,
+  CITIES,
+  VEHICLE_TYPES,
+  computeEstimate,
+  formatINR,
+  getAddOnServices,
+  getCities,
+  getRoute,
+  getVehicleTypes,
+  validateCoupon,
+} from "../lib/pricing";
+import { saveEstimate } from "../lib/bookingStore";
+import Dropdown from "./Dropdown";
 
-const VEHICLE_TYPES = ["Sedan", "SUV", "Hatchback", "Truck", "Coupe"];
 const YEARS = Array.from({ length: 15 }, (_, i) => `${new Date().getFullYear() - i}`);
-
-const ADD_ONS = [
-  { icon: Calendar, title: "Guaranteed Date", subtitle: "Priority scheduling" },
-  { icon: ShieldCheck, title: "Insurance", subtitle: "Additional coverage" },
-  { icon: Car, title: "Car Wash", subtitle: "Professional cleaning" },
-];
-
-// Mock quote — there's no backend wired up yet, so this is the same
-// illustrative result every time, just to demo the loading → result flow.
-const MOCK_QUOTE = {
-  from: "Delhi",
-  to: "Mumbai",
-  distance: "1,400 km",
-  vehicleType: "Sedan",
-  transportation: 20000,
-  serviceCharges: 1000,
-  valueAddedServices: 2000,
-  gstRate: 0.18,
-  couponCode: "WELCOME10",
-  couponDiscount: 2500,
-};
-
-function formatINR(amount) {
-  return `₹${amount.toLocaleString("en-IN")}`;
-}
-
-function SelectField({ icon: Icon, iconClassName, ...props }) {
-  return (
-    <span className="relative mt-2 block">
-      {Icon && (
-        <Icon className={`pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 ${iconClassName}`} />
-      )}
-      <select
-        {...props}
-        className={`w-full appearance-none rounded-xl bg-slate-50 py-3 pr-10 text-sm font-normal text-slate-500 outline-none focus:ring-2 focus:ring-red-500 ${
-          Icon ? "pl-11" : "pl-4"
-        }`}
-      />
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-slate-400" />
-    </span>
-  );
-}
+const PIN_REGEX = /^\d{6}$/;
 
 function LoadingView() {
   return (
@@ -78,16 +50,64 @@ function LoadingView() {
   );
 }
 
-function ResultView() {
-  const [couponCode, setCouponCode] = useState(MOCK_QUOTE.couponCode);
-  const [couponApplied, setCouponApplied] = useState(true);
+function ResultView({ estimate, vehicleType, pickupPin, destinationPin, onClose }) {
+  const router = useRouter();
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
   const [showAddOns, setShowAddOns] = useState(false);
 
-  const base = MOCK_QUOTE.transportation + MOCK_QUOTE.serviceCharges + MOCK_QUOTE.valueAddedServices;
-  const gst = Math.round(base * MOCK_QUOTE.gstRate);
-  const subtotal = base + gst;
-  const discount = couponApplied ? MOCK_QUOTE.couponDiscount : 0;
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const { route, minDays, vehicleSurcharge, addOnsTotal, addOnBreakdown, selectedAddOns, serviceCharge, gst, subtotal } = estimate;
+  // "flat" coupons are a straight rupee amount off; "percent" ones are a
+  // percentage of the subtotal — mirrors computeEstimate()'s discount logic
+  // in lib/pricing.js. Clamped to the subtotal so a flat coupon bigger than
+  // the order can never push the total negative.
+  const discount = appliedCoupon
+    ? Math.min(
+        appliedCoupon.type === "flat" ? Math.round(appliedCoupon.value) : Math.round(subtotal * (appliedCoupon.value / 100)),
+        subtotal
+      )
+    : 0;
   const total = subtotal - discount;
+
+  async function handleApplyCoupon() {
+    setApplyingCoupon(true);
+    const coupon = await validateCoupon(couponInput);
+    setApplyingCoupon(false);
+    if (!coupon) {
+      setAppliedCoupon(null);
+      setCouponError("Invalid or expired coupon code.");
+      return;
+    }
+    setAppliedCoupon(coupon);
+    setCouponError("");
+  }
+
+  function handleBookNow() {
+    saveEstimate({
+      fromCity: route.fromCity,
+      toCity: route.toCity,
+      pickupPin,
+      destinationPin,
+      distanceKm: route.distanceKm,
+      minDays,
+      vehicleType,
+      routePrice: route.price,
+      vehicleSurcharge,
+      serviceCharge,
+      addOnsTotal,
+      addOnBreakdown,
+      selectedAddOns,
+      gst,
+      subtotal,
+      coupon: appliedCoupon,
+      discount,
+      total,
+    });
+    onClose();
+    router.push("/services/b2c/book");
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-8 py-6">
@@ -97,10 +117,10 @@ function ResultView() {
         </span>
         <div>
           <p className="text-base font-extrabold text-[#0b1e42]">
-            {MOCK_QUOTE.from} <span className="text-slate-400">&rarr;</span> {MOCK_QUOTE.to}
+            {route.fromCity} <span className="text-slate-400">&rarr;</span> {route.toCity}
           </p>
           <p className="mt-0.5 text-sm text-slate-500">
-            {MOCK_QUOTE.distance} &bull; {MOCK_QUOTE.vehicleType}
+            ~{route.distanceKm.toLocaleString("en-IN")} km &bull; {vehicleType}
           </p>
         </div>
       </div>
@@ -110,33 +130,49 @@ function ResultView() {
         <div className="mt-3 flex flex-col divide-y divide-slate-100">
           <div className="flex items-center justify-between py-2.5 text-sm">
             <span className="text-slate-600">
-              Transportation ({MOCK_QUOTE.from} &rarr; {MOCK_QUOTE.to})
+              Transportation ({route.fromCity} &rarr; {route.toCity})
             </span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(MOCK_QUOTE.transportation)}</span>
+            <span className="font-semibold text-[#0b1e42]">{formatINR(route.price)}</span>
           </div>
+          {vehicleSurcharge !== 0 && (
+            <div className="flex items-center justify-between py-2.5 text-sm">
+              <span className="text-slate-600">Vehicle Type ({vehicleType})</span>
+              <span className={`font-semibold ${vehicleSurcharge > 0 ? "text-[#0b1e42]" : "text-green-600"}`}>
+                {vehicleSurcharge > 0 ? "+" : "-"}
+                {formatINR(Math.abs(vehicleSurcharge))}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between py-2.5 text-sm">
             <span className="text-slate-600">Service Charges</span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(MOCK_QUOTE.serviceCharges)}</span>
+            <span className="font-semibold text-[#0b1e42]">{formatINR(serviceCharge)}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAddOns((v) => !v)}
-            className="flex w-full items-center justify-between py-2.5 text-left text-sm"
-          >
-            <span className="flex items-center gap-1.5 text-slate-600">
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`}
-              />
-              Value Added Services
-            </span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(MOCK_QUOTE.valueAddedServices)}</span>
-          </button>
-          {showAddOns && (
-            <div className="flex flex-col gap-1.5 py-2.5 pl-5 text-xs text-slate-500">
-              {ADD_ONS.map(({ title }) => (
-                <p key={title}>{title}</p>
-              ))}
-            </div>
+          {addOnsTotal > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddOns((v) => !v)}
+                className="flex w-full items-center justify-between py-2.5 text-left text-sm"
+              >
+                <span className="flex items-center gap-1.5 text-slate-600">
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`}
+                  />
+                  Value Added Services
+                </span>
+                <span className="font-semibold text-[#0b1e42]">{formatINR(addOnsTotal)}</span>
+              </button>
+              {showAddOns && (
+                <div className="flex flex-col gap-1.5 py-2.5 pl-5 text-xs text-slate-500">
+                  {addOnBreakdown.map((a) => (
+                    <p key={a.key} className="flex items-center justify-between">
+                      <span>{a.label}</span>
+                      <span>{formatINR(a.price)}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
           )}
           <div className="flex items-center justify-between py-2.5 text-sm">
             <span className="text-slate-600">GST (18%)</span>
@@ -150,27 +186,30 @@ function ResultView() {
         <div className="mt-2 flex items-center gap-2">
           <input
             type="text"
-            value={couponCode}
+            value={couponInput}
             onChange={(event) => {
-              setCouponCode(event.target.value);
-              setCouponApplied(false);
+              setCouponInput(event.target.value);
+              setCouponError("");
             }}
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="e.g. WELCOME5"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-[#0b1e42] uppercase outline-none placeholder:text-slate-400 placeholder:normal-case focus:ring-2 focus:ring-red-500"
           />
           <button
             type="button"
-            onClick={() => setCouponApplied(true)}
-            className="shrink-0 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700"
+            onClick={handleApplyCoupon}
+            disabled={applyingCoupon}
+            className="shrink-0 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-wait disabled:opacity-70"
           >
-            Apply
+            {applyingCoupon ? "Applying…" : "Apply"}
           </button>
         </div>
-        {couponApplied && (
+        {appliedCoupon && (
           <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-green-600">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {couponCode} applied: Saved -{formatINR(MOCK_QUOTE.couponDiscount)}
+            {appliedCoupon.code} applied: Saved -{formatINR(discount)}
           </p>
         )}
+        {couponError && <p className="mt-2 text-xs font-semibold text-red-600">{couponError}</p>}
       </div>
 
       <div className="flex flex-col divide-y divide-slate-100 text-sm">
@@ -178,7 +217,7 @@ function ResultView() {
           <span className="text-slate-500">Subtotal</span>
           <span className="text-slate-600">{formatINR(subtotal)}</span>
         </div>
-        {couponApplied && (
+        {appliedCoupon && (
           <div className="flex items-center justify-between py-2 text-red-600">
             <span>Discount</span>
             <span>-{formatINR(discount)}</span>
@@ -198,32 +237,123 @@ function ResultView() {
         <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
       </div>
 
-      <Link
-        href="/services/b2c/book"
+      <button
+        type="button"
+        onClick={handleBookNow}
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b1220] py-4 text-sm font-bold text-white transition-colors hover:bg-[#0b1220]/90"
       >
         Book Now
         <ArrowRight className="h-4 w-4" />
-      </Link>
+      </button>
     </div>
   );
 }
 
-export default function EstimateModal({ open, onClose }) {
-  const [step, setStep] = useState("form"); // "form" | "loading" | "result"
+export default function EstimateModal({ open, onClose, initialFromCity, initialToCity }) {
+  const [step, setStep] = useState("form");
+  const [fromCity, setFromCity] = useState(initialFromCity ?? "");
+  const [toCity, setToCity] = useState(initialToCity ?? "");
+  const [vehicleType, setVehicleType] = useState("");
+  // Decorative alongside Make/Model — collected but not part of the
+  // estimate (same as those two text fields), same as before this was a
+  // native <select>.
+  const [registrationYear, setRegistrationYear] = useState("");
+  const [pickupPin, setPickupPin] = useState("");
+  const [destinationPin, setDestinationPin] = useState("");
+  const [selectedAddOns, setSelectedAddOns] = useState([]);
+  const [routeError, setRouteError] = useState("");
+  const [estimate, setEstimate] = useState(null);
+  const [cities, setCities] = useState(CITIES);
+  const [addOnCatalog, setAddOnCatalog] = useState(ADD_ON_SERVICES);
+  const [vehicleTypes, setVehicleTypes] = useState(VEHICLE_TYPES);
+
+  // Adjusting state during render (React's documented alternative to an
+  // effect for this) rather than setState-in-an-effect: carries over
+  // whatever the B2cHero city dropdowns already had selected the moment
+  // this modal opens, without re-snapping fromCity/toCity back on every
+  // render while it's open (which would fight the user's own selection
+  // inside the modal).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setFromCity(initialFromCity ?? "");
+      setToCity(initialToCity ?? "");
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    // Refreshes from Supabase (if configured) every time the modal opens —
+    // falls back to the static CITIES/ADD_ON_SERVICES/VEHICLE_TYPES already
+    // shown above if it's not configured or the fetch fails.
+    getCities().then(setCities);
+    getAddOnServices().then(setAddOnCatalog);
+    getVehicleTypes().then(setVehicleTypes);
+  }, [open]);
 
   if (!open) return null;
 
   function handleClose() {
     setStep("form");
+    setRouteError("");
     onClose();
   }
 
-  function handleSubmit(event) {
+  function toggleAddOn(key) {
+    setSelectedAddOns((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  // Keeps each field numeric-as-you-type (also rules out whitespace-only
+  // input) and caps it at 6 digits, matching a real Indian PIN code —
+  // same helper B2cHero.js used to use before pincodes moved here.
+  function handlePinInput(setter) {
+    return (event) => setter(event.target.value.replace(/\D/g, "").slice(0, 6));
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
+
+    if (!vehicleType) {
+      setRouteError("Select a vehicle type.");
+      return;
+    }
+    if (!fromCity || !toCity) {
+      setRouteError("Select both a pickup and destination location.");
+      return;
+    }
+    if (fromCity === toCity) {
+      setRouteError("Pickup and destination can't be the same city.");
+      return;
+    }
+    if (!pickupPin.trim() || !destinationPin.trim()) {
+      setRouteError("Enter both a pickup and destination PIN code.");
+      return;
+    }
+    if (!PIN_REGEX.test(pickupPin) || !PIN_REGEX.test(destinationPin)) {
+      setRouteError("PIN codes must be exactly 6 digits.");
+      return;
+    }
+    if (pickupPin === destinationPin) {
+      setRouteError("Pickup and destination PIN codes can't be the same.");
+      return;
+    }
+    const route = await getRoute(fromCity, toCity);
+    if (!route) {
+      setRouteError("We don't have a route between these two cities yet.");
+      return;
+    }
+    setRouteError("");
     setStep("loading");
-    // No backend wired up yet — simulate a short calculation delay.
-    setTimeout(() => setStep("result"), 1800);
+    // Keep a minimum visible delay on the loading view even though the
+    // Supabase fetch inside computeEstimate is usually much faster than
+    // this — it reads as "calculating" rather than a flash of content.
+    const [computed] = await Promise.all([
+      computeEstimate({ fromCity, toCity, vehicleType, selectedAddOns }),
+      new Promise((resolve) => setTimeout(resolve, 1400)),
+    ]);
+    setEstimate(computed);
+    setStep("result");
   }
 
   const isResult = step === "result";
@@ -267,7 +397,15 @@ export default function EstimateModal({ open, onClose }) {
         </div>
 
         {step === "loading" && <LoadingView />}
-        {step === "result" && <ResultView />}
+        {step === "result" && estimate && (
+          <ResultView
+            estimate={estimate}
+            vehicleType={vehicleType}
+            pickupPin={pickupPin}
+            destinationPin={destinationPin}
+            onClose={handleClose}
+          />
+        )}
 
         {step === "form" && (
           <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
@@ -296,29 +434,23 @@ export default function EstimateModal({ open, onClose }) {
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Vehicle Type
-                    <SelectField defaultValue="">
-                      <option value="" disabled>
-                        Select type
-                      </option>
-                      {VEHICLE_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </SelectField>
+                    <Dropdown
+                      placeholder="Select type"
+                      value={vehicleType}
+                      onChange={setVehicleType}
+                      options={vehicleTypes.map((v) => v.name)}
+                    />
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Registration Year
-                    <SelectField icon={Calendar} iconClassName="text-slate-400" defaultValue="">
-                      <option value="" disabled>
-                        Select year
-                      </option>
-                      {YEARS.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </SelectField>
+                    <Dropdown
+                      icon={Calendar}
+                      iconClassName="text-slate-400"
+                      placeholder="Select year"
+                      value={registrationYear}
+                      onChange={setRegistrationYear}
+                      options={YEARS}
+                    />
                   </label>
                 </div>
               </div>
@@ -331,21 +463,57 @@ export default function EstimateModal({ open, onClose }) {
                 <div className="mt-4 grid gap-5 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Pickup Location
-                    <SelectField icon={MapPin} iconClassName="text-red-500" defaultValue="">
-                      <option value="" disabled>
-                        Source
-                      </option>
-                    </SelectField>
+                    {/* Excludes whatever's picked as the destination — a
+                        city can't be its own route. */}
+                    <Dropdown
+                      icon={MapPin}
+                      iconClassName="text-red-500"
+                      placeholder="Select city"
+                      value={fromCity}
+                      onChange={setFromCity}
+                      options={cities.filter((city) => city !== toCity)}
+                    />
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Destination Location
-                    <SelectField icon={MapPin} iconClassName="text-[#0b1e42]" defaultValue="">
-                      <option value="" disabled>
-                        Destination
-                      </option>
-                    </SelectField>
+                    <Dropdown
+                      icon={MapPin}
+                      iconClassName="text-[#0b1e42]"
+                      placeholder="Select city"
+                      value={toCity}
+                      onChange={setToCity}
+                      options={cities.filter((city) => city !== fromCity)}
+                    />
                   </label>
                 </div>
+
+                <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold text-[#0b1e42]">
+                    Source Pincode
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pickupPin}
+                      onChange={handlePinInput(setPickupPin)}
+                      placeholder="Enter pickup PIN code"
+                      className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-[#0b1e42]">
+                    Destination Pincode
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={destinationPin}
+                      onChange={handlePinInput(setDestinationPin)}
+                      placeholder="Enter destination PIN code"
+                      className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+                    />
+                  </label>
+                </div>
+                {routeError && <p className="mt-3 text-xs font-semibold text-red-600">{routeError}</p>}
               </div>
 
               <div>
@@ -354,24 +522,36 @@ export default function EstimateModal({ open, onClose }) {
                   Value-Added Services
                 </div>
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                  {ADD_ONS.map(({ icon: Icon, title, subtitle }) => (
-                    <label
-                      key={title}
-                      className="relative flex cursor-pointer flex-col gap-3 rounded-2xl border border-slate-200 p-4 transition-colors hover:border-red-200"
-                    >
-                      <input
-                        type="checkbox"
-                        className="absolute top-4 right-4 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
-                      />
-                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600">
-                        <Icon className="h-4 w-4" strokeWidth={2} />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-bold text-[#0b1e42]">{title}</span>
-                        <span className="block text-xs text-slate-500">{subtitle}</span>
-                      </span>
-                    </label>
-                  ))}
+                  {addOnCatalog.map(({ key, label, subtitle, price }) => {
+                    const selected = selectedAddOns.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleAddOn(key)}
+                        className={`relative flex cursor-pointer flex-col gap-3 rounded-2xl border p-4 text-left transition-colors ${
+                          selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-red-200"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-4 right-4 flex h-4 w-4 items-center justify-center rounded border ${
+                            selected ? "border-red-600 bg-red-600 text-white" : "border-slate-300"
+                          }`}
+                        >
+                          {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </span>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                          <ShieldCheck className="h-4 w-4" strokeWidth={2} />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-bold text-[#0b1e42]">
+                            {label} <span className="font-semibold text-slate-400">(+{formatINR(price)})</span>
+                          </span>
+                          <span className="block text-xs text-slate-500">{subtitle}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

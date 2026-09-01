@@ -6,19 +6,19 @@ const VALUES = [
     icon: Rocket,
     title: "Our Mission",
     description:
-      "To provide the most secure, reliable, and transparent vehicle logistics ecosystem in India, leveraging technology to eliminate uncertainty.",
+      "To provide the most secure, reliable and transparent vehicle logistics ecosystem in India, using technology to eliminate uncertainty in car transport.",
   },
   {
     icon: Eye,
     title: "Our Vision",
     description:
-      "To redefine luxury transport with continuous innovation, becoming the global benchmark for customer-centric logistics excellence.",
+      "To redefine luxury vehicle transport through continuous innovation, becoming the benchmark for customer-centric logistics excellence in India.",
   },
   {
     icon: Heart,
     title: "Our Values",
     description:
-      "Safety First, Customer Obsession, Operational Excellence, and Radical Transparency in every mile we travel.",
+      "Safety First, Customer Obsession, Operational Excellence and Radical Transparency in every mile of vehicle transport we deliver.",
   },
 ];
 
@@ -33,10 +33,9 @@ export default function CoreValues() {
       <div className="relative mx-auto max-w-6xl">
         <p className="text-sm font-semibold text-red-600">Our Core Values</p>
         <h2 className="mt-2 max-w-2xl text-4xl font-extrabold leading-tight sm:text-5xl">
-          <span className="text-[#0b1e42]">Our </span>
-          <span className="text-red-600">Mission, Vision </span>
-          <span className="text-[#0b1e42]">&amp; </span>
-          <span className="text-red-600">Values</span>
+          <span className="text-[#0b1e42]">What Drives Our </span>
+          <span className="text-red-600">Vehicle Logistics</span>
+          <span className="text-[#0b1e42]"> Business</span>
         </h2>
 
         <div className="mt-12 grid gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-stretch lg:gap-16">

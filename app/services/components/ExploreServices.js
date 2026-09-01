@@ -19,8 +19,8 @@ export default function ExploreServices() {
         <div>
           <p className="text-sm font-semibold text-red-600">Explore Services</p>
           <h2 className="mt-2 text-4xl font-extrabold leading-tight sm:text-5xl">
-            <span className="text-[#0b1e42]">Everything You Need for Safe Car </span>
-            <span className="text-red-600">Transportation.</span>
+            <span className="text-[#0b1e42]">Everything You Need For Safe Car </span>
+            <span className="text-red-600">Transportation</span>
           </h2>
 
           {/* Keyed by title so this whole block remounts (and replays the

@@ -3,11 +3,18 @@
 import { Clock3, Mail, MapPin, Phone } from "lucide-react";
 import { useState } from "react";
 
+// Same contact details as ContactInfoBand.js on /contact — kept in sync
+// manually since the two sections use different layouts (a compact list
+// here vs. a 4-column banner there).
 const CONTACT_INFO = [
-  { icon: MapPin, label: "Address", value: "CarCoolie HQ, Andheri East, Mumbai – 400069" },
-  { icon: Phone, label: "Phone", value: "+91 98765 43210" },
-  { icon: Mail, label: "Email", value: "hello@carcoolie.in" },
-  { icon: Clock3, label: "Working Hours", value: "Mon – Sat : 9:00 AM – 8:00 PM" },
+  {
+    icon: MapPin,
+    label: "Address",
+    value: "Car Coolie Logistics Pvt Ltd, B-124 Industrial Area, Block B, Prem Puri, Phase 2, Gurugram, Haryana 122011, India.",
+  },
+  { icon: Phone, label: "Phone", value: "+1234567890" },
+  { icon: Mail, label: "Email", value: "support@carcoolie.com" },
+  { icon: Clock3, label: "Working Hours", value: "Mon to Sat, 10:00 AM to 6:30 PM" },
 ];
 
 const FIELDS = [

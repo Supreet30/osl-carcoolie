@@ -20,7 +20,7 @@ export default function StatsSection() {
       <div className="relative mx-auto max-w-6xl">
         <p className="text-sm font-semibold text-red-600">Our Brand Numbers</p>
         <h2 className="mt-2 text-4xl font-extrabold text-[#0b1e42] sm:text-5xl">
-          Our Impact In <span className="text-red-600">Numbers...</span>
+          Vehicle Transport At Scale, <span className="text-red-600">Backed By Data</span>
         </h2>
 
         <div className="mt-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">

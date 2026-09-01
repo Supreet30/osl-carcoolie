@@ -22,14 +22,14 @@ export default function BlogHero() {
           <h1 className="mt-6 text-6xl font-extrabold leading-[1.15] tracking-tight text-white">
             Insights, Updates
             <span className="block">
-              <span className="text-white">&amp; </span>
-              <span className="text-red-600">Stories.</span>
+              <span className="text-white">&amp; Stories </span>
+              <span className="text-red-600">From The Road</span>
             </span>
           </h1>
 
           <p className="mt-6 max-w-md text-base leading-relaxed text-slate-300">
-            Stay informed with expert tips, industry insights, and the latest updates from the world
-            of car transport.
+            Stay informed with expert car transport tips, vehicle logistics insights and the latest
+            updates from Car Coolie.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">

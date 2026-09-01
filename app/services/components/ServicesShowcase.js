@@ -19,9 +19,9 @@ export default function ServicesShowcase() {
       <div className="relative mx-auto max-w-6xl">
         <p className="text-sm font-semibold text-red-600">What We Provide</p>
         <h2 className="mt-2 max-w-2xl text-4xl font-extrabold leading-tight sm:text-5xl">
-          <span className="text-[#0b1e42]">We Transport </span>
-          <span className="text-red-600">Your Vehicles Safely </span>
-          <span className="text-[#0b1e42]">Across India</span>
+          <span className="text-[#0b1e42]">Solutions For Every </span>
+          <span className="text-red-600">Vehicle Transport</span>
+          <span className="text-[#0b1e42]"> Need</span>
         </h2>
 
         <div className="relative mx-auto mt-10 flex max-w-3xl items-center rounded-full bg-white p-1.5 shadow-lg ring-1 ring-slate-100">

@@ -22,16 +22,16 @@ export default function CaseStudiesHero() {
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
         <div className="max-w-lg">
           <h1 className="text-6xl font-extrabold leading-[1.2] tracking-tight">
-            <span className="block text-[#0b1e42]">Driving Success</span>
+            <span className="block text-[#0b1e42]">Real Vehicle Logistics</span>
             <span className="block">
-              <span className="text-[#0b1e42]">Through </span>
-              <span className="text-red-600">Every</span>
+              <span className="text-[#0b1e42]">Results, </span>
+              <span className="text-red-600">Backed</span>
             </span>
-            <span className="block text-red-600">Delivery</span>
+            <span className="block text-red-600">By Data</span>
           </h1>
           <p className="mt-6 max-w-md text-base leading-relaxed text-slate-600">
-            From manufacturers to dealerships and individual owners, discover how our nationwide
-            vehicle transportation network delivers speed, safety, and reliability.
+            From manufacturers to dealerships and individual owners, see how our nationwide vehicle
+            transportation network delivers speed, safety and reliability at scale.
           </p>
 
           <div className="mt-10 grid grid-cols-4 gap-3">

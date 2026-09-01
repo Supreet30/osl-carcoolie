@@ -20,12 +20,12 @@ export default function ResourcesHero() {
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
         <div className="max-w-lg">
           <h1 className="text-4xl font-extrabold leading-[1.2] tracking-tight sm:text-5xl">
-            <span className="block text-[#0b1e42]">Car Transport</span>
-            <span className="block text-red-600">Resources &amp; Story.</span>
+            <span className="block text-[#0b1e42]">Everything You Need To Know</span>
+            <span className="block text-red-600">About Vehicle Transport</span>
           </h1>
           <p className="mt-8 max-w-md text-base leading-relaxed text-slate-600">
-            Explore Helpful guides, real clients stories and expert tips about car transport, logistics
-            and everything that keeps your vehicle moving safely.
+            Explore helpful guides, real client stories and expert tips about car transport, vehicle
+            logistics and everything that keeps your vehicle moving safely.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
             <a

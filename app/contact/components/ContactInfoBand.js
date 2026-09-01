@@ -6,9 +6,9 @@ const CONTACT_ITEMS = [
     title: "Our",
     highlight: "Address",
     lines: [
-      { text: "CarCoolie Logistics Pvt Ltd.", bold: true },
+      { text: "Car Coolie Logistics Pvt Ltd", bold: true },
       {
-        text: "B-124 Industrial Area, Block B, Prem Puri, Phase 2 Gurugram Haryana 122011, India",
+        text: "B-124 Industrial Area, Block B, Prem Puri, Phase 2, Gurugram, Haryana 122011, India.",
       },
     ],
   },
@@ -17,9 +17,8 @@ const CONTACT_ITEMS = [
     title: "Contact",
     highlight: "No.",
     lines: [
-      { text: "Mon to Sat", bold: true },
       { text: "+1234567890", bold: true },
-      { text: "Call Us On This Number." },
+      { text: "Available Mon to Sat for vehicle transport queries and bookings." },
     ],
   },
   {
@@ -27,9 +26,8 @@ const CONTACT_ITEMS = [
     title: "Email",
     highlight: "Us",
     lines: [
-      { text: "Mon to Sat", bold: true },
       { text: "support@carcoolie.com", bold: true },
-      { text: "We will reply as soon as possible." },
+      { text: "Our team responds to every vehicle transport enquiry as soon as possible." },
     ],
   },
   {
@@ -38,8 +36,7 @@ const CONTACT_ITEMS = [
     highlight: "Hours",
     lines: [
       { text: "Mon to Sat", bold: true },
-      { text: "10:00 Am To 6:30 Pm", bold: true },
-      { text: "We are available 6 days a week to assist you..." },
+      { text: "10:00 AM to 6:30 PM", bold: true },
     ],
   },
 ];

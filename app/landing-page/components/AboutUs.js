@@ -5,71 +5,84 @@ import Image from "next/image";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { CheckCircle2 } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Dummy placeholder copy/stats for points 2-4 — swap for real content
-// (pricing/tracking/coverage copy, actual numbers) before shipping. Images
-// reuse the existing testi*.jpg assets as placeholders (testi1 repeats for
-// point 4) — swap each for the real per-point photo once available.
+// Images reuse the existing testi*.jpg assets as placeholders (testi1
+// repeats for point 4) — swap each for the real per-point photo once
+// available.
 const POINTS = [
   {
-    id: "loading",
+    id: "transparency",
     heading: (
       <>
-        Secure <span className="text-red-600">Vehicle Loading</span>
+        Transparency <span className="text-red-600">&amp; Assurance</span>
       </>
     ),
-    description:
-      "Our expert team ensures every vehicle is loaded with precision using advanced equipment and strict safety procedures. From careful positioning to secure fastening, we protect your vehicle throughout transit, minimizing risks and ensuring a safe, damage-free journey across India with complete reliability and professional care.",
+    bullets: [
+      "Transparent written quotation before booking",
+      "No hidden charges or last-minute surprises",
+      "Timely delivery with complete transparency at every step",
+      "No subcontracting to tier 2 vendors — OSL manages the entire process directly",
+    ],
     stats: [
-      { value: "12k+", label: "DELIVERIES ANNUALLY" },
-      { value: "99.9%", label: "SAFETY RECORD" },
+      { value: "100%", label: "WRITTEN QUOTATIONS" },
+      { value: "ZERO", label: "HIDDEN CHARGES" },
     ],
     image: "/testi1.jpg",
   },
   {
-    id: "tracking",
+    id: "handling",
     heading: (
       <>
-        Real-Time <span className="text-red-600">Vehicle Tracking</span>
+        Professional Handling <span className="text-red-600">&amp; Security</span>
       </>
     ),
-    description:
-      "Track your shipment live from pickup to delivery with GPS-enabled monitoring. Get instant status updates and accurate arrival estimates, so you always know exactly where your vehicle is on its journey across India.",
+    bullets: [
+      "Professional vehicle inspection before pickup",
+      "Photos and videos of your vehicle at the time of pickup",
+      "Safe and secure loading and unloading by trained professionals",
+      "Your vehicle is never used for unauthorized driving or to carry someone else's luggage",
+    ],
     stats: [
-      { value: "24/7", label: "LIVE GPS MONITORING" },
-      { value: "100%", label: "ROUTE VISIBILITY" },
+      { value: "100%", label: "PRE-PICKUP INSPECTIONS" },
+      { value: "100%", label: "PHOTO-DOCUMENTED PICKUPS" },
     ],
     image: "/testi2.jpg",
   },
   {
-    id: "network",
+    id: "journey",
     heading: (
       <>
-        <span className="text-red-600">Nationwide</span> Coverage Network
+        Connected Journey <span className="text-red-600">&amp; Support</span>
       </>
     ),
-    description:
-      "Our carrier network spans every major city and hundreds of smaller towns across India. Wherever your vehicle needs to go, our extensive hub network keeps transit times short and deliveries reliable.",
+    bullets: [
+      "Real-time tracking and regular transit updates",
+      "Dedicated customer support throughout the journey",
+      "Door to door delivery as committed",
+    ],
     stats: [
-      { value: "500+", label: "CITIES COVERED" },
-      { value: "50+", label: "REGIONAL HUBS" },
+      { value: "24/7", label: "CUSTOMER SUPPORT" },
+      { value: "100%", label: "DOOR TO DOOR DELIVERY" },
     ],
     image: "/testi3.jpg",
   },
   {
-    id: "insurance",
+    id: "reliability",
     heading: (
       <>
-        Fully <span className="text-red-600">Insured</span> Transit
+        Reliability <span className="text-red-600">&amp; Confidence</span>
       </>
     ),
-    description:
-      "Every vehicle we transport is covered by comprehensive transit insurance from the moment it's loaded until it reaches your doorstep, giving you complete peace of mind on every shipment.",
+    bullets: [
+      "Timely delivery assurance",
+      "Complete confidence from pickup to delivery, ensuring peace of mind",
+    ],
     stats: [
-      { value: "100%", label: "INSURED SHIPMENTS" },
-      { value: "0", label: "CLAIM DISPUTES" },
+      { value: "99.9%", label: "ON-TIME DELIVERY RATE" },
+      { value: "100%", label: "CUSTOMER CONFIDENCE" },
     ],
     image: "/testi1.jpg",
   },
@@ -158,9 +171,9 @@ export default function AboutUs() {
       <div className="mx-auto w-full max-w-7xl shrink-0">
         <p className="text-md font-semibold text-red-600">About Us</p>
         <h2 className="mt-3 text-5xl font-extrabold leading-tight text-[#0b1e42]">
-          We Transport <span className="text-red-600">Your Vehicles Safely</span>
+          The OSL Logistics / Car Coolie Difference:
           <br />
-          Across India
+          <span className="text-red-600">Transparent, Secure, Reliable</span>
         </h2>
       </div>
 
@@ -185,17 +198,21 @@ export default function AboutUs() {
 
               <div>
                 <h3 className="text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">{point.heading}</h3>
-                <p className="mt-4 text-sm leading-relaxed text-slate-500 sm:text-base">
-                  {point.description}
-                </p>
+
+                <ul className="mt-5 flex flex-col gap-3">
+                  {point.bullets.map((bullet) => (
+                    <li key={bullet} className="flex items-start gap-2.5 text-sm leading-relaxed text-slate-600 sm:text-base">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2} />
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
 
                 <div className="mt-6 divide-y divide-slate-200 border-t border-slate-200">
                   {point.stats.map((stat) => (
                     <div key={stat.label} className="py-3">
                       <p className="text-2xl font-extrabold text-red-600 sm:text-3xl">{stat.value}</p>
-                      <p className="mt-1 text-xs font-medium tracking-wide text-slate-500">
-                        {stat.label}
-                      </p>
+                      <p className="mt-1 text-xs font-medium tracking-wide text-slate-500">{stat.label}</p>
                     </div>
                   ))}
                 </div>

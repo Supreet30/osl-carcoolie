@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Calendar,
@@ -11,15 +12,20 @@ import {
   FileText,
   Fingerprint,
   IdCard,
-  MapPin,
+  Loader2,
   LocateFixed,
   Map,
+  MapPin,
   Navigation,
   Shield,
   ShieldCheck,
   User,
 } from "lucide-react";
-import { MOCK_QUOTE } from "../../mockQuote";
+import { getCurrentPosition, reverseGeocode } from "../lib/geocode";
+import { createBooking } from "../../lib/bookingStore";
+import { formatINR } from "../../lib/pricing";
+import DatePicker from "./DatePicker";
+import MapPickerModal from "./MapPickerModal";
 
 const DOCUMENT_TYPES = [
   { key: "rc", label: "RC Card", icon: FileText },
@@ -39,12 +45,32 @@ const DROPOFF_METHODS = [
   { key: "driver", label: "CarCoolie Driver Drop-off", subtitle: "Driver delivers car to your location", icon: User },
 ];
 
-const LOCATION_MODES = [
-  { key: "current", label: "Current Location", icon: LocateFixed },
-  { key: "map", label: "Select on Map", icon: Map },
-];
-
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
+
+// Native date inputs use this as their `min` so past dates can't be picked.
+const todayISO = new Date().toISOString().slice(0, 10);
+
+// Adds `days` calendar days to an ISO (YYYY-MM-DD) date string — used to
+// turn the route's minimum transit days into the drop-off date picker's
+// `min` bound (see minDropoffISO below).
+function addDaysISO(iso, days) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+// `new Date("YYYY-MM-DD")` parses as UTC midnight, which can display as the
+// previous day in timezones behind UTC — parse the parts and construct in
+// local time instead, same fix DatePicker.js and BookingSummary.js already
+// use for the same reason.
+function formatISOShort(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
 
 function SectionCard({ icon: Icon, title, badge, children }) {
   return (
@@ -80,24 +106,122 @@ function TextField({ label, ...props }) {
   );
 }
 
-export default function BookingForm() {
+// Shared "Add Location" block used under both Pickup and Drop-off Details —
+// wires the real Geolocation API for "Current Location" and opens the
+// Leaflet map picker for "Select on Map".
+function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, loading, error }) {
+  // Whichever method actually produced the captured location gets the red
+  // "selected" border — same treatment as the Pickup/Drop-off Method cards
+  // above this section, since these two buttons are really just another
+  // mutually-exclusive choice (which way was the location set).
+  const currentSelected = captured?.source === "current";
+  const mapSelected = captured?.source === "map";
+
+  return (
+    <div className="mt-6">
+      <p className="text-sm font-semibold text-[#0b1e42]">Add Location</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={onUseCurrentLocation}
+          disabled={loading}
+          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-wait ${
+            currentSelected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+        >
+          {loading ? (
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-red-600" />
+          ) : (
+            <LocateFixed className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
+          )}
+          <span className="text-sm font-bold text-[#0b1e42]">Current Location</span>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenMap}
+          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+            mapSelected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+        >
+          <Map className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
+          <span className="text-sm font-bold text-[#0b1e42]">Select on Map</span>
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
+      {captured && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-green-600">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {captured.address}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function BookingForm({ estimate, estimateLoaded, onSummaryChange }) {
+  const router = useRouter();
+
+  // Nothing is uploaded until the customer actually picks a file — the
+  // upload card only turns green in response to a real handleFileSelected
+  // call below, never pre-filled.
   const [uploads, setUploads] = useState({
-    rc: { uploaded: true, fileName: "RC.pdf", fileSize: "1.2 MB" },
+    rc: { uploaded: false },
     license: { uploaded: false },
     pan: { uploaded: false },
     aadhaar: { uploaded: false },
     insurance: { uploaded: false },
   });
-  const [pickupMethod, setPickupMethod] = useState("driver");
-  const [locationMode, setLocationMode] = useState(null);
+
+  const [pickupMethod, setPickupMethod] = useState("self");
+  const [pickupLocation, setPickupLocation] = useState(null);
+  const [pickupGeoLoading, setPickupGeoLoading] = useState(false);
+  const [pickupGeoError, setPickupGeoError] = useState("");
+  const [pickupDate, setPickupDate] = useState(estimate?.date ?? "");
   const [timeSlot, setTimeSlot] = useState("11:00 - 01:00");
-  const [dropoffMethod, setDropoffMethod] = useState("driver");
-  const [dropoffLocationMode, setDropoffLocationMode] = useState(null);
+
+  const [dropoffMethod, setDropoffMethod] = useState("self");
+  const [dropoffLocation, setDropoffLocation] = useState(null);
+  const [dropoffGeoLoading, setDropoffGeoLoading] = useState(false);
+  const [dropoffGeoError, setDropoffGeoError] = useState("");
+  const [dropoffDate, setDropoffDate] = useState("");
   const [dropoffTimeSlot, setDropoffTimeSlot] = useState(null);
+
+  // The route's minimum transit days (admin-set per direction in Route
+  // Pricing — see routes.min_days) gates how soon a drop-off can be
+  // scheduled after the chosen pickup date: minDays=3 and pickup=day 1
+  // disables days 2-4, leaving day 5 onward selectable. Falls back to 1
+  // (same as the DB column's default) if the estimate predates this field
+  // or wasn't loaded from a real route.
+  const minTransitDays = estimate?.minDays ?? 1;
+  const minDropoffISO = pickupDate ? addDaysISO(pickupDate, minTransitDays + 1) : todayISO;
+
+  // Adjusting state during render (not in an effect — see the same
+  // pattern in EstimateModal.js) rather than setState-in-an-effect:
+  // clears an already-picked drop-off date if changing the pickup date
+  // pushes the minimum past it, so a stale, now-invalid date can't get
+  // silently submitted.
+  const [lastMinDropoffISO, setLastMinDropoffISO] = useState(minDropoffISO);
+  if (minDropoffISO !== lastMinDropoffISO) {
+    setLastMinDropoffISO(minDropoffISO);
+    if (dropoffDate && dropoffDate < minDropoffISO) {
+      setDropoffDate("");
+    }
+  }
+
+  const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
   const [confirmedDocs, setConfirmedDocs] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
   const fileInputRef = useRef(null);
   const pendingUploadKey = useRef(null);
+
+  // Bubbles the fields the booking summary sidebar displays up to the
+  // shared parent, so it stays live as the customer fills in this form
+  // instead of only reflecting the estimate from before this page loaded.
+  useEffect(() => {
+    onSummaryChange?.({ pickupMethod, dropoffMethod, date: pickupDate, timeSlot });
+  }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot]);
 
   function triggerUpload(key) {
     pendingUploadKey.current = key;
@@ -111,52 +235,176 @@ export default function BookingForm() {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       setUploads((prev) => ({
         ...prev,
-        [key]: { uploaded: true, fileName: file.name, fileSize: `${sizeMB} MB` },
+        // `file` (the raw File object) travels through to createBooking so
+        // it can actually be uploaded to Supabase Storage on submit — see
+        // createBookingSupabase in bookingStore.js.
+        [key]: { uploaded: true, fileName: file.name, fileSize: `${sizeMB} MB`, file },
       }));
     }
     event.target.value = "";
   }
 
-  function handleSubmit(event) {
-    event.preventDefault();
-    // No backend wired up yet — this is UI only.
+  async function handleUseCurrentLocation(target) {
+    const setLoading = target === "pickup" ? setPickupGeoLoading : setDropoffGeoLoading;
+    const setError = target === "pickup" ? setPickupGeoError : setDropoffGeoError;
+    const setLocation = target === "pickup" ? setPickupLocation : setDropoffLocation;
+
+    setError("");
+    setLoading(true);
+    try {
+      const { lat, lng } = await getCurrentPosition();
+      const address = await reverseGeocode(lat, lng);
+      setLocation({ address, lat, lng, source: "current" });
+    } catch (err) {
+      setError(
+        err?.code === 1
+          ? "Location permission denied — allow access or use Select on Map instead."
+          : "Couldn't get your current location. Try Select on Map instead."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const canSubmit = confirmedDocs && agreedTerms;
+  function handleMapConfirm(location) {
+    const tagged = { ...location, source: "map" };
+    if (mapPickerTarget === "pickup") setPickupLocation(tagged);
+    if (mapPickerTarget === "dropoff") setDropoffLocation(tagged);
+    setMapPickerTarget(null);
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    setSubmitting(true);
+
+    const booking = {
+      estimate,
+      pickup: {
+        fullName: formData.get("pickup_fullName"),
+        phone: formData.get("pickup_phone"),
+        house: formData.get("pickup_house"),
+        street: formData.get("pickup_street"),
+        landmark: formData.get("pickup_landmark"),
+        city: formData.get("pickup_city"),
+        pin: formData.get("pickup_pin"),
+        method: pickupMethod,
+        capturedLocation: pickupLocation,
+        date: formData.get("pickup_date"),
+        timeSlot,
+      },
+      dropoff: {
+        fullName: formData.get("dropoff_fullName"),
+        phone: formData.get("dropoff_phone"),
+        house: formData.get("dropoff_house"),
+        street: formData.get("dropoff_street"),
+        landmark: formData.get("dropoff_landmark"),
+        city: formData.get("dropoff_city"),
+        pin: formData.get("dropoff_pin"),
+        method: dropoffMethod,
+        capturedLocation: dropoffLocation,
+        date: formData.get("dropoff_date"),
+        timeSlot: dropoffTimeSlot,
+      },
+      documents: uploads,
+    };
+
+    try {
+      const created = await createBooking(booking);
+      router.push(`/my-bookings?id=${created.id}`);
+    } catch (err) {
+      console.error("Failed to create booking:", err);
+      setSubmitting(false);
+    }
+  }
+
+  const canSubmit = confirmedDocs && agreedTerms && !submitting;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
 
-      <SectionCard icon={MapPin} title="1. Pickup Address" badge={`${MOCK_QUOTE.pickupCity.split(",")[0]}, ${MOCK_QUOTE.pickupPin}`}>
+      {estimateLoaded && !estimate && (
+        <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
+          No estimate found for this session — the price shown will be a placeholder. Start from{" "}
+          <a href="/services/b2c" className="underline">
+            Get an Estimate
+          </a>{" "}
+          first for a real quote.
+        </div>
+      )}
+      {estimate && (
+        <div className="flex items-center justify-between rounded-2xl bg-red-50 p-4 text-sm">
+          <span className="font-semibold text-[#0b1e42]">
+            {estimate.fromCity} &rarr; {estimate.toCity} &bull; {estimate.vehicleType}
+          </span>
+          <span className="font-extrabold text-red-600">{formatINR(estimate.total)}</span>
+        </div>
+      )}
+
+      <SectionCard
+        icon={MapPin}
+        title="1. Pickup Address"
+        badge={estimate ? `${estimate.fromCity}${estimate.pickupPin ? `, ${estimate.pickupPin}` : ""}` : undefined}
+      >
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField label="Full Name" type="text" placeholder="e.g. Rahul Sharma" />
-          <TextField label="Phone Number" type="tel" placeholder="+91 98765 43210" />
+          <TextField label="Full Name" name="pickup_fullName" type="text" placeholder="e.g. Rahul Sharma" />
+          <TextField label="Phone Number" name="pickup_phone" type="tel" placeholder="+91 98765 43210" />
         </div>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <TextField label="House / Plot / Flat No." type="text" placeholder="B-24, 2nd Floor" />
-          <TextField label="Street / Area Name" type="text" placeholder="Connaught Place" />
+          <TextField label="House / Plot / Flat No." name="pickup_house" type="text" placeholder="B-24, 2nd Floor" />
+          <TextField label="Street / Area Name" name="pickup_street" type="text" placeholder="Connaught Place" />
         </div>
         <div className="mt-5 grid gap-5 sm:grid-cols-3">
-          <TextField label="Landmark (Optional)" type="text" placeholder="Near Metro Pillar 12" />
-          <TextField label="City" type="text" placeholder="New Delhi" />
-          <TextField label="PIN Code" type="text" inputMode="numeric" placeholder="110001" />
+          <TextField label="Landmark (Optional)" name="pickup_landmark" type="text" placeholder="Near Metro Pillar 12" />
+          <TextField
+            label="City"
+            name="pickup_city"
+            type="text"
+            defaultValue={estimate?.fromCity ?? ""}
+            placeholder="New Delhi"
+          />
+          <TextField
+            label="PIN Code"
+            name="pickup_pin"
+            type="text"
+            inputMode="numeric"
+            defaultValue={estimate?.pickupPin ?? ""}
+            placeholder="110001"
+          />
         </div>
       </SectionCard>
 
-      <SectionCard icon={Navigation} title="2. Destination Address" badge={`${MOCK_QUOTE.dropCity.split(",")[0]}, ${MOCK_QUOTE.dropPin}`}>
+      <SectionCard
+        icon={Navigation}
+        title="2. Destination Address"
+        badge={estimate ? `${estimate.toCity}${estimate.destinationPin ? `, ${estimate.destinationPin}` : ""}` : undefined}
+      >
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField label="Full Name" type="text" placeholder="Recipient Name" />
-          <TextField label="Phone Number" type="tel" placeholder="+91 98765 43210" />
+          <TextField label="Full Name" name="dropoff_fullName" type="text" placeholder="Recipient Name" />
+          <TextField label="Phone Number" name="dropoff_phone" type="tel" placeholder="+91 98765 43210" />
         </div>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <TextField label="House / Plot / Flat No." type="text" placeholder="A-12, 5th Floor" />
-          <TextField label="Street / Area Name" type="text" placeholder="Bandra West" />
+          <TextField label="House / Plot / Flat No." name="dropoff_house" type="text" placeholder="A-12, 5th Floor" />
+          <TextField label="Street / Area Name" name="dropoff_street" type="text" placeholder="Bandra West" />
         </div>
         <div className="mt-5 grid gap-5 sm:grid-cols-3">
-          <TextField label="Landmark (Optional)" type="text" placeholder="Near Linking Road" />
-          <TextField label="City" type="text" placeholder="Mumbai" />
-          <TextField label="PIN Code" type="text" inputMode="numeric" placeholder="400001" />
+          <TextField label="Landmark (Optional)" name="dropoff_landmark" type="text" placeholder="Near Linking Road" />
+          <TextField
+            label="City"
+            name="dropoff_city"
+            type="text"
+            defaultValue={estimate?.toCity ?? ""}
+            placeholder="Mumbai"
+          />
+          <TextField
+            label="PIN Code"
+            name="dropoff_pin"
+            type="text"
+            inputMode="numeric"
+            defaultValue={estimate?.destinationPin ?? ""}
+            placeholder="400001"
+          />
         </div>
       </SectionCard>
 
@@ -226,39 +474,20 @@ export default function BookingForm() {
         </div>
 
         {pickupMethod === "driver" && (
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-[#0b1e42]">Add Location</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {LOCATION_MODES.map(({ key, label, icon: Icon }) => {
-                const selected = locationMode === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setLocationMode(key)}
-                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                      selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-                    <span className="text-sm font-bold text-[#0b1e42]">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <AddLocationPicker
+            captured={pickupLocation}
+            loading={pickupGeoLoading}
+            error={pickupGeoError}
+            onUseCurrentLocation={() => handleUseCurrentLocation("pickup")}
+            onOpenMap={() => setMapPickerTarget("pickup")}
+          />
         )}
 
         <div className="mt-6 grid gap-5 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-[#0b1e42]">
             Select Date
-            <span className="relative mt-2 block">
-              <Calendar className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                defaultValue={MOCK_QUOTE.date}
-                className="w-full rounded-xl bg-slate-50 py-3 pr-4 pl-11 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
-              />
+            <span className="mt-2 block">
+              <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={todayISO} />
             </span>
           </label>
 
@@ -317,39 +546,24 @@ export default function BookingForm() {
         </div>
 
         {dropoffMethod === "driver" && (
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-[#0b1e42]">Add Location</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {LOCATION_MODES.map(({ key, label, icon: Icon }) => {
-                const selected = dropoffLocationMode === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setDropoffLocationMode(key)}
-                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                      selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-                    <span className="text-sm font-bold text-[#0b1e42]">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <AddLocationPicker
+            captured={dropoffLocation}
+            loading={dropoffGeoLoading}
+            error={dropoffGeoError}
+            onUseCurrentLocation={() => handleUseCurrentLocation("dropoff")}
+            onOpenMap={() => setMapPickerTarget("dropoff")}
+          />
         )}
 
         <div className="mt-6 grid gap-5 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-[#0b1e42]">
             Select Date
-            <span className="relative mt-2 block">
-              <Calendar className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Select Date"
-                className="w-full rounded-xl bg-slate-50 py-3 pr-4 pl-11 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
-              />
+            <span className="mt-2 block">
+              <DatePicker name="dropoff_date" value={dropoffDate} onChange={setDropoffDate} min={minDropoffISO} />
+            </span>
+            <span className="mt-1.5 block text-xs font-normal text-slate-400">
+              Minimum {minTransitDays} day{minTransitDays === 1 ? "" : "s"} transit
+              {pickupDate ? ` — earliest ${formatISOShort(minDropoffISO)}` : ""}
             </span>
           </label>
 
@@ -413,9 +627,24 @@ export default function BookingForm() {
         disabled={!canSubmit}
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-4 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
       >
-        Confirm &amp; Book Now
-        <ArrowRight className="h-4 w-4" />
+        {submitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Creating Booking&hellip;
+          </>
+        ) : (
+          <>
+            Confirm &amp; Book Now
+            <ArrowRight className="h-4 w-4" />
+          </>
+        )}
       </button>
+
+      <MapPickerModal
+        open={mapPickerTarget !== null}
+        onClose={() => setMapPickerTarget(null)}
+        onConfirm={handleMapConfirm}
+      />
     </form>
   );
 }

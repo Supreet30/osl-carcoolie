@@ -116,6 +116,10 @@ export default function GallerySection() {
               <p className="shrink-0 text-md font-bold tracking-[0.25em] text-white/70">FEATURED VIDEO</p>
               <span className="h-px flex-1 bg-white/20" />
             </div>
+            <p className="mx-auto mt-4 max-w-xl text-center text-sm leading-relaxed text-slate-300">
+              Follow our journey and stay updated with real moments from real vehicle deliveries
+              across India.
+            </p>
 
             <div className="relative mx-auto mt-8 aspect-video max-w-4xl overflow-hidden rounded-[28px] shadow-2xl">
               {/* No port/dockyard footage exists in the repo — a plain dark

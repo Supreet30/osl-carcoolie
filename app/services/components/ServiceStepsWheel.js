@@ -8,18 +8,17 @@ import {
   UserPlus,
 } from "lucide-react";
 
-// Dummy placeholder copy — swap for the real 6-step booking flow once it's defined.
 const STEPS = [
   {
     number: "01",
     title: "Register",
-    description: "Create your secure CarCoolie account today.",
+    description: "Create your secure Car Coolie account today.",
     icon: UserPlus,
   },
   {
     number: "02",
     title: "Upload Documents",
-    description: "Add your vehicle & ID documents securely.",
+    description: "Add your vehicle and ID documents securely.",
     icon: Upload,
   },
   {
@@ -74,8 +73,10 @@ export default function ServiceStepsWheel() {
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white">
           <ShieldCheck className="h-5 w-5" strokeWidth={2.2} />
         </span>
-        <p className="mt-3 text-lg font-extrabold text-[#0b1e42] sm:text-xl">6 Steps to Avail</p>
-        <p className="mt-1 text-[10px] font-bold tracking-[0.18em] text-red-600">
+        <p className="mt-3 px-2 text-sm leading-tight font-extrabold text-[#0b1e42] sm:text-base">
+          6 Steps To Book Vehicle Transport
+        </p>
+        <p className="mt-1.5 text-[10px] font-bold tracking-[0.18em] text-red-600">
           SIMPLE • FAST • SECURE PROCESS
         </p>
       </div>

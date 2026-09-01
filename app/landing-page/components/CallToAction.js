@@ -17,11 +17,11 @@ export default function CallToAction() {
 
         <div className="relative flex flex-col items-center px-6 py-20 text-center sm:px-12 md:py-28">
           <h2 className="max-w-2xl text-5xl font-extrabold leading-tight text-red-500">
-            Ready to Transport Your Vehicle Safely?
+            Book Trusted Car Transport Services Today
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-black">
-            Join 500+ companies that trust Car Coolie to deliver on time, every
-            time. No contracts. No minimums.
+            Join 500+ companies that trust Car Coolie for on-time, insured vehicle
+            transport across India. No contracts, no minimums.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">

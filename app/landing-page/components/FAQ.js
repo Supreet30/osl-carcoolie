@@ -72,7 +72,7 @@ export default function FAQ() {
               Frequently Ask <span className="text-red-600">Questions</span>
             </h2>
             <p className="mt-4 text-base text-slate-500">
-              Everything you need to know about elite car transport.
+              Everything You Need To Know Before Booking Car Transport
             </p>
 
             <div className="mt-10 space-y-4">
@@ -93,11 +93,11 @@ export default function FAQ() {
                 <Image src="/mailicon.png" alt="" fill sizes="96px" className="object-contain" />
               </div>
               <h3 className="mt-5 text-xl font-extrabold text-[#0b1e42]">
-                Do you have more <span className="text-red-600">questions?</span>
+                Still Need Help With Your <span className="text-red-600">Vehicle Transport Booking?</span>
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                End-to-end payments and financial management in a single solution.
-                Meet the right platform to help realize.
+                Reach out directly and our vehicle transport experts will help with quotes, scheduling
+                and any other booking questions.
               </p>
               <a
                 href="mailto:support@carcoolie.com"

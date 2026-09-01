@@ -1,7 +1,6 @@
 import Navbar from "../../../landing-page/components/Navbar";
 import Footer from "../../../landing-page/components/Footer";
-import BookingForm from "./components/BookingForm";
-import BookingSummary from "./components/BookingSummary";
+import BookingPageClient from "./components/BookingPageClient";
 
 export const metadata = {
   title: "Complete Your Booking | Car Coolie",
@@ -21,10 +20,7 @@ export default function B2cBookPage() {
           handle the rest with premium care.
         </p>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-start">
-          <BookingForm />
-          <BookingSummary />
-        </div>
+        <BookingPageClient />
       </div>
 
       <Footer />

@@ -23,10 +23,10 @@ export default function BlogNewsletterCta() {
             </span>
             <div>
               <p className="text-3xl font-semibold text-white">
-                Newsletter — Subscribe for Updates
+                Get Vehicle Shipping Tips Straight To Your Inbox
               </p>
               <p className="mt-1 text-md text-slate-400">
-                Get the latest news, updates, tips, and offers straight to your inbox.
+                Get the latest car transport news, guides, tips and offers delivered to your inbox.
               </p>
             </div>
           </div>

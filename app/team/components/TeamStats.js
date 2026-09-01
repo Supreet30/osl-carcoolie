@@ -20,6 +20,14 @@ export default function TeamStats() {
           className="pointer-events-none absolute inset-0 bg-linear-to-r from-[#0b1e42] via-[#0b1e42]/85 to-transparent"
         />
 
+        <div className="relative mb-10 max-w-2xl">
+          <h2 className="text-3xl font-extrabold text-white sm:text-4xl">Our Team In Numbers</h2>
+          <p className="mt-3 text-sm leading-relaxed text-slate-300 sm:text-base">
+            We come from different places and backgrounds, but we share one goal: delivering trust
+            across India&apos;s vehicle transport network.
+          </p>
+        </div>
+
         <div className="relative grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-4">
           {STATS.map(({ icon: Icon, value, label }) => (
             <div key={label} className="flex items-center gap-4">

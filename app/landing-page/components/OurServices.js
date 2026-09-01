@@ -9,82 +9,82 @@ import { Truck } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Dummy placeholder copy/stats for cards 2-4 — swap for real service
-// content (pricing, actual coverage/turnaround numbers) before shipping.
 // Images reuse the existing testi*.jpg assets as placeholders (testi1
 // repeats for card 4) — swap each for the real per-service photo once
-// available.
+// available. Badges are short, non-numeric restatements of the actual
+// description copy (no invented stats), unlike the dummy 100%/ZERO/etc.
+// badges this replaced.
 const CARDS = [
+  {
+    id: "door-to-door",
+    label: "DOOR TO DOOR (PART TRUCK LOAD)",
+    heading: (
+      <>
+        Right-Sized Transport, <span className="text-red-600">Delivered to Your Doorstep</span>
+      </>
+    ),
+    description:
+      "Book a part truck load, with pickup and delivery handled at your exact doorstep. Ideal for single vehicles and tighter city routes, without paying for a full truck.",
+    badges: [
+      { value: "DOOR TO DOOR", label: "PICKUP & DELIVERY" },
+      { value: "SINGLE VEHICLE", label: "RIGHT-SIZED LOADS" },
+      { value: "NO FULL TRUCK", label: "COST REQUIRED" },
+    ],
+    cta: "Explore Door to Door",
+    image: "/testi2.jpg",
+  },
   {
     id: "full-truck-load",
     label: "FULL TRUCK LOAD",
     heading: (
       <>
-        Dedicated Carrier. <span className="text-red-600">Maximum</span> Protection.
+        Dedicated Carrier, <span className="text-red-600">Maximum Protection</span>
       </>
     ),
     description:
-      "Experience premium vehicle transportation with our Full Truck Load (FTL) service. Your vehicle travels in a dedicated carrier without sharing space with any other shipment, ensuring absolute security and priority scheduling.",
+      "Book a dedicated full truck load carrier for premium, priority vehicle transportation. Your vehicles travel without shared stops or transfers, with pan-India doorstep delivery.",
     badges: [
-      { value: "100%", label: "DEDICATED TRUCK" },
-      { value: "ZERO", label: "VEHICLE TRANSFERS" },
+      { value: "DEDICATED", label: "CARRIER" },
+      { value: "NO SHARED", label: "STOPS OR TRANSFERS" },
       { value: "PAN INDIA", label: "DOORSTEP DELIVERY" },
     ],
     cta: "Explore Full Truck Load",
     image: "/testi1.jpg",
   },
   {
-    id: "part-load",
-    label: "PART LOAD (PTL)",
+    id: "stockyard",
+    label: "STOCKYARD MANAGEMENT",
     heading: (
       <>
-        Shared Carrier. <span className="text-red-600">Smart</span> Savings.
+        Secure Vehicle <span className="text-red-600">Storage</span> Between Moves
       </>
     ),
     description:
-      "Moving fewer vehicles? Our Part Truck Load service shares carrier space across multiple shipments on the same route, cutting your cost without cutting corners on care or tracking.",
+      "Store vehicles safely in our managed stockyards during transit or before dispatch, with the same tracking and security standards that cover every Car Coolie shipment. Making final delivery to customer, on demand.",
     badges: [
-      { value: "30%", label: "LOWER COST" },
-      { value: "FLEXIBLE", label: "PICKUP SLOTS" },
-      { value: "MULTI-CITY", label: "ROUTE COVERAGE" },
+      { value: "SECURE", label: "MANAGED STORAGE" },
+      { value: "FULL", label: "TRACKING & SECURITY" },
+      { value: "ON DEMAND", label: "FINAL DELIVERY" },
     ],
-    cta: "Explore Part Load",
-    image: "/testi2.jpg",
-  },
-  {
-    id: "express",
-    label: "EXPRESS DELIVERY",
-    heading: (
-      <>
-        Priority Transit. <span className="text-red-600">Fastest</span> Routes.
-      </>
-    ),
-    description:
-      "When timing matters, our Express service prioritizes your vehicle on the fastest available route with dedicated handling, so it reaches its destination as quickly as safely possible.",
-    badges: [
-      { value: "48HR", label: "AVG. DELIVERY" },
-      { value: "PRIORITY", label: "ROUTE HANDLING" },
-      { value: "LIVE", label: "STATUS UPDATES" },
-    ],
-    cta: "Explore Express Delivery",
+    cta: "Explore Stockyard Management",
     image: "/testi3.jpg",
   },
   {
-    id: "two-wheeler",
-    label: "TWO-WHEELER TRANSPORT",
+    id: "warehouse",
+    label: "WAREHOUSE MANAGEMENT",
     heading: (
       <>
-        Fully Crated. <span className="text-red-600">Doorstep</span> Ready.
+        Managing Parts <span className="text-red-600">Warehouses</span> for OEMs
       </>
     ),
     description:
-      "Bikes and scooters travel individually crated and secured, protected from dust, weather, and transit damage, then delivered right to your door — no showroom pickup required.",
+      "Managing dedicated parts warehouses for OEMs, ensuring streamlined inventory control, secure handling, and timely distribution to support uninterrupted supply chains.",
     badges: [
-      { value: "CRATED", label: "INDIVIDUAL PACKING" },
-      { value: "ZERO", label: "SCRATCH GUARANTEE" },
-      { value: "PAN INDIA", label: "DOORSTEP DELIVERY" },
+      { value: "OEM", label: "DEDICATED WAREHOUSES" },
+      { value: "STREAMLINED", label: "INVENTORY CONTROL" },
+      { value: "TIMELY", label: "DISTRIBUTION" },
     ],
-    cta: "Explore Bike Transport",
+    cta: "Explore Warehouse Management",
     image: "/testi1.jpg",
   },
 ];
@@ -221,9 +221,9 @@ export default function OurServices() {
       <div className="mx-auto w-full max-w-6xl shrink-0">
         <p className="text-md font-semibold text-red-600">Our Services</p>
         <h2 className="mt-3 text-5xl font-extrabold leading-tight text-[#0b1e42]">
-          We Transport <span className="text-red-600">Your Vehicles Safely</span>
+          Choose The <span className="text-red-600">Right Car Carrier</span>
           <br />
-          Across India
+          For Your Shipment
         </h2>
       </div>
 

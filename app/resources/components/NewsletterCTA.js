@@ -27,11 +27,11 @@ export default function NewsletterCTA() {
               Stay Updated
             </p>
             <h2 className="mt-3 text-3xl font-extrabold leading-tight text-white sm:text-4xl">
-              Subscribe to Our Resources
+              Get Vehicle Transport Tips In Your Inbox
             </h2>
             <span className="mt-3 block h-1 w-14 rounded-full bg-red-600" />
             <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-300">
-              Get the latest articles, tips, success stories, and updates about car transport
+              Get the latest articles, tips, success stories and updates about car transport
               delivered to your inbox.
             </p>
           </div>
@@ -68,7 +68,7 @@ export default function NewsletterCTA() {
                 </form>
                 <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
                   <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
-                  We respect your privacy. Unsubscribe anytime.
+                  We respect your privacy, unsubscribe anytime.
                 </p>
               </>
             )}

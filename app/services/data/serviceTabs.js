@@ -3,7 +3,8 @@ import { Building2, Users } from "lucide-react";
 // Shared by ServicesShowcase (the accordion cards) and ExploreServices (the
 // content panel below it) — both read whichever service is currently in
 // focus via ServiceSelectionContext, so this is the single source of truth
-// for copy across both sections.
+// for copy across both sections. Written in plain, conversational language
+// on purpose (no em dashes) rather than terse marketing fragments.
 export const TABS = [
   {
     id: "b2c",
@@ -11,13 +12,13 @@ export const TABS = [
     icon: Users,
     services: [
       {
-        title: "Enclosed Car Carrier",
+        title: "Door To Door (Half Truck Load)",
         image: "/contact-hero-truck.png",
         description:
-          "Fully covered trailers for luxury, exotic and vintage vehicles — climate-safe, dust-free and completely private.",
-        tagline: ["Door To Door ", "Vehicle Transport."],
+          "Half truck load carriers with pickup and delivery handled right at your doorstep.",
+        tagline: ["Door To Door ", "Vehicle Transport"],
         details:
-          "From doorstep pickup to final delivery, our fully-managed service handles every mile. Trained handlers, GPS-monitored carriers and insured transit make sure your vehicle arrives exactly as it left — clean, intact and on time.",
+          "From doorstep pickup to final delivery, our fully managed vehicle transport service handles every mile. Trained handlers, GPS monitored carriers and insured transit ensure your car arrives exactly as it left, clean, intact and on time.",
         highlights: [
           "Professional Loading",
           "Wheel Lock Safety",
@@ -27,51 +28,51 @@ export const TABS = [
         ],
       },
       {
-        title: "Open Car Carrier",
+        title: "Multiple Cars (Full Truck Load)",
         image: "/servicehero.png",
         description:
-          "Cost-effective multi-vehicle transport on open trailers, ideal for standard cars moving city to city.",
-        tagline: ["Fast & ", "Affordable Transport."],
+          "Dedicated full truck load carriers for moving multiple vehicles together, with faster delivery nationwide.",
+        tagline: ["Dedicated Carrier, ", "Maximum Protection"],
         details:
-          "Multiple vehicles travel together on our open trailers, keeping costs low without compromising on care. Ideal for standard cars moving between cities on a set schedule.",
+          "When you're moving several vehicles at once, a dedicated full truck load carrier keeps everything together and on schedule. There are no shared stops or extra transfers along the way, just a direct run from pickup to your destination with faster delivery across India.",
         highlights: [
-          "Multi-Vehicle Batching",
-          "Scheduled Dispatch",
-          "Real-Time GPS Tracking",
-          "Trained Loading Crew",
-          "Basic Insurance Included",
+          "Dedicated Full Truck",
+          "Multiple Vehicles Together",
+          "No Shared Stops",
+          "Faster Pan India Delivery",
+          "Insurance Support",
         ],
       },
       {
-        title: "Full Truck Car Carrier",
+        title: "Express Delivery",
         image: "/contact-hero-truck.png",
         description:
-          "Dedicated full-load carriers for single large shipments, moving faster with no shared stops in between.",
-        tagline: ["Dedicated ", "Full-Load Transport."],
+          "Priority vehicle transport on the fastest available route, for when timing matters most.",
+        tagline: ["Priority Transit, ", "Fastest Routes"],
         details:
-          "Book an entire truck for your shipment with no shared stops in between. Faster transit, tighter handling control and priority scheduling for large or time-sensitive moves.",
+          "When timing matters more than anything else, our express service puts your vehicle on the fastest available route with dedicated handling from start to finish. It's built for the moves that simply can't wait.",
         highlights: [
-          "Single Dedicated Truck",
           "Priority Scheduling",
-          "No Shared Stops",
-          "Route Flexibility",
+          "Fastest Available Route",
+          "Dedicated Handling",
+          "Time Sensitive Delivery",
           "Insurance Support",
         ],
       },
       {
-        title: "Half Truck Car Carrier",
+        title: "Luxury Car Transport",
         image: "/servicehero.png",
         description:
-          "Right-sized carriers for smaller loads, built for tighter city routes and hill-station deliveries.",
-        tagline: ["Right-Sized ", "City Transport."],
+          "Climate safe, fully enclosed carriers built for luxury, exotic and vintage vehicles.",
+        tagline: ["Fully Enclosed, ", "Damage Free Transport"],
         details:
-          "Compact carriers built for tighter city routes, narrow lanes and hill-station deliveries — without paying for capacity you don't need.",
+          "Luxury, exotic and vintage vehicles deserve more than an open trailer. Our fully enclosed, climate safe carriers keep your car shielded from weather, dust and prying eyes, with private handling all the way from your door to theirs.",
         highlights: [
-          "Compact Carrier Size",
-          "City & Hill Route Ready",
-          "Flexible Pickup Slots",
-          "Daily Tracking Updates",
-          "Insurance Support",
+          "Fully Enclosed Carriers",
+          "Climate Safe Transit",
+          "Luxury And Exotic Ready",
+          "Private Handling",
+          "Door To Door Delivery",
         ],
       },
     ],
@@ -82,66 +83,66 @@ export const TABS = [
     icon: Building2,
     services: [
       {
-        title: "Dealer Stock Transfer",
+        title: "New Car Transportation From Warehouses",
         image: "/servicehero.png",
         description:
-          "Scheduled, high-frequency runs moving new inventory from stockyards to dealership showrooms.",
-        tagline: ["Scheduled ", "Dealer Deliveries."],
+          "Scheduled dispatch of new vehicles from warehouses to showrooms, moved safely and on time.",
+        tagline: ["Scheduled ", "Warehouse Dispatch"],
         details:
-          "High-frequency runs moving new inventory from stockyards straight to dealership showrooms, kept on a predictable schedule your sales floor can rely on.",
+          "New vehicles need to reach showrooms on schedule, every time. We run structured, recurring dispatch from manufacturer and dealer warehouses straight to showroom floors nationwide, so your inventory is never the reason a sale gets delayed.",
         highlights: [
-          "Recurring Route Slots",
-          "Showroom-Ready Handling",
-          "Digital Delivery Proof",
-          "Fleet-Wide Tracking",
-          "Dedicated Account Manager",
-        ],
-      },
-      {
-        title: "Manufacturer Plant Dispatch",
-        image: "/contact-hero-truck.png",
-        description:
-          "Direct plant-to-hub dispatch for OEMs, with volume capacity and documented chain of custody.",
-        tagline: ["Direct ", "Plant-To-Hub Dispatch."],
-        details:
-          "Structured dispatch straight from the manufacturing plant to regional hubs, with documented chain of custody and volume capacity built for OEM output.",
-        highlights: [
-          "High-Volume Capacity",
-          "Documented Chain Of Custody",
-          "Plant-To-Hub Routing",
-          "Compliance Reporting",
-          "Dedicated Account Manager",
-        ],
-      },
-      {
-        title: "Fleet Relocation",
-        image: "/servicehero.png",
-        description:
-          "Bulk relocation for rental and corporate fleets, coordinated across multiple pickup points.",
-        tagline: ["Bulk ", "Fleet Relocation."],
-        details:
-          "Coordinated relocation for rental and corporate fleets across multiple pickup points, consolidated into one managed logistics plan.",
-        highlights: [
-          "Multi-Point Pickup",
-          "Consolidated Scheduling",
-          "Fleet-Wide Tracking",
-          "Damage-Free Handling",
-          "Dedicated Account Manager",
-        ],
-      },
-      {
-        title: "Bulk Vehicle Logistics",
-        image: "/contact-hero-truck.png",
-        description:
-          "End-to-end logistics for large-volume vehicle movement, with real-time tracking on every unit.",
-        tagline: ["End-To-End ", "Bulk Logistics."],
-        details:
-          "Full-service logistics for large-volume vehicle movement, with real-time tracking on every unit from pickup to final drop.",
-        highlights: [
-          "Large-Volume Capacity",
-          "Real-Time Unit Tracking",
-          "Custom Reporting",
+          "Scheduled Dispatch",
+          "Manufacturer And Dealer Warehouses",
+          "On Time Showroom Delivery",
           "Nationwide Coverage",
+          "Dedicated Account Manager",
+        ],
+      },
+      {
+        title: "Used / Pre-Owned Cars",
+        image: "/contact-hero-truck.png",
+        description:
+          "Secure transport for used and pre-owned vehicles between dealers, auctions and buyers.",
+        tagline: ["Secure ", "Pre-Owned Transport"],
+        details:
+          "Used and pre-owned vehicles move between dealers, auctions and buyers all the time, and each one deserves the same care as a brand new car. Every transfer comes with full tracking and insurance, so ownership changes hands without any surprises.",
+        highlights: [
+          "Dealer, Auction And Buyer Transfers",
+          "Secure Handling",
+          "Real Time Tracking",
+          "Full Insurance Coverage",
+          "Dedicated Account Manager",
+        ],
+      },
+      {
+        title: "Warehouse",
+        image: "/servicehero.png",
+        description:
+          "End to end warehouse management for dealer and manufacturer vehicle stock.",
+        tagline: ["End To End ", "Warehouse Management"],
+        details:
+          "Keeping dealer and manufacturer vehicle stock organized takes more than just space. We manage the entire warehouse operation for you, keeping inventory secure, accounted for and ready to dispatch the moment it's needed.",
+        highlights: [
+          "Dealer And Manufacturer Stock",
+          "Organized Inventory",
+          "Secure Storage",
+          "Dispatch Ready Handling",
+          "Dedicated Account Manager",
+        ],
+      },
+      {
+        title: "Stockyard",
+        image: "/contact-hero-truck.png",
+        description:
+          "Secure, monitored stockyard storage for vehicles in transit or awaiting dispatch.",
+        tagline: ["Secure ", "Stockyard Storage"],
+        details:
+          "Vehicles waiting for their next move need somewhere safe to sit. Our monitored stockyards hold vehicles in transit or ahead of dispatch under the same safety and tracking standards that cover every Car Coolie shipment.",
+        highlights: [
+          "Monitored Stockyard Storage",
+          "In Transit And Pre Dispatch",
+          "Consistent Safety Standards",
+          "Full Tracking",
           "Dedicated Account Manager",
         ],
       },

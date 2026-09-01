@@ -55,7 +55,19 @@ export default function GalleryShowcase() {
   return (
     <section className="bg-white px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl overflow-hidden rounded-[120px] bg-[#0b1e42] px-6 py-14 sm:px-10 sm:py-16">
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-4">
+          <span className="h-px w-10 bg-white/20" />
+          <h2 className="shrink-0 text-3xl font-extrabold text-white sm:text-4xl">
+            Explore Our <span className="text-red-600">Moments</span>
+          </h2>
+          <span className="h-px w-10 bg-white/20" />
+        </div>
+        <p className="mt-3 text-center text-sm text-slate-400">
+          From daily vehicle transport operations to team milestones, here&apos;s a look inside Car
+          Coolie.
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           {CATEGORIES.map(({ id, label, icon: Icon }) => {
             const isActive = id === selectedCategory;
             return (
@@ -75,17 +87,6 @@ export default function GalleryShowcase() {
             );
           })}
         </div>
-
-        <div className="mt-8 flex items-center justify-center gap-4">
-          <span className="h-px w-10 bg-white/20" />
-          <h2 className="shrink-0 text-3xl font-extrabold text-white sm:text-4xl">
-            Our <span className="text-red-600">Moments</span>
-          </h2>
-          <span className="h-px w-10 bg-white/20" />
-        </div>
-        <p className="mt-3 text-center text-sm text-slate-400">
-          Glimpses from our everyday operations and celebrations.
-        </p>
 
         <div className="relative z-10 -mx-2 mt-10 rounded-[100px] bg-white px-8 py-20 sm:-mx-4">
           {visibleItems.length > 0 ? (
