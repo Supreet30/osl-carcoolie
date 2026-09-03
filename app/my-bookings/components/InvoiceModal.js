@@ -10,7 +10,11 @@ import { formatINR } from "../../services/b2c/lib/pricing";
 // page (nav, other modal chrome) doesn't end up on the page too.
 export default function InvoiceModal({ open, onClose, booking }) {
   if (!open) return null;
-  const { estimate, pickup, dropoff } = booking;
+  const { estimate, pickup, dropoff, billing } = booking;
+  // Falls back to the pickup address for "Billed To" — covers both an
+  // explicit "Same as Pickup Address" booking and an older booking from
+  // before billing addresses existed at all (billing is null either way).
+  const billTo = billing ?? pickup;
 
   const lineItems = estimate
     ? [
@@ -83,7 +87,14 @@ export default function InvoiceModal({ open, onClose, booking }) {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-6 border-t border-slate-100 pt-6 sm:grid-cols-2">
+          <div className="mt-6 grid gap-6 border-t border-slate-100 pt-6 sm:grid-cols-3">
+            <div>
+              <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Billed To</p>
+              <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{billTo?.fullName || "—"}</p>
+              <p className="text-sm text-slate-500">
+                {[billTo?.house, billTo?.street, billTo?.city, billTo?.pin].filter(Boolean).join(", ") || "—"}
+              </p>
+            </div>
             <div>
               <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Pickup</p>
               <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{pickup?.fullName || "—"}</p>

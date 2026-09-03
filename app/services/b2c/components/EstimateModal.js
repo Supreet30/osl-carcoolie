@@ -15,19 +15,21 @@ import {
   MapPin,
   Route,
   ShieldCheck,
+  Tag,
   Truck,
+  User,
   X,
 } from "lucide-react";
 import {
   ADD_ON_SERVICES,
   CITIES,
-  VEHICLE_TYPES,
+  VEHICLE_MODELS,
   computeEstimate,
   formatINR,
   getAddOnServices,
   getCities,
   getRoute,
-  getVehicleTypes,
+  getVehicleModels,
   validateCoupon,
 } from "../lib/pricing";
 import { saveEstimate } from "../lib/bookingStore";
@@ -35,6 +37,20 @@ import Dropdown from "./Dropdown";
 
 const YEARS = Array.from({ length: 15 }, (_, i) => `${new Date().getFullYear() - i}`);
 const PIN_REGEX = /^\d{6}$/;
+
+// Picked here (not on /book anymore) so the booking form only shows the
+// driver location-capture step when it's actually relevant — see
+// book/components/BookingForm.js, which reads these back off the saved
+// estimate instead of asking again.
+const PICKUP_METHODS = [
+  { key: "self", label: "Self Drop-off", subtitle: "Drop the car at our hub", icon: MapPin },
+  { key: "driver", label: "CarCoolie Driver Pickup", subtitle: "Professional driver collects car", icon: User },
+];
+
+const DROPOFF_METHODS = [
+  { key: "self", label: "Self Pickup", subtitle: "Collect the car from our hub", icon: MapPin },
+  { key: "driver", label: "CarCoolie Driver Drop-off", subtitle: "Driver delivers car to your location", icon: User },
+];
 
 function LoadingView() {
   return (
@@ -50,7 +66,7 @@ function LoadingView() {
   );
 }
 
-function ResultView({ estimate, vehicleType, pickupPin, destinationPin, onClose }) {
+function ResultView({ estimate, vehicleType, make, model, pickupPin, destinationPin, pickupMethod, dropoffMethod, onClose }) {
   const router = useRouter();
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -93,6 +109,10 @@ function ResultView({ estimate, vehicleType, pickupPin, destinationPin, onClose 
       distanceKm: route.distanceKm,
       minDays,
       vehicleType,
+      make,
+      model,
+      pickupMethod,
+      dropoffMethod,
       routePrice: route.price,
       vehicleSurcharge,
       serviceCharge,
@@ -119,6 +139,9 @@ function ResultView({ estimate, vehicleType, pickupPin, destinationPin, onClose 
           <p className="text-base font-extrabold text-[#0b1e42]">
             {route.fromCity} <span className="text-slate-400">&rarr;</span> {route.toCity}
           </p>
+          {(make || model) && (
+            <p className="mt-0.5 text-sm font-extrabold text-[#0b1e42]">{[make, model].filter(Boolean).join(" ")}</p>
+          )}
           <p className="mt-0.5 text-sm text-slate-500">
             ~{route.distanceKm.toLocaleString("en-IN")} km &bull; {vehicleType}
           </p>
@@ -254,18 +277,39 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
   const [fromCity, setFromCity] = useState(initialFromCity ?? "");
   const [toCity, setToCity] = useState(initialToCity ?? "");
   const [vehicleType, setVehicleType] = useState("");
-  // Decorative alongside Make/Model — collected but not part of the
-  // estimate (same as those two text fields), same as before this was a
-  // native <select>.
+  // Make and Model drive vehicleType automatically (see handleModelChange
+  // below) — there's no free text entry for either, both are dropdowns
+  // sourced from vehicle_models.
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [vehicleModels, setVehicleModels] = useState(VEHICLE_MODELS);
+  // Decorative — collected but not part of the estimate, same as before
+  // this was a native <select>.
   const [registrationYear, setRegistrationYear] = useState("");
   const [pickupPin, setPickupPin] = useState("");
   const [destinationPin, setDestinationPin] = useState("");
+  const [pickupMethod, setPickupMethod] = useState("self");
+  const [dropoffMethod, setDropoffMethod] = useState("self");
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [routeError, setRouteError] = useState("");
   const [estimate, setEstimate] = useState(null);
   const [cities, setCities] = useState(CITIES);
   const [addOnCatalog, setAddOnCatalog] = useState(ADD_ON_SERVICES);
-  const [vehicleTypes, setVehicleTypes] = useState(VEHICLE_TYPES);
+
+  const makes = [...new Set(vehicleModels.map((v) => v.make))];
+  const modelsForMake = vehicleModels.filter((v) => v.make === make).map((v) => v.model);
+
+  function handleMakeChange(nextMake) {
+    setMake(nextMake);
+    setModel("");
+    setVehicleType("");
+  }
+
+  function handleModelChange(nextModel) {
+    setModel(nextModel);
+    const match = vehicleModels.find((v) => v.make === make && v.model === nextModel);
+    setVehicleType(match?.vehicleType ?? "");
+  }
 
   // Adjusting state during render (React's documented alternative to an
   // effect for this) rather than setState-in-an-effect: carries over
@@ -285,11 +329,11 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
   useEffect(() => {
     if (!open) return;
     // Refreshes from Supabase (if configured) every time the modal opens —
-    // falls back to the static CITIES/ADD_ON_SERVICES/VEHICLE_TYPES already
+    // falls back to the static CITIES/ADD_ON_SERVICES/VEHICLE_MODELS already
     // shown above if it's not configured or the fetch fails.
     getCities().then(setCities);
     getAddOnServices().then(setAddOnCatalog);
-    getVehicleTypes().then(setVehicleTypes);
+    getVehicleModels().then(setVehicleModels);
   }, [open]);
 
   if (!open) return null;
@@ -314,8 +358,12 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
   async function handleSubmit(event) {
     event.preventDefault();
 
+    if (!make || !model) {
+      setRouteError("Select your vehicle's make and model.");
+      return;
+    }
     if (!vehicleType) {
-      setRouteError("Select a vehicle type.");
+      setRouteError("We couldn't determine a vehicle type for that model.");
       return;
     }
     if (!fromCity || !toCity) {
@@ -401,8 +449,12 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
           <ResultView
             estimate={estimate}
             vehicleType={vehicleType}
+            make={make}
+            model={model}
             pickupPin={pickupPin}
             destinationPin={destinationPin}
+            pickupMethod={pickupMethod}
+            dropoffMethod={dropoffMethod}
             onClose={handleClose}
           />
         )}
@@ -418,29 +470,39 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                 <div className="mt-4 grid gap-5 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Make
-                    <input
-                      type="text"
-                      placeholder="e.g. Tesla, Ford"
-                      className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
-                    />
+                    <Dropdown placeholder="Select make" value={make} onChange={handleMakeChange} options={makes} />
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Model
-                    <input
-                      type="text"
-                      placeholder="e.g. Model S, F-150"
-                      className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-[#0b1e42]">
-                    Vehicle Type
                     <Dropdown
-                      placeholder="Select type"
-                      value={vehicleType}
-                      onChange={setVehicleType}
-                      options={vehicleTypes.map((v) => v.name)}
+                      placeholder={make ? "Select model" : "Select a make first"}
+                      value={model}
+                      onChange={handleModelChange}
+                      options={modelsForMake}
+                      disabled={!make}
                     />
                   </label>
+                  <div className="block text-sm font-semibold text-[#0b1e42]">
+                    Vehicle Type
+                    {/* Determined automatically from the selected model
+                        above, not picked directly — a static readout
+                        rather than a disabled Dropdown so it doesn't
+                        look like an inert control the customer can click. */}
+                    <div className="mt-2 flex w-full items-center gap-2.5 rounded-xl bg-slate-50 py-3 pr-3 pl-4">
+                      <Tag className="h-4 w-4 shrink-0 text-red-500" strokeWidth={2} />
+                      <span className={`flex-1 truncate text-sm ${vehicleType ? "font-semibold text-[#0b1e42]" : "font-normal text-slate-400"}`}>
+                        {vehicleType || "Select a make & model first"}
+                      </span>
+                      {vehicleType && (
+                        <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-red-600 uppercase">
+                          Auto
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-xs font-normal text-slate-400">
+                      Automatically determined from your vehicle model.
+                    </p>
+                  </div>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Registration Year
                     <Dropdown
@@ -514,6 +576,78 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                   </label>
                 </div>
                 {routeError && <p className="mt-3 text-xs font-semibold text-red-600">{routeError}</p>}
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+                  <User className="h-4 w-4" strokeWidth={2} />
+                  Pickup &amp; Drop-off Method
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-[#0b1e42]">Choose Pickup Method</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {PICKUP_METHODS.map(({ key, label, subtitle, icon: Icon }) => {
+                      const selected = pickupMethod === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setPickupMethod(key)}
+                          className={`relative flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+                            selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
+                          <span>
+                            <span className="block text-sm font-bold text-[#0b1e42]">{label}</span>
+                            <span className="block text-xs text-slate-500">{subtitle}</span>
+                          </span>
+                          {selected && (
+                            <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-sm font-semibold text-[#0b1e42]">Choose Drop-off Method</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {DROPOFF_METHODS.map(({ key, label, subtitle, icon: Icon }) => {
+                      const selected = dropoffMethod === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setDropoffMethod(key)}
+                          className={`relative flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+                            selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
+                          <span>
+                            <span className="block text-sm font-bold text-[#0b1e42]">{label}</span>
+                            <span className="block text-xs text-slate-500">{subtitle}</span>
+                          </span>
+                          {selected && (
+                            <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Chosen here rather than on /book — a driver pickup/drop-off
+                    only adds the location-capture step there if opted into
+                    here; "Self" skips it entirely. */}
+                <p className="mt-3 text-xs font-normal text-slate-400">
+                  Opting for a CarCoolie Driver adds a quick location step on the next page.
+                </p>
               </div>
 
               <div>

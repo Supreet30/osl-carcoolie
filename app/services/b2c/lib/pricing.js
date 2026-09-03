@@ -60,15 +60,40 @@ function getLocalRoute(fromCity, toCity) {
 export const SERVICE_CHARGE = 1000;
 export const GST_RATE = 0.18;
 
-// Vehicle type changes the price — a flat rupee surcharge (or discount,
-// for smaller cars) added on top of the route's base transportation price.
+// Vehicle type changes the price via a multiplier on the route's base
+// transportation price, not a flat rupee amount — so the surcharge scales
+// with distance (a longer, pricier route gets a bigger SUV surcharge, a
+// short route a smaller one). 1.0 = no change (Sedan baseline); below 1.0
+// is a discount (Hatchback); above 1.0 is a surcharge. The actual rupee
+// surcharge added on top of route.price is computed in computeEstimate()
+// as route.price * (priceMultiplier - 1).
 export const VEHICLE_TYPES = [
-  { name: "Hatchback", priceAddon: -1000 },
-  { name: "Sedan", priceAddon: 0 },
-  { name: "SUV", priceAddon: 2500 },
-  { name: "Luxury Sedan", priceAddon: 6000 },
-  { name: "Luxury SUV", priceAddon: 9000 },
-  { name: "Sports", priceAddon: 12000 },
+  { name: "Hatchback", priceMultiplier: 0.9 },
+  { name: "Sedan", priceMultiplier: 1.0 },
+  { name: "SUV", priceMultiplier: 1.15 },
+  { name: "Luxury Sedan", priceMultiplier: 1.3 },
+  { name: "Luxury SUV", priceMultiplier: 1.45 },
+  { name: "Sports", priceMultiplier: 1.6 },
+];
+
+// Make/Model catalog for the "Get an Estimate" modal's Make and Model
+// dropdowns — no free text. Picking a Model looks up its vehicleType here
+// and sets that automatically, instead of asking the customer to also pick
+// a Vehicle Type themselves. Matches the vehicle_models seed data in
+// supabase-schema.sql; admin-editable from the "Vehicle Models" page.
+export const VEHICLE_MODELS = [
+  { make: "Maruti Suzuki", model: "Swift", vehicleType: "Hatchback" },
+  { make: "Hyundai", model: "i20", vehicleType: "Hatchback" },
+  { make: "Hyundai", model: "Verna", vehicleType: "Sedan" },
+  { make: "Volkswagen", model: "Virtus", vehicleType: "Sedan" },
+  { make: "Toyota", model: "Fortuner", vehicleType: "SUV" },
+  { make: "Ford", model: "Endeavour", vehicleType: "SUV" },
+  { make: "BMW", model: "5 Series", vehicleType: "Luxury Sedan" },
+  { make: "Mercedes-Benz", model: "S Class", vehicleType: "Luxury Sedan" },
+  { make: "Mercedes-Benz", model: "GLS", vehicleType: "Luxury SUV" },
+  { make: "Audi", model: "Q7", vehicleType: "Luxury SUV" },
+  { make: "Ford", model: "Mustang", vehicleType: "Sports" },
+  { make: "Audi", model: "R8", vehicleType: "Sports" },
 ];
 
 export const ADD_ON_SERVICES = [
@@ -112,12 +137,27 @@ export async function getVehicleTypes() {
   if (isSupabaseConfigured) {
     const { data, error } = await supabase
       .from("vehicle_types")
-      .select("name, price_addon")
+      .select("name, price_multiplier")
       .eq("is_active", true)
-      .order("price_addon");
-    if (!error && data?.length) return data.map((v) => ({ name: v.name, priceAddon: Number(v.price_addon) }));
+      .order("price_multiplier");
+    if (!error && data?.length)
+      return data.map((v) => ({ name: v.name, priceMultiplier: Number(v.price_multiplier) }));
   }
   return VEHICLE_TYPES;
+}
+
+export async function getVehicleModels() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from("vehicle_models")
+      .select("make, model, vehicle_type:vehicle_type_id(name)")
+      .eq("is_active", true)
+      .order("make")
+      .order("model");
+    if (!error && data?.length)
+      return data.map((v) => ({ make: v.make, model: v.model, vehicleType: v.vehicle_type?.name ?? null }));
+  }
+  return VEHICLE_MODELS;
 }
 
 export async function getRoute(fromCity, toCity) {
@@ -164,9 +204,12 @@ export async function computeEstimate({ fromCity, toCity, vehicleType, selectedA
   if (!route) return null;
 
   const vehicleTypes = await getVehicleTypes();
-  // Flat rupee amount added on top of the route price — Sedan (0) shows as
-  // no line at all, SUV/Luxury show a surcharge, Hatchback shows a discount.
-  const vehicleSurcharge = vehicleTypes.find((v) => v.name === vehicleType)?.priceAddon ?? 0;
+  // Rupee surcharge derived from the multiplier applied to THIS route's own
+  // price, not a flat amount — so it scales with distance. Sedan's 1.0x
+  // multiplier resolves to 0 (no line shown), SUV/Luxury show a surcharge,
+  // Hatchback's sub-1.0 multiplier shows a discount.
+  const vehiclePriceMultiplier = vehicleTypes.find((v) => v.name === vehicleType)?.priceMultiplier ?? 1;
+  const vehicleSurcharge = Math.round(route.price * (vehiclePriceMultiplier - 1));
 
   const addOnCatalog = await getAddOnServices();
   const addOnBreakdown = addOnCatalog.filter((a) => selectedAddOns.includes(a.key));

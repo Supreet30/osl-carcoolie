@@ -160,6 +160,7 @@ function documentRowsToJs(rows) {
       fileSize: row.file_size_mb ? `${row.file_size_mb} MB` : undefined,
       status: row.status,
       fileUrl: row.file_url ?? null,
+      rejectionReason: row.rejection_reason ?? null,
     };
   }
   return documents;
@@ -172,11 +173,14 @@ function rowToBooking(row, { addresses = [], documents = [], addons = [] } = {})
     createdAt: row.created_at,
     finalQuote: row.final_quote,
     advancePaid: row.advance_paid,
+    registrationNumber: row.vehicle_registration_number ?? null,
     estimate: {
       fromCity: row.from_city?.name ?? null,
       toCity: row.to_city?.name ?? null,
       distanceKm: row.distance_km,
       vehicleType: row.vehicle_type_label ?? row.vehicle_type?.name ?? null,
+      make: row.vehicle_make ?? null,
+      model: row.vehicle_model ?? null,
       routePrice: row.route_price,
       vehicleSurcharge: row.vehicle_surcharge ?? 0,
       serviceCharge: row.service_charge,
@@ -197,6 +201,7 @@ function rowToBooking(row, { addresses = [], documents = [], addons = [] } = {})
     },
     pickup: addressRowToJs(addresses.find((a) => a.type === "pickup")),
     dropoff: addressRowToJs(addresses.find((a) => a.type === "dropoff")),
+    billing: addressRowToJs(addresses.find((a) => a.type === "billing")),
     documents: documentRowsToJs(documents),
   };
 }
@@ -214,7 +219,7 @@ async function fetchBookingChildren(bookingId) {
 }
 
 async function createBookingSupabase(bookingData) {
-  const { estimate, pickup, dropoff, documents } = bookingData;
+  const { estimate, registrationNumber, pickup, dropoff, billing, documents } = bookingData;
 
   const [{ data: cities }, { data: vehicleTypes }, { data: addOns }] = await Promise.all([
     supabase.from("cities").select("id, name"),
@@ -232,6 +237,9 @@ async function createBookingSupabase(bookingData) {
       to_city_id: cityIdByName.get(estimate?.toCity) ?? null,
       vehicle_type_id: vehicleTypeIdByName.get((estimate?.vehicleType || "").toLowerCase()) ?? null,
       vehicle_type_label: estimate?.vehicleType ?? null,
+      vehicle_make: estimate?.make ?? null,
+      vehicle_model: estimate?.model ?? null,
+      vehicle_registration_number: registrationNumber ?? null,
       distance_km: estimate?.distanceKm ?? null,
       route_price: estimate?.routePrice ?? null,
       vehicle_surcharge: estimate?.vehicleSurcharge ?? 0,
@@ -253,9 +261,11 @@ async function createBookingSupabase(bookingData) {
     .filter((a) => addOnIdByKey.has(a.key))
     .map((a) => ({ booking_id: row.id, add_on_service_id: addOnIdByKey.get(a.key), price_at_booking: a.price }));
 
-  const addressRows = [addressToRow(row.id, "pickup", pickup), addressToRow(row.id, "dropoff", dropoff)].filter(
-    Boolean
-  );
+  const addressRows = [
+    addressToRow(row.id, "pickup", pickup),
+    addressToRow(row.id, "dropoff", dropoff),
+    addressToRow(row.id, "billing", billing),
+  ].filter(Boolean);
 
   // Upload the actual file to Storage (if the browser still has it — e.g.
   // not on a page reload) before writing the booking_documents row, so
@@ -349,6 +359,43 @@ async function updateBookingSupabase(id, updates) {
   return rowToBooking(row, children);
 }
 
+// Re-uploading a rejected document — looked up by booking_code since that's
+// all the client ever has (rowToBooking's `id` field is the human code, not
+// the real uuid). `.upsert` is safe here (unlike the admin app's documented
+// upsert caveat) because every NOT NULL column always has a real value in
+// this payload, never a partial one — there's also no existing row yet if
+// this doc was never uploaded at booking time in the first place, so a
+// plain update by id wouldn't even find one. Resets status back to
+// "uploaded" and clears any previous rejection, exactly like a first-time
+// upload, so it re-enters the admin's review queue.
+async function updateBookingDocumentSupabase(bookingCode, docType, file) {
+  const { data: booking, error: bookingError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("booking_code", bookingCode)
+    .single();
+  if (bookingError) throw bookingError;
+
+  const fileUrl = await uploadDocumentFile(booking.id, docType, file);
+  if (!fileUrl) throw new Error("The file couldn't be uploaded — please try again.");
+
+  const { error } = await supabase.from("booking_documents").upsert(
+    {
+      booking_id: booking.id,
+      doc_type: docType,
+      file_name: file.name,
+      file_size_mb: Number((file.size / (1024 * 1024)).toFixed(2)),
+      file_url: fileUrl,
+      status: "uploaded",
+      verified_by: null,
+      verified_at: null,
+      rejection_reason: null,
+    },
+    { onConflict: "booking_id,doc_type" }
+  );
+  if (error) throw error;
+}
+
 // ---- Public API — tries Supabase first, falls back to localStorage ----
 
 export async function createBooking(bookingData) {
@@ -394,4 +441,29 @@ export async function updateBooking(id, updates) {
     }
   }
   return updateBookingLocal(id, updates);
+}
+
+// Lets a customer re-upload a document the admin rejected. Deliberately no
+// silent fallback to local storage on a Supabase failure (unlike every
+// function above) — a "rejected" status only ever comes from a real
+// admin-panel review of a real Supabase booking, so a copy of it was never
+// going to be sitting in local storage; masking a real upload failure that
+// way would be worse than just surfacing it.
+export async function updateBookingDocument(bookingCode, docType, file) {
+  if (isSupabaseConfigured) {
+    await updateBookingDocumentSupabase(bookingCode, docType, file);
+    return;
+  }
+  const bookings = getBookingsLocal();
+  const idx = bookings.findIndex((b) => b.id === bookingCode);
+  if (idx === -1) throw new Error("Booking not found.");
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  bookings[idx] = {
+    ...bookings[idx],
+    documents: {
+      ...bookings[idx].documents,
+      [docType]: { uploaded: true, fileName: file.name, fileSize: `${sizeMB} MB`, status: "uploaded", file, rejectionReason: null },
+    },
+  };
+  saveBookingsLocal(bookings);
 }

@@ -41,12 +41,26 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type leg_type as enum ('pickup', 'dropoff');
+  create type leg_type as enum ('pickup', 'dropoff', 'billing');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   create type document_type as enum ('rc', 'license', 'pan', 'aadhaar', 'insurance');
 exception when duplicate_object then null; end $$;
+
+-- `billing` was added to an already-shipped enum — `create type` above only
+-- runs once (guarded by the exception block), so an existing project needs
+-- this to actually pick up the new value. `add value if not exists` is a
+-- no-op on a fresh project where `create type` just created it inline above.
+alter type leg_type add value if not exists 'billing';
+
+-- Same situation for the Vehicle Documents section's catalog: `license` is
+-- kept here (Postgres has no `drop value` for enums — a value, once added,
+-- can never be removed) but the app no longer offers it as an upload slot,
+-- so no new booking_documents row will ever use it again.
+alter type document_type add value if not exists 'puc';
+alter type document_type add value if not exists 'noc';
+alter type document_type add value if not exists 'authority_letter';
 
 do $$ begin
   create type document_status as enum ('pending', 'uploaded', 'verified', 'rejected');
@@ -166,41 +180,77 @@ create trigger routes_set_updated_at before update on routes
 create table if not exists vehicle_types (
   id uuid primary key default gen_random_uuid(),
   name text not null unique, -- 'Hatchback' | 'Sedan' | 'SUV' | 'Luxury Sedan' | 'Luxury SUV' | 'Sports' ...
-  -- Flat rupee surcharge added on top of the route price (negative for a
-  -- discount, e.g. Hatchback). Matches the frontend's VEHICLE_TYPES
-  -- fallback in pricing.js.
-  price_addon numeric(10, 2) not null default 0,
+  -- Multiplier applied to THIS booking's route price (route.price *
+  -- price_multiplier), not a flat rupee amount — so the vehicle-type
+  -- surcharge scales with distance instead of being the same regardless of
+  -- route length. 1.0 = no change (Sedan baseline); below 1.0 is a
+  -- discount (Hatchback); above 1.0 is a surcharge. Matches the frontend's
+  -- VEHICLE_TYPES fallback in pricing.js, which computes the actual rupee
+  -- surcharge as route.price * (price_multiplier - 1).
+  price_multiplier numeric(6, 3) not null default 1.0,
   is_active boolean not null default true
 );
 
--- Renames the column in place for a project that already has this table
--- from before it switched from a percentage multiplier to a flat amount —
--- a no-op once price_addon exists.
-do $$ begin
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'vehicle_types' and column_name = 'price_multiplier'
-  ) then
-    alter table vehicle_types rename column price_multiplier to price_addon;
-    alter table vehicle_types alter column price_addon type numeric(10, 2);
-    alter table vehicle_types alter column price_addon set default 0;
-  end if;
-end $$;
+-- Idempotent add for a project that already has this table from before it
+-- switched from a flat price_addon amount to a route-scaling multiplier —
+-- a no-op once price_multiplier exists.
+alter table vehicle_types add column if not exists price_multiplier numeric(6, 3) not null default 1.0;
 
--- `do update` (not `do nothing`) so re-running this file after an amount
+-- The flat price_addon column this replaces is no longer read anywhere —
+-- dropped rather than left as dead weight (unlike price_multiplier itself,
+-- which is a genuine semantic change, not just a rename, so there's no
+-- sensible flat-to-multiplier value conversion to preserve here).
+alter table vehicle_types drop column if exists price_addon;
+
+-- `do update` (not `do nothing`) so re-running this file after a value
 -- changes here actually updates it on an existing project.
-insert into vehicle_types (name, price_addon) values
-  ('Hatchback', -1000),
-  ('Sedan', 0),
-  ('SUV', 2500),
-  ('Luxury Sedan', 6000),
-  ('Luxury SUV', 9000),
-  ('Sports', 12000)
-on conflict (name) do update set price_addon = excluded.price_addon;
+insert into vehicle_types (name, price_multiplier) values
+  ('Hatchback', 0.90),
+  ('Sedan', 1.00),
+  ('SUV', 1.15),
+  ('Luxury Sedan', 1.30),
+  ('Luxury SUV', 1.45),
+  ('Sports', 1.60)
+on conflict (name) do update set price_multiplier = excluded.price_multiplier;
 
 -- Superseded by 'Luxury Sedan' / 'Luxury SUV' above — deactivated rather
 -- than deleted so any past booking referencing it by id still resolves.
 update vehicle_types set is_active = false where name = 'Luxury';
+
+-- ---------------------------------------------------------------------
+-- Vehicle models — the "Get an Estimate" modal's Make/Model fields are
+-- dropdowns sourced from this table (no free text), and picking a Model
+-- auto-determines the booking's Vehicle Type from vehicle_type_id below
+-- instead of asking the customer to pick that separately. Admin-editable
+-- ("Vehicle Models" in the admin panel) so the make/model catalog can grow
+-- without a code change.
+-- ---------------------------------------------------------------------
+
+create table if not exists vehicle_models (
+  id uuid primary key default gen_random_uuid(),
+  make text not null,
+  model text not null,
+  vehicle_type_id uuid not null references vehicle_types (id) on delete cascade,
+  is_active boolean not null default true,
+  unique (make, model)
+);
+
+-- `do update` (not `do nothing`) so re-running this file after a mapping
+-- changes here actually updates it on an existing project.
+insert into vehicle_models (make, model, vehicle_type_id) values
+  ('Maruti Suzuki', 'Swift', (select id from vehicle_types where name = 'Hatchback')),
+  ('Hyundai', 'i20', (select id from vehicle_types where name = 'Hatchback')),
+  ('Hyundai', 'Verna', (select id from vehicle_types where name = 'Sedan')),
+  ('Volkswagen', 'Virtus', (select id from vehicle_types where name = 'Sedan')),
+  ('Toyota', 'Fortuner', (select id from vehicle_types where name = 'SUV')),
+  ('Ford', 'Endeavour', (select id from vehicle_types where name = 'SUV')),
+  ('BMW', '5 Series', (select id from vehicle_types where name = 'Luxury Sedan')),
+  ('Mercedes-Benz', 'S Class', (select id from vehicle_types where name = 'Luxury Sedan')),
+  ('Mercedes-Benz', 'GLS', (select id from vehicle_types where name = 'Luxury SUV')),
+  ('Audi', 'Q7', (select id from vehicle_types where name = 'Luxury SUV')),
+  ('Ford', 'Mustang', (select id from vehicle_types where name = 'Sports')),
+  ('Audi', 'R8', (select id from vehicle_types where name = 'Sports'))
+on conflict (make, model) do update set vehicle_type_id = excluded.vehicle_type_id;
 
 -- ---------------------------------------------------------------------
 -- Add-on services — admin-manageable ("add add-on services").
@@ -265,10 +315,21 @@ create table if not exists bookings (
   -- Free-text copy of whatever the customer picked, even if it doesn't
   -- match a seeded vehicle_types row (vehicle_type_id is left null then).
   vehicle_type_label text,
+  -- The Make/Model picked in "Get an Estimate" (see vehicle_models) —
+  -- snapshotted as plain text here too, same reasoning as
+  -- vehicle_type_label: still reads correctly even if that make/model is
+  -- later renamed or removed from the catalog.
+  vehicle_make text,
+  vehicle_model text,
+  -- Entered directly on the booking form (section 3, Vehicle Documents) —
+  -- not looked up against any table, just the plate the customer typed.
+  vehicle_registration_number text,
   distance_km integer,
   route_price numeric(10, 2),
-  -- Flat surcharge (or discount, negative) from vehicle_types.price_addon
-  -- applied on top of route_price — see computeEstimate() in pricing.js.
+  -- Rupee surcharge (or discount, negative) computed at booking time as
+  -- route_price * (vehicle_types.price_multiplier - 1) — snapshotted here
+  -- as a plain amount so it still reads correctly even if the vehicle
+  -- type's multiplier changes later. See computeEstimate() in pricing.js.
   vehicle_surcharge numeric(10, 2) not null default 0,
   service_charge numeric(10, 2),
   addons_total numeric(10, 2) not null default 0,
@@ -300,6 +361,9 @@ create trigger bookings_set_updated_at before update on bookings
 -- re-run: no-ops once the column is present.
 alter table bookings add column if not exists vehicle_type_label text;
 alter table bookings add column if not exists vehicle_surcharge numeric(10, 2) not null default 0;
+alter table bookings add column if not exists vehicle_registration_number text;
+alter table bookings add column if not exists vehicle_make text;
+alter table bookings add column if not exists vehicle_model text;
 
 create index if not exists bookings_customer_id_idx on bookings (customer_id);
 create index if not exists bookings_status_idx on bookings (status);
@@ -314,8 +378,12 @@ create table if not exists booking_addons (
   unique (booking_id, add_on_service_id)
 );
 
--- Pickup + drop-off legs (sections 1/2/4/5 of the booking form). One row
--- per leg per booking, distinguished by `type`.
+-- Pickup, drop-off and billing legs (sections 1/2/4 of the booking form —
+-- pickup/drop-off method, location capture and date/slot are collected
+-- inline under sections 1/2 respectively, not as their own sections
+-- anymore). One row per leg per booking, distinguished by `type`. The
+-- billing row is address-only — method/captured location/slot_date/
+-- time_slot never apply to it and stay at their column defaults/null.
 create table if not exists booking_addresses (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references bookings (id) on delete cascade,
@@ -416,6 +484,7 @@ alter table admin_users enable row level security;
 alter table cities enable row level security;
 alter table routes enable row level security;
 alter table vehicle_types enable row level security;
+alter table vehicle_models enable row level security;
 alter table add_on_services enable row level security;
 alter table coupons enable row level security;
 alter table bookings enable row level security;
@@ -474,6 +543,11 @@ drop policy if exists "vehicle_types readable" on vehicle_types;
 create policy "vehicle_types readable" on vehicle_types for select using (true);
 drop policy if exists "vehicle_types admin write" on vehicle_types;
 create policy "vehicle_types admin write" on vehicle_types for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+drop policy if exists "vehicle_models readable" on vehicle_models;
+create policy "vehicle_models readable" on vehicle_models for select using (true);
+drop policy if exists "vehicle_models admin write" on vehicle_models;
+create policy "vehicle_models admin write" on vehicle_models for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 
 drop policy if exists "add_on_services readable" on add_on_services;
 create policy "add_on_services readable" on add_on_services for select using (true);

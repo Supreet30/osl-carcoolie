@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -10,9 +10,12 @@ import {
   Circle,
   Clock,
   CreditCard,
+  FileCheck,
+  FileSignature,
   FileText,
   Fingerprint,
   IdCard,
+  Loader2,
   MapPin,
   MessageCircle,
   Phone,
@@ -21,9 +24,11 @@ import {
   ShieldCheck,
   Tag,
   Truck,
+  Upload,
   User,
+  Wind,
 } from "lucide-react";
-import { BOOKING_STATUS, STATUS_STEPS, getBooking, getBookings } from "../../services/b2c/lib/bookingStore";
+import { BOOKING_STATUS, STATUS_STEPS, getBooking, getBookings, updateBookingDocument } from "../../services/b2c/lib/bookingStore";
 import { formatINR } from "../../services/b2c/lib/pricing";
 import InvoiceModal from "./InvoiceModal";
 
@@ -36,11 +41,13 @@ const ENQUIRY_PHONE = "911234567890";
 // own list here since this is a read-only summary of what was uploaded,
 // not the upload UI itself.
 const DOC_TYPES = [
+  { key: "puc", label: "PUC", icon: Wind },
+  { key: "noc", label: "NOC", icon: FileCheck },
   { key: "rc", label: "RC Card", icon: FileText },
-  { key: "license", label: "Driving License", icon: CreditCard },
-  { key: "pan", label: "PAN Card", icon: IdCard },
   { key: "aadhaar", label: "Aadhaar", icon: Fingerprint },
   { key: "insurance", label: "Insurance", icon: Shield },
+  { key: "authority_letter", label: "Customer Authority Letter", icon: FileSignature },
+  { key: "pan", label: "PAN Card", icon: IdCard },
 ];
 
 const DOC_STATUS_STYLES = {
@@ -259,22 +266,30 @@ function DetailRow({ icon: Icon, label, value }) {
 // Full pickup/drop-off leg — contact, address, method (self vs. driver),
 // captured location for a driver leg, and the scheduled date/slot. The
 // old "Addresses" card only showed name + address; this is everything
-// BookingForm.js actually collects for that leg.
-function AddressDetailCard({ title, icon: Icon, address }) {
-  const isDriver = address?.method === "driver";
+// BookingForm.js actually collects for that leg. `simple` (the Billing
+// card) drops all of that leg-specific detail — there's no method, no
+// driver location, no date/slot for a billing address — down to just
+// contact + address.
+function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsNote }) {
+  const isDriver = !simple && address?.method === "driver";
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
           <Icon className="h-3.5 w-3.5 text-red-600" /> {title}
         </p>
-        {address && (
+        {address && !simple && (
           <span
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
               isDriver ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"
             }`}
           >
             <User className="h-3 w-3" /> {isDriver ? "CarCoolie Driver" : "Self"}
+          </span>
+        )}
+        {simple && sameAsNote && (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500 uppercase">
+            {sameAsNote}
           </span>
         )}
       </div>
@@ -288,7 +303,8 @@ function AddressDetailCard({ title, icon: Icon, address }) {
             label="Address"
             value={[address.house, address.street, address.landmark, address.city, address.pin].filter(Boolean).join(", ")}
           />
-          {isDriver &&
+          {!simple &&
+            isDriver &&
             (address.capturedLocation ? (
               <p className="mt-1 flex items-start gap-1.5 rounded-xl bg-green-50 p-2.5 text-xs font-semibold text-green-700">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {address.capturedLocation.address}
@@ -298,8 +314,12 @@ function AddressDetailCard({ title, icon: Icon, address }) {
                 No pickup/drop-off location captured yet
               </p>
             ))}
-          <DetailRow icon={Calendar} label="Date" value={address.date ? new Date(address.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null} />
-          <DetailRow icon={Clock} label="Time Slot" value={address.timeSlot} />
+          {!simple && (
+            <>
+              <DetailRow icon={Calendar} label="Date" value={address.date ? new Date(address.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null} />
+              <DetailRow icon={Clock} label="Time Slot" value={address.timeSlot} />
+            </>
+          )}
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-400">Not provided.</p>
@@ -311,16 +331,27 @@ function AddressDetailCard({ title, icon: Icon, address }) {
 // Every document type BookingForm.js can collect, with whatever status
 // the admin's Document Verification screen has set — matching what the
 // admin panel's own BookingDetailClient.js shows, just read-only here.
-function DocumentsCard({ documents }) {
+// `onReupload` and `busyKey`/`error` are only passed in from the detail
+// view, which is the only place a document can actually have been reviewed
+// (and possibly rejected) yet — the list view's BookingCard never renders
+// this with them, so re-upload just doesn't apply there.
+function DocumentsCard({ documents, registrationNumber, onReupload, busyKey, error }) {
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
-      <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
-        <ShieldCheck className="h-3.5 w-3.5 text-red-600" /> Documents
-      </p>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+          <ShieldCheck className="h-3.5 w-3.5 text-red-600" /> Documents
+        </p>
+        {registrationNumber && (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-[#0b1e42]">{registrationNumber}</span>
+        )}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {DOC_TYPES.map(({ key, label, icon: Icon }) => {
           const doc = documents?.[key];
           const style = doc?.uploaded ? (DOC_STATUS_STYLES[doc.status] ?? DOC_STATUS_STYLES.uploaded) : null;
+          const rejected = doc?.status === "rejected";
+          const busy = busyKey === key;
           return (
             <div key={key} className="rounded-2xl border border-slate-200 p-3">
               <Icon className={`h-4 w-4 ${doc?.uploaded ? "text-slate-500" : "text-slate-300"}`} strokeWidth={2} />
@@ -334,18 +365,85 @@ function DocumentsCard({ documents }) {
                   Not uploaded
                 </span>
               )}
+              {rejected && doc?.rejectionReason && <p className="mt-1.5 text-[10px] text-red-500">{doc.rejectionReason}</p>}
+              {rejected && onReupload && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onReupload(key)}
+                  className="mt-2 flex items-center gap-1 text-[10px] font-bold text-red-600 uppercase transition-colors hover:text-red-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {busy ? "Uploading…" : "Re-upload"}
+                </button>
+              )}
             </div>
           );
         })}
       </div>
+      {error && <p className="mt-4 text-xs font-semibold text-red-600">{error}</p>}
     </div>
   );
 }
 
-function BookingDetailView({ booking }) {
-  const { estimate, pickup, dropoff } = booking;
+function addressesMatch(a, b) {
+  if (!a || !b) return false;
+  return ["fullName", "phone", "house", "street", "landmark", "city", "pin"].every((k) => (a[k] || "") === (b[k] || ""));
+}
+
+function BookingDetailView({ booking, onBookingChange }) {
+  const { estimate, pickup, dropoff, billing } = booking;
+  // Compares the actual field values rather than trusting a stored flag
+  // (none is persisted — billing is just another booking_addresses row) so
+  // this stays correct even if the customer had unchecked one of the
+  // "Same as ___" boxes but then retyped the exact same details by hand.
+  const billingSameAsPickupNote = addressesMatch(billing, pickup)
+    ? "Same as Pickup"
+    : addressesMatch(billing, dropoff)
+      ? "Same as Destination"
+      : null;
   const [tab, setTab] = useState("summary");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  // Re-uploading a rejected document — a fresh pick reaches
+  // handleDocFileSelected via the same hidden-input trigger pattern
+  // BookingForm.js uses for the original upload.
+  const [reuploadKey, setReuploadKey] = useState(null); // doc key currently uploading, or null
+  const [reuploadError, setReuploadError] = useState("");
+  const docFileInputRef = useRef(null);
+  const pendingReuploadKey = useRef(null);
+
+  function triggerReupload(key) {
+    setReuploadError("");
+    pendingReuploadKey.current = key;
+    docFileInputRef.current?.click();
+  }
+
+  async function handleDocFileSelected(event) {
+    const file = event.target.files?.[0];
+    const key = pendingReuploadKey.current;
+    event.target.value = "";
+    if (!file || !key) return;
+    setReuploadError("");
+    setReuploadKey(key);
+    try {
+      await updateBookingDocument(booking.id, key, file);
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      // Optimistic local patch instead of a full refetch — we already know
+      // exactly what updateBookingDocument just wrote.
+      onBookingChange?.((prev) => ({
+        ...prev,
+        documents: {
+          ...prev.documents,
+          [key]: { uploaded: true, fileName: file.name, fileSize: `${sizeMB} MB`, status: "uploaded", rejectionReason: null },
+        },
+      }));
+    } catch (err) {
+      setReuploadError(`Couldn't re-upload — ${err.message}`);
+    } finally {
+      setReuploadKey(null);
+    }
+  }
 
   const enquiryUrl = `https://wa.me/${ENQUIRY_PHONE}?text=${encodeURIComponent(
     `Hi! I have an enquiry about my booking ${booking.id}.`
@@ -353,6 +451,8 @@ function BookingDetailView({ booking }) {
 
   return (
     <div>
+      <input ref={docFileInputRef} type="file" className="hidden" onChange={handleDocFileSelected} />
+
       <Link href="/my-bookings" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#0b1e42]">
         &larr; All Bookings
       </Link>
@@ -435,7 +535,15 @@ function BookingDetailView({ booking }) {
               <AddressDetailCard title="Drop-off" icon={MapPin} address={dropoff} />
             </div>
 
-            <DocumentsCard documents={booking.documents} />
+            <AddressDetailCard title="Billing" icon={CreditCard} address={billing} simple sameAsNote={billingSameAsPickupNote} />
+
+            <DocumentsCard
+              documents={booking.documents}
+              registrationNumber={booking.registrationNumber}
+              onReupload={triggerReupload}
+              busyKey={reuploadKey}
+              error={reuploadError}
+            />
 
             <PriceBreakdownCard booking={booking} />
 
@@ -504,7 +612,7 @@ export default function MyBookingsClient() {
         </div>
       );
     }
-    return <BookingDetailView booking={result} />;
+    return <BookingDetailView booking={result} onBookingChange={setResult} />;
   }
 
   // List view: every booking as a card.

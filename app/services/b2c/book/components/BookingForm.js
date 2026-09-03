@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowRight,
-  Calendar,
+  Camera,
   Check,
   CheckCircle2,
-  Clock,
   CreditCard,
+  Download,
+  FileCheck,
+  FileSignature,
   FileText,
   Fingerprint,
   IdCard,
@@ -20,6 +23,7 @@ import {
   Shield,
   ShieldCheck,
   User,
+  Wind,
 } from "lucide-react";
 import { getCurrentPosition, reverseGeocode } from "../lib/geocode";
 import { createBooking } from "../../lib/bookingStore";
@@ -27,12 +31,24 @@ import { formatINR } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import MapPickerModal from "./MapPickerModal";
 
+// Driving License is dropped from this list — `license` stays defined in
+// the DB's document_type enum (Postgres can't drop an enum value once
+// added), it's just never offered here anymore. `downloadUrl` (Customer
+// Authority Letter only) points at a blank, fillable copy of the letter to
+// print/sign/scan and re-upload — see public/documents/.
 const DOCUMENT_TYPES = [
+  { key: "puc", label: "PUC", icon: Wind },
+  { key: "noc", label: "NOC", icon: FileCheck },
   { key: "rc", label: "RC Card", icon: FileText },
-  { key: "license", label: "Driving License", icon: CreditCard },
-  { key: "pan", label: "PAN Card", icon: IdCard },
   { key: "aadhaar", label: "Aadhaar", icon: Fingerprint },
   { key: "insurance", label: "Insurance", icon: Shield },
+  {
+    key: "authority_letter",
+    label: "Customer Authority Letter",
+    icon: FileSignature,
+    downloadUrl: "/documents/customer-authority-letter-format.pdf",
+  },
+  { key: "pan", label: "PAN Card", icon: IdCard },
 ];
 
 const PICKUP_METHODS = [
@@ -158,6 +174,66 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, loading,
   );
 }
 
+// The choice itself normally happens in the "Get an Estimate" modal (see
+// PICKUP_METHODS'/DROPOFF_METHODS' comment above) — `locked` shows a
+// read-only readout of what was picked there. But someone can land on
+// /book directly (no estimate carried over, or an older saved one from
+// before this moved to the modal) with no method decided at all — `locked`
+// is false then, and this falls back to the original selectable cards so
+// there's always a way to actually choose, not a silently-defaulted value
+// with no way to change it.
+function MethodPicker({ label, method, options, locked, onChange }) {
+  if (locked) {
+    const option = options.find((o) => o.key === method) ?? options[0];
+    const Icon = option.icon;
+    return (
+      <div>
+        <p className="text-sm font-semibold text-[#0b1e42]">{label}</p>
+        <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-slate-50 py-3 pr-3 pl-4">
+          <Icon className="h-4 w-4 shrink-0 text-red-500" strokeWidth={2} />
+          <span className="flex-1 truncate text-sm font-semibold text-[#0b1e42]">{option.label}</span>
+          <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-red-600 uppercase">
+            From Estimate
+          </span>
+        </div>
+        <p className="mt-1.5 text-xs font-normal text-slate-400">{option.subtitle}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-[#0b1e42]">Choose {label}</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {options.map(({ key, label: optionLabel, subtitle, icon: Icon }) => {
+          const selected = method === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(key)}
+              className={`relative flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+                selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+              }`}
+            >
+              <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
+              <span>
+                <span className="block text-sm font-bold text-[#0b1e42]">{optionLabel}</span>
+                <span className="block text-xs text-slate-500">{subtitle}</span>
+              </span>
+              {selected && (
+                <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
+                  <Check className="h-3 w-3" strokeWidth={3} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function BookingForm({ estimate, estimateLoaded, onSummaryChange }) {
   const router = useRouter();
 
@@ -165,26 +241,53 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // upload card only turns green in response to a real handleFileSelected
   // call below, never pre-filled.
   const [uploads, setUploads] = useState({
+    puc: { uploaded: false },
+    noc: { uploaded: false },
     rc: { uploaded: false },
-    license: { uploaded: false },
-    pan: { uploaded: false },
     aadhaar: { uploaded: false },
     insurance: { uploaded: false },
+    authority_letter: { uploaded: false },
+    pan: { uploaded: false },
   });
 
-  const [pickupMethod, setPickupMethod] = useState("self");
+  // Chosen in the "Get an Estimate" modal now, not here — see
+  // handleBookNow in EstimateModal.js. Defaults to "self" so a booking
+  // reached without a saved estimate (the amber notice above) still works.
+  const [pickupMethod, setPickupMethod] = useState(estimate?.pickupMethod ?? "self");
   const [pickupLocation, setPickupLocation] = useState(null);
   const [pickupGeoLoading, setPickupGeoLoading] = useState(false);
   const [pickupGeoError, setPickupGeoError] = useState("");
   const [pickupDate, setPickupDate] = useState(estimate?.date ?? "");
   const [timeSlot, setTimeSlot] = useState("11:00 - 01:00");
 
-  const [dropoffMethod, setDropoffMethod] = useState("self");
+  const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(null);
   const [dropoffGeoLoading, setDropoffGeoLoading] = useState(false);
   const [dropoffGeoError, setDropoffGeoError] = useState("");
   const [dropoffDate, setDropoffDate] = useState("");
   const [dropoffTimeSlot, setDropoffTimeSlot] = useState(null);
+
+  // `estimate` loads from localStorage after mount (see BookingPageClient.js
+  // — it's null on first render), so the useState defaults above miss it.
+  // Adjusting state during render, same pattern as lastMinDropoffISO below:
+  // once estimateLoaded flips true, pull the methods off whatever estimate
+  // actually came back (still "self"/"self" if there wasn't one).
+  const [lastEstimateLoaded, setLastEstimateLoaded] = useState(estimateLoaded);
+  if (estimateLoaded !== lastEstimateLoaded) {
+    setLastEstimateLoaded(estimateLoaded);
+    if (estimateLoaded) {
+      setPickupMethod(estimate?.pickupMethod ?? "self");
+      setDropoffMethod(estimate?.dropoffMethod ?? "self");
+    }
+  }
+
+  // Only actually locked (read-only, "From Estimate") once a loaded
+  // estimate really carried a method over — landing on /book directly, or
+  // from an older saved estimate that predates this field, leaves both
+  // pickers open instead of silently defaulting to Self with no way to
+  // change it.
+  const pickupMethodLocked = estimateLoaded && Boolean(estimate?.pickupMethod);
+  const dropoffMethodLocked = estimateLoaded && Boolean(estimate?.dropoffMethod);
 
   // The route's minimum transit days (admin-set per direction in Route
   // Pricing — see routes.min_days) gates how soon a drop-off can be
@@ -209,12 +312,25 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   }
 
   const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
+  // "pickup" | "destination" | "custom" — the two "Same as ___" checkboxes
+  // are mutually exclusive (checking one clears the other), and the custom
+  // fields below only appear once neither is checked. Defaults to the
+  // common case (billed at the pickup address).
+  const [billingMode, setBillingMode] = useState("pickup");
   const [confirmedDocs, setConfirmedDocs] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Only flips true once a submit attempt actually finds a document
+  // missing — the "Still required" banner stays hidden while the customer
+  // is still filling the form out, not shown proactively the whole time.
+  // Recomputed live below (not frozen at the moment of that failed
+  // attempt), so it updates/clears itself as documents get uploaded
+  // instead of needing another submit click to catch up.
+  const [docsSubmitAttempted, setDocsSubmitAttempted] = useState(false);
 
   const fileInputRef = useRef(null);
   const pendingUploadKey = useRef(null);
+  const documentsSectionRef = useRef(null);
 
   // Bubbles the fields the booking summary sidebar displays up to the
   // shared parent, so it stays live as the customer fills in this form
@@ -223,9 +339,24 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     onSummaryChange?.({ pickupMethod, dropoffMethod, date: pickupDate, timeSlot });
   }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot]);
 
-  function triggerUpload(key) {
+  // `fromCamera` toggles the shared hidden input into "open the camera
+  // directly" mode (mobile browsers show a photo viewfinder instead of the
+  // usual file/photo picker) right before clicking it, then clears the
+  // attributes back off — so the plain "+ Upload" trigger goes back to
+  // accepting any file type (PDFs included) next time, not just images.
+  function triggerUpload(key, { fromCamera = false } = {}) {
     pendingUploadKey.current = key;
-    fileInputRef.current?.click();
+    const input = fileInputRef.current;
+    if (input) {
+      if (fromCamera) {
+        input.setAttribute("accept", "image/*");
+        input.setAttribute("capture", "environment");
+      } else {
+        input.removeAttribute("accept");
+        input.removeAttribute("capture");
+      }
+    }
+    input?.click();
   }
 
   function handleFileSelected(event) {
@@ -275,11 +406,25 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    // Checked here (on the actual submit attempt), not proactively the
+    // whole time the form is open — see docsSubmitAttempted above.
+    if (DOCUMENT_TYPES.some(({ key }) => !uploads[key]?.uploaded)) {
+      setDocsSubmitAttempted(true);
+      documentsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
     setSubmitting(true);
 
+    // Only styled uppercase via CSS above (textTransform) — the stored
+    // value needs the same normalization, not just the on-screen look.
+    const registrationNumber = (formData.get("registration_number") || "").toString().trim().toUpperCase() || null;
+
     const booking = {
       estimate,
+      registrationNumber,
       pickup: {
         fullName: formData.get("pickup_fullName"),
         phone: formData.get("pickup_phone"),
@@ -306,6 +451,40 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         date: formData.get("dropoff_date"),
         timeSlot: dropoffTimeSlot,
       },
+      // Copies the pickup/destination address straight over rather than
+      // relying on (empty, hidden) billing_* fields when one of the "Same
+      // as ___" checkboxes is on — keeps it true to what actually gets
+      // billed even if the customer edits that address afterward.
+      billing:
+        billingMode === "pickup"
+          ? {
+              fullName: formData.get("pickup_fullName"),
+              phone: formData.get("pickup_phone"),
+              house: formData.get("pickup_house"),
+              street: formData.get("pickup_street"),
+              landmark: formData.get("pickup_landmark"),
+              city: formData.get("pickup_city"),
+              pin: formData.get("pickup_pin"),
+            }
+          : billingMode === "destination"
+            ? {
+                fullName: formData.get("dropoff_fullName"),
+                phone: formData.get("dropoff_phone"),
+                house: formData.get("dropoff_house"),
+                street: formData.get("dropoff_street"),
+                landmark: formData.get("dropoff_landmark"),
+                city: formData.get("dropoff_city"),
+                pin: formData.get("dropoff_pin"),
+              }
+            : {
+                fullName: formData.get("billing_fullName"),
+                phone: formData.get("billing_phone"),
+                house: formData.get("billing_house"),
+                street: formData.get("billing_street"),
+                landmark: formData.get("billing_landmark"),
+                city: formData.get("billing_city"),
+                pin: formData.get("billing_pin"),
+              },
       documents: uploads,
     };
 
@@ -318,6 +497,12 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     }
   }
 
+  // Every document in section 3 is mandatory — enforced in handleSubmit
+  // rather than pre-disabling the button, so the "Still required" message
+  // only shows up once the customer actually tries to submit with
+  // something missing (and then tracks live as they fix it).
+  const missingDocs = DOCUMENT_TYPES.filter(({ key }) => !uploads[key]?.uploaded);
+  const showDocsError = docsSubmitAttempted && missingDocs.length > 0;
   const canSubmit = confirmedDocs && agreedTerms && !submitting;
 
   return (
@@ -373,6 +558,61 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             placeholder="110001"
           />
         </div>
+
+        {/* Was its own "4. Pickup Details" section — folded in here since
+            it's really more detail about this same pickup leg, not a
+            separate concern. */}
+        <div className="mt-6 border-t border-slate-100 pt-6">
+          <MethodPicker
+            label="Pickup Method"
+            method={pickupMethod}
+            options={PICKUP_METHODS}
+            locked={pickupMethodLocked}
+            onChange={setPickupMethod}
+          />
+
+          {pickupMethod === "driver" && (
+            <AddLocationPicker
+              captured={pickupLocation}
+              loading={pickupGeoLoading}
+              error={pickupGeoError}
+              onUseCurrentLocation={() => handleUseCurrentLocation("pickup")}
+              onOpenMap={() => setMapPickerTarget("pickup")}
+            />
+          )}
+
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-[#0b1e42]">
+              Select Date
+              <span className="mt-2 block">
+                <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={todayISO} />
+              </span>
+            </label>
+
+            <div>
+              <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {TIME_SLOTS.map((slot) => {
+                  const selected = timeSlot === slot;
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setTimeSlot(slot)}
+                      className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
+                        selected
+                          ? "bg-red-600 text-white"
+                          : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -406,190 +646,195 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             placeholder="400001"
           />
         </div>
-      </SectionCard>
 
-      <SectionCard icon={ShieldCheck} title="3. Vehicle Documents">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {DOCUMENT_TYPES.map(({ key, label, icon: Icon }) => {
-            const state = uploads[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => triggerUpload(key)}
-                className={`flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
-                  state.uploaded
-                    ? "border-green-200 bg-green-50"
-                    : "border-slate-200 bg-white hover:border-red-200"
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${state.uploaded ? "text-green-600" : "text-slate-400"}`} strokeWidth={2} />
-                <span className="text-xs font-bold text-[#0b1e42]">{label}</span>
-                {state.uploaded ? (
-                  <>
-                    <span className="max-w-full truncate text-[10px] text-slate-500">
-                      {state.fileName} &bull; {state.fileSize}
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Success
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[10px] font-bold text-red-600 uppercase">+ Upload</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </SectionCard>
-
-      <SectionCard icon={Calendar} title="4. Pickup Details">
-        <p className="text-sm font-semibold text-[#0b1e42]">Choose Pickup Method</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {PICKUP_METHODS.map(({ key, label, subtitle, icon: Icon }) => {
-            const selected = pickupMethod === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPickupMethod(key)}
-                className={`relative flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                  selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-                <span>
-                  <span className="block text-sm font-bold text-[#0b1e42]">{label}</span>
-                  <span className="block text-xs text-slate-500">{subtitle}</span>
-                </span>
-                {selected && (
-                  <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {pickupMethod === "driver" && (
-          <AddLocationPicker
-            captured={pickupLocation}
-            loading={pickupGeoLoading}
-            error={pickupGeoError}
-            onUseCurrentLocation={() => handleUseCurrentLocation("pickup")}
-            onOpenMap={() => setMapPickerTarget("pickup")}
+        {/* Was its own "5. Drop-off Details" section — folded in here for
+            the same reason as Pickup Method above. */}
+        <div className="mt-6 border-t border-slate-100 pt-6">
+          <MethodPicker
+            label="Drop-off Method"
+            method={dropoffMethod}
+            options={DROPOFF_METHODS}
+            locked={dropoffMethodLocked}
+            onChange={setDropoffMethod}
           />
-        )}
 
-        <div className="mt-6 grid gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-[#0b1e42]">
-            Select Date
-            <span className="mt-2 block">
-              <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={todayISO} />
-            </span>
-          </label>
+          {dropoffMethod === "driver" && (
+            <AddLocationPicker
+              captured={dropoffLocation}
+              loading={dropoffGeoLoading}
+              error={dropoffGeoError}
+              onUseCurrentLocation={() => handleUseCurrentLocation("dropoff")}
+              onOpenMap={() => setMapPickerTarget("dropoff")}
+            />
+          )}
 
-          <div>
-            <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {TIME_SLOTS.map((slot) => {
-                const selected = timeSlot === slot;
-                return (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setTimeSlot(slot)}
-                    className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
-                      selected
-                        ? "bg-red-600 text-white"
-                        : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                );
-              })}
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-[#0b1e42]">
+              Select Date
+              <span className="mt-2 block">
+                <DatePicker name="dropoff_date" value={dropoffDate} onChange={setDropoffDate} min={minDropoffISO} />
+              </span>
+              <span className="mt-1.5 block text-xs font-normal text-slate-400">
+                Minimum {minTransitDays} day{minTransitDays === 1 ? "" : "s"} transit
+                {pickupDate ? ` — earliest ${formatISOShort(minDropoffISO)}` : ""}
+              </span>
+            </label>
+
+            <div>
+              <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {TIME_SLOTS.map((slot) => {
+                  const selected = dropoffTimeSlot === slot;
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setDropoffTimeSlot(slot)}
+                      className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
+                        selected
+                          ? "bg-red-600 text-white"
+                          : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard icon={Clock} title="5. Drop-off Details">
-        <p className="text-sm font-semibold text-[#0b1e42]">Choose Drop-off Method</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {DROPOFF_METHODS.map(({ key, label, subtitle, icon: Icon }) => {
-            const selected = dropoffMethod === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setDropoffMethod(key)}
-                className={`relative flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                  selected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <Icon className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-                <span>
-                  <span className="block text-sm font-bold text-[#0b1e42]">{label}</span>
-                  <span className="block text-xs text-slate-500">{subtitle}</span>
-                </span>
-                {selected && (
-                  <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      <div ref={documentsSectionRef}>
+        <SectionCard icon={ShieldCheck} title="3. Vehicle Documents">
+          <p className="-mt-2 mb-5 text-xs text-slate-400">
+            All documents below are required — the booking can&apos;t be submitted until every one is uploaded.
+          </p>
 
-        {dropoffMethod === "driver" && (
-          <AddLocationPicker
-            captured={dropoffLocation}
-            loading={dropoffGeoLoading}
-            error={dropoffGeoError}
-            onUseCurrentLocation={() => handleUseCurrentLocation("dropoff")}
-            onOpenMap={() => setMapPickerTarget("dropoff")}
+          <TextField
+            label="Vehicle Registration Number"
+            name="registration_number"
+            type="text"
+            placeholder="e.g. DL01AB1234"
+            style={{ textTransform: "uppercase" }}
           />
-        )}
 
-        <div className="mt-6 grid gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-[#0b1e42]">
-            Select Date
-            <span className="mt-2 block">
-              <DatePicker name="dropoff_date" value={dropoffDate} onChange={setDropoffDate} min={minDropoffISO} />
-            </span>
-            <span className="mt-1.5 block text-xs font-normal text-slate-400">
-              Minimum {minTransitDays} day{minTransitDays === 1 ? "" : "s"} transit
-              {pickupDate ? ` — earliest ${formatISOShort(minDropoffISO)}` : ""}
-            </span>
-          </label>
-
-          <div>
-            <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {TIME_SLOTS.map((slot) => {
-                const selected = dropoffTimeSlot === slot;
-                return (
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {DOCUMENT_TYPES.map(({ key, label, icon: Icon, downloadUrl }) => {
+              const state = uploads[key];
+              return (
+                <div
+                  key={key}
+                  className={`relative flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
+                    state.uploaded
+                      ? "border-green-200 bg-green-50"
+                      : "border-slate-200 bg-white hover:border-red-200"
+                  }`}
+                >
+                  {/* Phone only (sm:hidden) — on desktop the file picker
+                      has no camera to open in the first place. Sits at the
+                      opposite corner from the download-format button below
+                      so the two never collide on the one card that has
+                      both. */}
                   <button
-                    key={slot}
                     type="button"
-                    onClick={() => setDropoffTimeSlot(slot)}
-                    className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
-                      selected
-                        ? "bg-red-600 text-white"
-                        : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
-                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      triggerUpload(key, { fromCamera: true });
+                    }}
+                    aria-label="Take a photo"
+                    className="group absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:hidden"
                   >
-                    {slot}
+                    <Camera className="h-3.5 w-3.5" strokeWidth={2} />
+                    <span className="pointer-events-none absolute left-0 -top-8 whitespace-nowrap rounded-md bg-[#0b1e42] px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      Take Photo
+                    </span>
                   </button>
-                );
-              })}
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      download
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label="Download format"
+                      className="group absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Download className="h-3.5 w-3.5" strokeWidth={2} />
+                      <span className="pointer-events-none absolute right-0 -top-8 whitespace-nowrap rounded-md bg-[#0b1e42] px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Download Format
+                      </span>
+                    </a>
+                  )}
+                  <button type="button" onClick={() => triggerUpload(key)} className="flex w-full flex-col items-center gap-2">
+                    <Icon className={`h-5 w-5 ${state.uploaded ? "text-green-600" : "text-slate-400"}`} strokeWidth={2} />
+                    <span className="text-xs font-bold text-[#0b1e42]">
+                      {label} <span className="text-red-600">*</span>
+                    </span>
+                    {state.uploaded ? (
+                      <>
+                        <span className="max-w-full truncate text-[10px] text-slate-500">
+                          {state.fileName} &bull; {state.fileSize}
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Success
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[10px] font-bold text-red-600 uppercase">+ Upload</span>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {showDocsError && (
+            <p className="mt-4 flex items-start gap-1.5 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Still required: {missingDocs.map((d) => d.label).join(", ")}
+            </p>
+          )}
+        </SectionCard>
+      </div>
+
+      <SectionCard icon={CreditCard} title="4. Billing Address">
+        <label className="flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
+          <input
+            type="checkbox"
+            checked={billingMode === "pickup"}
+            onChange={(event) => setBillingMode(event.target.checked ? "pickup" : "custom")}
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
+          />
+          Same as Pickup Address
+        </label>
+        <label className="mt-3 flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
+          <input
+            type="checkbox"
+            checked={billingMode === "destination"}
+            onChange={(event) => setBillingMode(event.target.checked ? "destination" : "custom")}
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
+          />
+          Same as Destination Address
+        </label>
+
+        {billingMode === "custom" && (
+          <div className="mt-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <TextField label="Full Name" name="billing_fullName" type="text" placeholder="e.g. Rahul Sharma" />
+              <TextField label="Phone Number" name="billing_phone" type="tel" placeholder="+91 98765 43210" />
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <TextField label="House / Plot / Flat No." name="billing_house" type="text" placeholder="B-24, 2nd Floor" />
+              <TextField label="Street / Area Name" name="billing_street" type="text" placeholder="Connaught Place" />
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-3">
+              <TextField label="Landmark (Optional)" name="billing_landmark" type="text" placeholder="Near Metro Pillar 12" />
+              <TextField label="City" name="billing_city" type="text" placeholder="New Delhi" />
+              <TextField label="PIN Code" name="billing_pin" type="text" inputMode="numeric" placeholder="110001" />
             </div>
           </div>
-        </div>
+        )}
       </SectionCard>
 
       <div className="flex flex-col gap-3 px-1">
@@ -598,7 +843,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             type="checkbox"
             checked={confirmedDocs}
             onChange={(event) => setConfirmedDocs(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-red-600 focus:ring-red-500"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
           />
           I confirm that the vehicle details and documents provided are authentic and accurate as per my
           knowledge.
@@ -608,7 +853,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             type="checkbox"
             checked={agreedTerms}
             onChange={(event) => setAgreedTerms(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-red-600 focus:ring-red-500"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
           />
           I agree to CarCoolie&apos;s{" "}
           <a href="#" className="font-semibold text-red-600 hover:text-red-700">
