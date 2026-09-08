@@ -9,11 +9,8 @@ import { Truck } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Images reuse the existing testi*.jpg assets as placeholders (testi1
-// repeats for card 4) — swap each for the real per-service photo once
-// available. Badges are short, non-numeric restatements of the actual
-// description copy (no invented stats), unlike the dummy 100%/ZERO/etc.
-// badges this replaced.
+// Badges are short, non-numeric restatements of the actual description copy
+// (no invented stats), unlike the dummy 100%/ZERO/etc. badges this replaced.
 const CARDS = [
   {
     id: "door-to-door",
@@ -31,7 +28,7 @@ const CARDS = [
       { value: "NO FULL TRUCK", label: "COST REQUIRED" },
     ],
     cta: "Explore Door to Door",
-    image: "/testi2.jpg",
+    image: "/finalimages/homepage/services1.png",
   },
   {
     id: "full-truck-load",
@@ -49,7 +46,7 @@ const CARDS = [
       { value: "PAN INDIA", label: "DOORSTEP DELIVERY" },
     ],
     cta: "Explore Full Truck Load",
-    image: "/testi1.jpg",
+    image: "/finalimages/homepage/ourservices2.JPG",
   },
   {
     id: "stockyard",
@@ -67,7 +64,7 @@ const CARDS = [
       { value: "ON DEMAND", label: "FINAL DELIVERY" },
     ],
     cta: "Explore Stockyard Management",
-    image: "/testi3.jpg",
+    image: "/finalimages/homepage/ourservices3.JPG",
   },
   {
     id: "warehouse",
@@ -85,7 +82,7 @@ const CARDS = [
       { value: "TIMELY", label: "DISTRIBUTION" },
     ],
     cta: "Explore Warehouse Management",
-    image: "/testi1.jpg",
+    image: "/finalimages/homepage/ourservices4.JPG",
   },
 ];
 

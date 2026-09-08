@@ -22,7 +22,7 @@ export default function CompanyNumbersHero() {
           its left edge into the page background — same technique/image as
           TeamHero and UsVsMarketHero. */}
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]">
-        <Image src="/team-hero.png" alt="" fill priority className="object-cover" />
+        <Image src="/finalimages/company-numbers/hero.JPG" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-white via-white/40 to-transparent" />
       </div>
 
@@ -36,8 +36,8 @@ export default function CompanyNumbersHero() {
             </span>
           </h1>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-slate-600">
-            From a single journey to thousands of successful deliveries, our numbers reflect the
-            trust, scale and consistency behind every CarCoolie movement.
+            Scale alone doesn&apos;t guarantee safety. CarCoolie backs its growth with 28,000+ car
+            deliveries and over a decade of consistent, on-time service.
           </p>
           <div className="mt-30 flex flex-wrap items-center gap-8">
             {VALUES.map(({ icon: Icon, prefix, label }) => (

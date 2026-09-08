@@ -1,9 +1,9 @@
 import { MapPin, MapPinned, Package, Smile, Truck, Users } from "lucide-react";
 
 const STATS = [
-  { icon: Truck, value: "350+", label: "Trucks On Road Per Day" },
-  { icon: Users, value: "250+", label: "Expert Staffs Working" },
-  { icon: Package, value: "50k", label: "Deliveries Completed" },
+  { icon: Truck, value: "750+", label: "Trucks On Road Per Day" },
+  { icon: Users, value: "800+", label: "Expert Staffs Working" },
+  { icon: Package, value: "50K+", label: "Deliveries Completed" },
   { icon: MapPinned, value: "27+", label: "State We Reach Daily" },
   { icon: MapPin, value: "650+", label: "Service Locations All Over India" },
   { icon: Smile, value: "75k+", label: "Happy Customers Reached" },

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
-  Camera,
   Check,
   CheckCircle2,
   CreditCard,
@@ -25,7 +24,6 @@ import {
   User,
   Wind,
 } from "lucide-react";
-import { getCurrentPosition, reverseGeocode } from "../lib/geocode";
 import { createBooking } from "../../lib/bookingStore";
 import { formatINR } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
@@ -63,8 +61,34 @@ const DROPOFF_METHODS = [
 
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
 
+// The labels drop AM/PM (they're always a daytime business-hours slot), so
+// this is the only unambiguous place "01:00" means 1pm, not 1am — used to
+// tell whether a given slot has already started/passed today.
+const TIME_SLOT_START_HOUR = {
+  "09:00 - 11:00": 9,
+  "11:00 - 01:00": 11,
+  "01:00 - 03:00": 13,
+  "03:00 - 05:00": 15,
+};
+
 // Native date inputs use this as their `min` so past dates can't be picked.
 const todayISO = new Date().toISOString().slice(0, 10);
+
+// A slot only ever needs disabling for today's date — any later date has
+// nothing "passed" about it yet. Hour-granularity comparison matches the
+// slots themselves being on-the-hour boundaries.
+function isTimeSlotPast(slot, dateISO) {
+  if (dateISO !== todayISO) return false;
+  return TIME_SLOT_START_HOUR[slot] <= new Date().getHours();
+}
+
+// No date picked yet at all means there's nothing to check a time slot
+// against — every slot stays disabled until one is, rather than looking
+// pickable and then turning out to depend on a date that isn't set.
+function isTimeSlotDisabled(slot, dateISO) {
+  if (!dateISO) return true;
+  return isTimeSlotPast(slot, dateISO);
+}
 
 // Adds `days` calendar days to an ISO (YYYY-MM-DD) date string — used to
 // turn the route's minimum transit days into the drop-off date picker's
@@ -122,10 +146,17 @@ function TextField({ label, ...props }) {
   );
 }
 
-// Shared "Add Location" block used under both Pickup and Drop-off Details —
-// wires the real Geolocation API for "Current Location" and opens the
-// Leaflet map picker for "Select on Map".
-function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, loading, error }) {
+// Shared "Add Location" block used under both Pickup and Drop-off Details.
+// Both buttons now just open the same MapPickerModal — "Current Location"
+// opens it and immediately fires its own "Use current location" (see
+// MapPickerModal's `autoLocate`), "Select on Map" opens it plain — rather
+// than this component doing its own separate geolocation lookup. That
+// lookup used to always go through the free OSM/Nominatim reverse geocode
+// regardless of whether a Google Maps key was configured; routing it
+// through the same modal means it gets MapPickerModal's already-correct
+// "prefer Google's geocoding when available" behavior for free, instead of
+// a second, less accurate implementation living here too.
+function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
   // Whichever method actually produced the captured location gets the red
   // "selected" border — same treatment as the Pickup/Drop-off Method cards
   // above this section, since these two buttons are really just another
@@ -140,16 +171,11 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, loading,
         <button
           type="button"
           onClick={onUseCurrentLocation}
-          disabled={loading}
-          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-wait ${
+          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
             currentSelected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
           }`}
         >
-          {loading ? (
-            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-red-600" />
-          ) : (
-            <LocateFixed className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-          )}
+          <LocateFixed className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
           <span className="text-sm font-bold text-[#0b1e42]">Current Location</span>
         </button>
         <button
@@ -163,7 +189,6 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, loading,
           <span className="text-sm font-bold text-[#0b1e42]">Select on Map</span>
         </button>
       </div>
-      {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
       {captured && (
         <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-green-600">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -255,15 +280,14 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // reached without a saved estimate (the amber notice above) still works.
   const [pickupMethod, setPickupMethod] = useState(estimate?.pickupMethod ?? "self");
   const [pickupLocation, setPickupLocation] = useState(null);
-  const [pickupGeoLoading, setPickupGeoLoading] = useState(false);
-  const [pickupGeoError, setPickupGeoError] = useState("");
   const [pickupDate, setPickupDate] = useState(estimate?.date ?? "");
-  const [timeSlot, setTimeSlot] = useState("11:00 - 01:00");
+  // No default slot pre-selected (matches dropoffTimeSlot below) — every
+  // slot starts disabled until a date is actually picked, so nothing
+  // should already look chosen before then either.
+  const [timeSlot, setTimeSlot] = useState(null);
 
   const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(null);
-  const [dropoffGeoLoading, setDropoffGeoLoading] = useState(false);
-  const [dropoffGeoError, setDropoffGeoError] = useState("");
   const [dropoffDate, setDropoffDate] = useState("");
   const [dropoffTimeSlot, setDropoffTimeSlot] = useState(null);
 
@@ -289,6 +313,25 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const pickupMethodLocked = estimateLoaded && Boolean(estimate?.pickupMethod);
   const dropoffMethodLocked = estimateLoaded && Boolean(estimate?.dropoffMethod);
 
+  // If every one of today's time slots has already passed, today itself
+  // isn't a bookable pickup date anymore — there's nothing left on it to
+  // actually pick — so the earliest selectable day bumps to tomorrow
+  // instead of leaving today clickable with an entirely disabled slot grid
+  // waiting on the other side.
+  const allTodaySlotsPast = TIME_SLOTS.every((slot) => TIME_SLOT_START_HOUR[slot] <= new Date().getHours());
+  const earliestPickupISO = allTodaySlotsPast ? addDaysISO(todayISO, 1) : todayISO;
+
+  // Same "adjusting state during render" idea as minDropoffISO below:
+  // clears an already-picked pickup date of today if today's slots run out
+  // from under it while the form is still open.
+  const [lastEarliestPickupISO, setLastEarliestPickupISO] = useState(earliestPickupISO);
+  if (earliestPickupISO !== lastEarliestPickupISO) {
+    setLastEarliestPickupISO(earliestPickupISO);
+    if (pickupDate && pickupDate < earliestPickupISO) {
+      setPickupDate("");
+    }
+  }
+
   // The route's minimum transit days (admin-set per direction in Route
   // Pricing — see routes.min_days) gates how soon a drop-off can be
   // scheduled after the chosen pickup date: minDays=3 and pickup=day 1
@@ -296,7 +339,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // (same as the DB column's default) if the estimate predates this field
   // or wasn't loaded from a real route.
   const minTransitDays = estimate?.minDays ?? 1;
-  const minDropoffISO = pickupDate ? addDaysISO(pickupDate, minTransitDays + 1) : todayISO;
+  const minDropoffISO = pickupDate ? addDaysISO(pickupDate, minTransitDays + 1) : earliestPickupISO;
 
   // Adjusting state during render (not in an effect — see the same
   // pattern in EstimateModal.js) rather than setState-in-an-effect:
@@ -312,11 +355,35 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   }
 
   const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
+  // Which button opened the modal — "current" auto-fires MapPickerModal's
+  // own locate-me on open (see autoLocate below) and, once confirmed, tags
+  // the result the same way a plain map pick would've been tagged before
+  // this changed, so AddLocationPicker's own "which button was used"
+  // highlighting above still works.
+  const [mapPickerSource, setMapPickerSource] = useState("map");
   // "pickup" | "destination" | "custom" — the two "Same as ___" checkboxes
   // are mutually exclusive (checking one clears the other), and the custom
   // fields below only appear once neither is checked. Defaults to the
   // common case (billed at the pickup address).
   const [billingMode, setBillingMode] = useState("pickup");
+  // A "Same as ___" checkbox only makes sense when that leg actually has an
+  // address on file — Self methods don't collect one at all (see section
+  // 1/2 above), so there's nothing to copy.
+  const pickupAddressAvailable = pickupMethod === "driver";
+  const dropoffAddressAvailable = dropoffMethod === "driver";
+  // Neither source exists — the manual fields are the only option, so they
+  // stop being optional.
+  const billingCustomRequired = !pickupAddressAvailable && !dropoffAddressAvailable;
+
+  // Adjusting state during render (same pattern as lastMinDropoffISO
+  // below): if the leg billingMode currently points at just stopped
+  // collecting an address (its method switched to Self), fall back to the
+  // manual fields instead of silently staying on a source that's gone.
+  if (billingMode === "pickup" && !pickupAddressAvailable) {
+    setBillingMode("custom");
+  } else if (billingMode === "destination" && !dropoffAddressAvailable) {
+    setBillingMode("custom");
+  }
   const [confirmedDocs, setConfirmedDocs] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -339,24 +406,9 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     onSummaryChange?.({ pickupMethod, dropoffMethod, date: pickupDate, timeSlot });
   }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot]);
 
-  // `fromCamera` toggles the shared hidden input into "open the camera
-  // directly" mode (mobile browsers show a photo viewfinder instead of the
-  // usual file/photo picker) right before clicking it, then clears the
-  // attributes back off — so the plain "+ Upload" trigger goes back to
-  // accepting any file type (PDFs included) next time, not just images.
-  function triggerUpload(key, { fromCamera = false } = {}) {
+  function triggerUpload(key) {
     pendingUploadKey.current = key;
-    const input = fileInputRef.current;
-    if (input) {
-      if (fromCamera) {
-        input.setAttribute("accept", "image/*");
-        input.setAttribute("capture", "environment");
-      } else {
-        input.removeAttribute("accept");
-        input.removeAttribute("capture");
-      }
-    }
-    input?.click();
+    fileInputRef.current?.click();
   }
 
   function handleFileSelected(event) {
@@ -375,30 +427,21 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     event.target.value = "";
   }
 
-  async function handleUseCurrentLocation(target) {
-    const setLoading = target === "pickup" ? setPickupGeoLoading : setDropoffGeoLoading;
-    const setError = target === "pickup" ? setPickupGeoError : setDropoffGeoError;
-    const setLocation = target === "pickup" ? setPickupLocation : setDropoffLocation;
+  // Opens the map modal and has it fire its own locate-me immediately
+  // (autoLocate below) instead of doing a separate geolocation lookup
+  // here — see the comment on AddLocationPicker above for why.
+  function handleUseCurrentLocation(target) {
+    setMapPickerTarget(target);
+    setMapPickerSource("current");
+  }
 
-    setError("");
-    setLoading(true);
-    try {
-      const { lat, lng } = await getCurrentPosition();
-      const address = await reverseGeocode(lat, lng);
-      setLocation({ address, lat, lng, source: "current" });
-    } catch (err) {
-      setError(
-        err?.code === 1
-          ? "Location permission denied — allow access or use Select on Map instead."
-          : "Couldn't get your current location. Try Select on Map instead."
-      );
-    } finally {
-      setLoading(false);
-    }
+  function handleOpenMap(target) {
+    setMapPickerTarget(target);
+    setMapPickerSource("map");
   }
 
   function handleMapConfirm(location) {
-    const tagged = { ...location, source: "map" };
+    const tagged = { ...location, source: mapPickerSource };
     if (mapPickerTarget === "pickup") setPickupLocation(tagged);
     if (mapPickerTarget === "dropoff") setDropoffLocation(tagged);
     setMapPickerTarget(null);
@@ -536,28 +579,36 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           <TextField label="Full Name" name="pickup_fullName" type="text" placeholder="e.g. Rahul Sharma" />
           <TextField label="Phone Number" name="pickup_phone" type="tel" placeholder="+91 98765 43210" />
         </div>
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <TextField label="House / Plot / Flat No." name="pickup_house" type="text" placeholder="B-24, 2nd Floor" />
-          <TextField label="Street / Area Name" name="pickup_street" type="text" placeholder="Connaught Place" />
-        </div>
-        <div className="mt-5 grid gap-5 sm:grid-cols-3">
-          <TextField label="Landmark (Optional)" name="pickup_landmark" type="text" placeholder="Near Metro Pillar 12" />
-          <TextField
-            label="City"
-            name="pickup_city"
-            type="text"
-            defaultValue={estimate?.fromCity ?? ""}
-            placeholder="New Delhi"
-          />
-          <TextField
-            label="PIN Code"
-            name="pickup_pin"
-            type="text"
-            inputMode="numeric"
-            defaultValue={estimate?.pickupPin ?? ""}
-            placeholder="110001"
-          />
-        </div>
+        {pickupMethod === "driver" ? (
+          <>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <TextField label="House / Plot / Flat No." name="pickup_house" type="text" placeholder="B-24, 2nd Floor" />
+              <TextField label="Street / Area Name" name="pickup_street" type="text" placeholder="Connaught Place" />
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-3">
+              <TextField label="Landmark (Optional)" name="pickup_landmark" type="text" placeholder="Near Metro Pillar 12" />
+              <TextField
+                label="City"
+                name="pickup_city"
+                type="text"
+                defaultValue={estimate?.fromCity ?? ""}
+                placeholder="New Delhi"
+              />
+              <TextField
+                label="PIN Code"
+                name="pickup_pin"
+                type="text"
+                inputMode="numeric"
+                defaultValue={estimate?.pickupPin ?? ""}
+                placeholder="110001"
+              />
+            </div>
+          </>
+        ) : (
+          // Self Drop-off — the customer brings the car to our hub, so
+          // there's no address for a driver to go find.
+          <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll drop the car off at our hub.</p>
+        )}
 
         {/* Was its own "4. Pickup Details" section — folded in here since
             it's really more detail about this same pickup leg, not a
@@ -574,10 +625,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           {pickupMethod === "driver" && (
             <AddLocationPicker
               captured={pickupLocation}
-              loading={pickupGeoLoading}
-              error={pickupGeoError}
               onUseCurrentLocation={() => handleUseCurrentLocation("pickup")}
-              onOpenMap={() => setMapPickerTarget("pickup")}
+              onOpenMap={() => handleOpenMap("pickup")}
             />
           )}
 
@@ -585,7 +634,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             <label className="block text-sm font-semibold text-[#0b1e42]">
               Select Date
               <span className="mt-2 block">
-                <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={todayISO} />
+                <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={earliestPickupISO} />
               </span>
             </label>
 
@@ -594,15 +643,20 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {TIME_SLOTS.map((slot) => {
                   const selected = timeSlot === slot;
+                  const past = isTimeSlotDisabled(slot, pickupDate);
                   return (
                     <button
                       key={slot}
                       type="button"
+                      disabled={past}
                       onClick={() => setTimeSlot(slot)}
+                      title={past ? (pickupDate ? "This time slot has already passed today" : "Select a date first") : undefined}
                       className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
                         selected
                           ? "bg-red-600 text-white"
-                          : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
+                          : past
+                            ? "cursor-not-allowed bg-slate-50 text-slate-300 ring-1 ring-slate-100"
+                            : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
                       }`}
                     >
                       {slot}
@@ -624,28 +678,36 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           <TextField label="Full Name" name="dropoff_fullName" type="text" placeholder="Recipient Name" />
           <TextField label="Phone Number" name="dropoff_phone" type="tel" placeholder="+91 98765 43210" />
         </div>
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <TextField label="House / Plot / Flat No." name="dropoff_house" type="text" placeholder="A-12, 5th Floor" />
-          <TextField label="Street / Area Name" name="dropoff_street" type="text" placeholder="Bandra West" />
-        </div>
-        <div className="mt-5 grid gap-5 sm:grid-cols-3">
-          <TextField label="Landmark (Optional)" name="dropoff_landmark" type="text" placeholder="Near Linking Road" />
-          <TextField
-            label="City"
-            name="dropoff_city"
-            type="text"
-            defaultValue={estimate?.toCity ?? ""}
-            placeholder="Mumbai"
-          />
-          <TextField
-            label="PIN Code"
-            name="dropoff_pin"
-            type="text"
-            inputMode="numeric"
-            defaultValue={estimate?.destinationPin ?? ""}
-            placeholder="400001"
-          />
-        </div>
+        {dropoffMethod === "driver" ? (
+          <>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <TextField label="House / Plot / Flat No." name="dropoff_house" type="text" placeholder="A-12, 5th Floor" />
+              <TextField label="Street / Area Name" name="dropoff_street" type="text" placeholder="Bandra West" />
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-3">
+              <TextField label="Landmark (Optional)" name="dropoff_landmark" type="text" placeholder="Near Linking Road" />
+              <TextField
+                label="City"
+                name="dropoff_city"
+                type="text"
+                defaultValue={estimate?.toCity ?? ""}
+                placeholder="Mumbai"
+              />
+              <TextField
+                label="PIN Code"
+                name="dropoff_pin"
+                type="text"
+                inputMode="numeric"
+                defaultValue={estimate?.destinationPin ?? ""}
+                placeholder="400001"
+              />
+            </div>
+          </>
+        ) : (
+          // Self Pickup — the customer collects the car from our hub, so
+          // there's no address for a driver to deliver it to.
+          <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll collect the car from our hub.</p>
+        )}
 
         {/* Was its own "5. Drop-off Details" section — folded in here for
             the same reason as Pickup Method above. */}
@@ -661,10 +723,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           {dropoffMethod === "driver" && (
             <AddLocationPicker
               captured={dropoffLocation}
-              loading={dropoffGeoLoading}
-              error={dropoffGeoError}
               onUseCurrentLocation={() => handleUseCurrentLocation("dropoff")}
-              onOpenMap={() => setMapPickerTarget("dropoff")}
+              onOpenMap={() => handleOpenMap("dropoff")}
             />
           )}
 
@@ -672,11 +732,18 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             <label className="block text-sm font-semibold text-[#0b1e42]">
               Select Date
               <span className="mt-2 block">
-                <DatePicker name="dropoff_date" value={dropoffDate} onChange={setDropoffDate} min={minDropoffISO} />
+                <DatePicker
+                  name="dropoff_date"
+                  value={dropoffDate}
+                  onChange={setDropoffDate}
+                  min={minDropoffISO}
+                  disabled={!pickupDate}
+                />
               </span>
               <span className="mt-1.5 block text-xs font-normal text-slate-400">
-                Minimum {minTransitDays} day{minTransitDays === 1 ? "" : "s"} transit
-                {pickupDate ? ` — earliest ${formatISOShort(minDropoffISO)}` : ""}
+                {pickupDate
+                  ? `Minimum ${minTransitDays} day${minTransitDays === 1 ? "" : "s"} transit — earliest ${formatISOShort(minDropoffISO)}`
+                  : "Select a pickup date first."}
               </span>
             </label>
 
@@ -685,15 +752,20 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {TIME_SLOTS.map((slot) => {
                   const selected = dropoffTimeSlot === slot;
+                  const past = isTimeSlotDisabled(slot, dropoffDate);
                   return (
                     <button
                       key={slot}
                       type="button"
+                      disabled={past}
                       onClick={() => setDropoffTimeSlot(slot)}
+                      title={past ? (dropoffDate ? "This time slot has already passed today" : "Select a date first") : undefined}
                       className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
                         selected
                           ? "bg-red-600 text-white"
-                          : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
+                          : past
+                            ? "cursor-not-allowed bg-slate-50 text-slate-300 ring-1 ring-slate-100"
+                            : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
                       }`}
                     >
                       {slot}
@@ -732,25 +804,6 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                       : "border-slate-200 bg-white hover:border-red-200"
                   }`}
                 >
-                  {/* Phone only (sm:hidden) — on desktop the file picker
-                      has no camera to open in the first place. Sits at the
-                      opposite corner from the download-format button below
-                      so the two never collide on the one card that has
-                      both. */}
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      triggerUpload(key, { fromCamera: true });
-                    }}
-                    aria-label="Take a photo"
-                    className="group absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:hidden"
-                  >
-                    <Camera className="h-3.5 w-3.5" strokeWidth={2} />
-                    <span className="pointer-events-none absolute left-0 -top-8 whitespace-nowrap rounded-md bg-[#0b1e42] px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      Take Photo
-                    </span>
-                  </button>
                   {downloadUrl && (
                     <a
                       href={downloadUrl}
@@ -799,39 +852,99 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
       </div>
 
       <SectionCard icon={CreditCard} title="4. Billing Address">
-        <label className="flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
+        <label
+          className={`flex items-center gap-3 text-sm font-semibold ${
+            pickupAddressAvailable ? "text-[#0b1e42]" : "cursor-not-allowed text-slate-300"
+          }`}
+        >
           <input
             type="checkbox"
             checked={billingMode === "pickup"}
+            disabled={!pickupAddressAvailable}
             onChange={(event) => setBillingMode(event.target.checked ? "pickup" : "custom")}
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500 disabled:cursor-not-allowed"
           />
           Same as Pickup Address
         </label>
-        <label className="mt-3 flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
+        {!pickupAddressAvailable && (
+          <p className="mt-1 pl-7 text-xs text-slate-400">No pickup address was collected (Self Drop-off).</p>
+        )}
+
+        <label
+          className={`mt-3 flex items-center gap-3 text-sm font-semibold ${
+            dropoffAddressAvailable ? "text-[#0b1e42]" : "cursor-not-allowed text-slate-300"
+          }`}
+        >
           <input
             type="checkbox"
             checked={billingMode === "destination"}
+            disabled={!dropoffAddressAvailable}
             onChange={(event) => setBillingMode(event.target.checked ? "destination" : "custom")}
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500 disabled:cursor-not-allowed"
           />
           Same as Destination Address
         </label>
+        {!dropoffAddressAvailable && (
+          <p className="mt-1 pl-7 text-xs text-slate-400">No destination address was collected (Self Pickup).</p>
+        )}
 
         {billingMode === "custom" && (
           <div className="mt-5">
+            {billingCustomRequired && (
+              <p className="mb-4 flex items-start gap-1.5 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                No pickup or drop-off address was collected for this booking — a billing address is required below.
+              </p>
+            )}
             <div className="grid gap-5 sm:grid-cols-2">
-              <TextField label="Full Name" name="billing_fullName" type="text" placeholder="e.g. Rahul Sharma" />
-              <TextField label="Phone Number" name="billing_phone" type="tel" placeholder="+91 98765 43210" />
+              <TextField
+                label="Full Name"
+                name="billing_fullName"
+                type="text"
+                placeholder="e.g. Rahul Sharma"
+                required={billingCustomRequired}
+              />
+              <TextField
+                label="Phone Number"
+                name="billing_phone"
+                type="tel"
+                placeholder="+91 98765 43210"
+                required={billingCustomRequired}
+              />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <TextField label="House / Plot / Flat No." name="billing_house" type="text" placeholder="B-24, 2nd Floor" />
-              <TextField label="Street / Area Name" name="billing_street" type="text" placeholder="Connaught Place" />
+              <TextField
+                label="House / Plot / Flat No."
+                name="billing_house"
+                type="text"
+                placeholder="B-24, 2nd Floor"
+                required={billingCustomRequired}
+              />
+              <TextField
+                label="Street / Area Name"
+                name="billing_street"
+                type="text"
+                placeholder="Connaught Place"
+                required={billingCustomRequired}
+              />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
               <TextField label="Landmark (Optional)" name="billing_landmark" type="text" placeholder="Near Metro Pillar 12" />
-              <TextField label="City" name="billing_city" type="text" placeholder="New Delhi" />
-              <TextField label="PIN Code" name="billing_pin" type="text" inputMode="numeric" placeholder="110001" />
+              <TextField
+                label="City"
+                name="billing_city"
+                type="text"
+                placeholder="New Delhi"
+                required={billingCustomRequired}
+              />
+              <TextField
+                label="PIN Code"
+                name="billing_pin"
+                type="text"
+                inputMode="numeric"
+                placeholder="110001"
+                required={billingCustomRequired}
+              />
             </div>
           </div>
         )}
@@ -887,6 +1000,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
 
       <MapPickerModal
         open={mapPickerTarget !== null}
+        autoLocate={mapPickerSource === "current"}
         onClose={() => setMapPickerTarget(null)}
         onConfirm={handleMapConfirm}
       />

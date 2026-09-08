@@ -2,9 +2,9 @@ import Image from "next/image";
 import { Building2, Globe, TrendingUp, Users } from "lucide-react";
 
 const STATS = [
-  { icon: Users, value: "150+", label: "Team Members" },
+  { icon: Users, value: "800+", label: "Team Members" },
   { icon: Globe, value: "12+", label: "Nationalities" },
-  { icon: Building2, value: "8", label: "Office" },
+  { icon: Building2, value: "35", label: "Branches" },
   { icon: TrendingUp, value: "92%", label: "Retention Rate" },
 ];
 

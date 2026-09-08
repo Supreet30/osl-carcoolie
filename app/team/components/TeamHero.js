@@ -22,7 +22,7 @@ export default function TeamHero() {
           its left edge into the page background — same technique as
           BlogHero, just white instead of navy since this hero is light. */}
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]">
-        <Image src="/team-hero.png" alt="" fill priority className="object-cover" />
+        <Image src="/finalimages/team/hero.JPG" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-white via-white/40 to-transparent" />
       </div>
 

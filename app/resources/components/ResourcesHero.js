@@ -46,7 +46,7 @@ export default function ResourcesHero() {
         <div className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0">
           <div className="relative aspect-[16/10] overflow-hidden rounded-[22px] shadow-xl">
             <Image
-              src="/contact-hero-truck.png"
+              src="/finalimages/resources/hero.JPG"
               alt="Red CarCoolie carrier truck driving down a highway at sunset"
               fill
               sizes="(max-width: 1023px) 100vw, 52vw"

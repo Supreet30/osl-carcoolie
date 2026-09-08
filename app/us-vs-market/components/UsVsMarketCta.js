@@ -19,8 +19,8 @@ export default function UsVsMarketCta() {
             See the Difference for Yourself.
           </h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
-            Join thousands of luxury collectors and dealerships who trust CarCoolie for their most
-            valuable assets.
+            Join thousands of customers and dealerships across India who trust CarCoolie with
+            their vehicles.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">

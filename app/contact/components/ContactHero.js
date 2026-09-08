@@ -40,7 +40,7 @@ export default function ContactHero() {
         <div className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0">
           <div className="relative aspect-[16/10] overflow-hidden rounded-[22px] shadow-xl">
             <Image
-              src="/contact-hero-truck.png"
+              src="/finalimages/contact/hero.JPG"
               alt="Red logistics truck travelling on a highway at sunset"
               fill
               preload
@@ -49,8 +49,8 @@ export default function ContactHero() {
             />
           </div>
           <div className="absolute -bottom-2 left-0 rounded-xl bg-[#0b1e42] px-5 py-4 text-white shadow-lg sm:-left-9">
-            <p className="text-2xl font-extrabold leading-none">99.9%</p>
-            <p className="mt-1 text-[9px] font-semibold tracking-[0.14em] text-slate-300">SAFE DELIVERIES</p>
+            <p className="text-2xl font-extrabold leading-none">&lt;0.01%</p>
+            <p className="mt-1 text-[9px] font-semibold tracking-[0.14em] text-slate-300">DAMAGE RATIO</p>
           </div>
         </div>
       </div>

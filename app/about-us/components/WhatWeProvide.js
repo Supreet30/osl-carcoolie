@@ -2,32 +2,40 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Lock, MapPin, Quote, ShieldCheck } from "lucide-react";
+import { Flag, Sparkles, TrendingUp, Truck } from "lucide-react";
 
-// Dummy placeholder milestones — swap in the real 4-step story and unique
-// photography once it's defined. Reusing the two existing truck photos
-// (servicehero.png, contact-hero-truck.png) across all 4 for now, same
-// approach used for the services showcase cards.
+// The real company timeline — each milestone gets its own icon (founding,
+// fleet growth, cumulative volume, new business line) instead of the same
+// static badge stack every card used to show regardless of which one was
+// active.
 const MILESTONES = [
   {
     number: "01",
-    image: "/servicehero.png",
-    quote: '"Moving more than just metal; we move dreams."',
+    year: "2004",
+    description: "50 Car Carriers, 1 OEM",
+    icon: Flag,
+    image: "/finalimages/company-numbers/years-exp.JPG",
   },
   {
     number: "02",
-    image: "/contact-hero-truck.png",
-    quote: '"Every delivery is a promise kept, on time, every time."',
+    year: "2014",
+    description: "500 Car Carriers, 10 Lac Cars Handled (Cumulative)",
+    icon: Truck,
+    image: "/finalimages/company-numbers/fleet.JPG",
   },
   {
     number: "03",
-    image: "/servicehero.png",
-    quote: '"From city roads to mountain passes, we go the distance."',
+    year: "2024",
+    description: "825 Car Carriers, 30 Lac Cars Handled (Cumulative)",
+    icon: TrendingUp,
+    image: "/finalimages/company-numbers/cars-delivery.png",
   },
   {
     number: "04",
-    image: "/contact-hero-truck.png",
-    quote: '"Trusted by thousands of families, driven by care."',
+    year: "2026",
+    description: "Launch of Retail Relocation Business",
+    icon: Sparkles,
+    image: "/finalimages/company-numbers/hero.JPG",
   },
 ];
 
@@ -39,8 +47,6 @@ const POSITIONS = [
   { left: "20%", top: "64%" },
   { left: "82%", top: "90%" },
 ];
-
-const BADGE_ICONS = [ShieldCheck, MapPin, Lock];
 
 export default function WhatWeProvide() {
   const [active, setActive] = useState(0);
@@ -67,7 +73,7 @@ export default function WhatWeProvide() {
               <Image
                 key={milestone.image + milestone.number}
                 src={milestone.image}
-                alt="CarCoolie carrier truck transporting vehicles"
+                alt={`CarCoolie in ${milestone.year}: ${milestone.description}`}
                 fill
                 sizes="(max-width: 1023px) 100vw, 40vw"
                 className="object-cover"
@@ -76,23 +82,12 @@ export default function WhatWeProvide() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
             </div>
 
-            <div className="absolute left-4 top-1/2 flex -translate-y-1/2 flex-col gap-3">
-              {BADGE_ICONS.map((Icon, i) => (
-                <span
-                  key={i}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm"
-                >
-                  <Icon className="h-4 w-4" strokeWidth={2} />
-                </span>
-              ))}
-            </div>
-
             <div className="absolute inset-x-4 bottom-4 flex items-center gap-3 rounded-2xl bg-black/45 p-3 backdrop-blur-sm">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-600 text-white">
-                <Quote className="h-4 w-4" strokeWidth={2.2} />
+                <milestone.icon className="h-4 w-4" strokeWidth={2.2} />
               </span>
-              <p key={milestone.quote} className="text-sm font-semibold leading-snug text-white">
-                {milestone.quote}
+              <p key={milestone.year} className="text-sm font-semibold leading-snug text-white">
+                <span className="font-extrabold text-red-400">{milestone.year}</span> — {milestone.description}
               </p>
             </div>
           </div>

@@ -4,7 +4,7 @@ const NODES = [
   {
     year: "2022",
     title: "First Steps",
-    desc: "Started operations in key cities with a focus on safe & reliable delivery.",
+    desc: "Started operations in key cities with a focus on safe, reliable vehicle delivery.",
     card: { left: "15%", top: "64%" },
     circle: { left: "15%", top: "70%" },
     dot: { left: "15%", top: "85%" },
@@ -12,7 +12,7 @@ const NODES = [
   {
     year: "2023",
     title: "Network Expansion",
-    desc: "Expanded to more cities and strengthened our logistics network.",
+    desc: "Expanded into more cities and strengthened the logistics network.",
     card: { left: "39%", top: "60%" },
     circle: { left: "39%", top: "66%" },
     dot: { left: "39%", top: "81%" },
@@ -20,7 +20,7 @@ const NODES = [
   {
     year: "2024",
     title: "Customer Growth",
-    desc: "Thousands of customers chose CarCoolie for stress-free and secure vehicle transport.",
+    desc: "Thousands of customers chose CarCoolie for stress-free, secure vehicle transport.",
     card: { left: "63%", top: "54%" },
     circle: { left: "63%", top: "60%" },
     dot: { left: "63%", top: "75%" },
@@ -28,7 +28,7 @@ const NODES = [
   {
     year: "2025",
     title: "Nationwide Reach",
-    desc: "Reaching 28+ states with 650+ service locations across India.",
+    desc: "Reached 27+ states with 650+ service locations across India.",
     card: { left: "88%", top: "46%" },
     circle: { left: "88%", top: "51%" },
     dot: { left: "88%", top: "66%" },
@@ -41,8 +41,8 @@ export default function GrowthChart() {
       <div className="mx-auto max-w-6xl">
         <p className="text-sm font-bold text-red-600">Growth Chart</p>
         <h2 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-          <span className="text-[#0b1e42]">Growth That Keeps </span>
-          <span className="text-red-600">Moving Forward</span>
+          <span className="text-[#0b1e42]">CarCoolie&apos;s Growth Story, </span>
+          <span className="text-red-600">Year by Year</span>
         </h2>
 
         {/* Staircase timeline — desktop only, positions are % coordinates

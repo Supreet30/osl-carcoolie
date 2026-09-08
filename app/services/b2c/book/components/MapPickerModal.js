@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, MapPin, Search, X } from "lucide-react";
+import { LocateFixed, Loader2, MapPin, Search, X } from "lucide-react";
 import {
   forwardGeocode,
   forwardGeocodeGoogle,
+  getCurrentPosition,
   reverseGeocode,
   reverseGeocodeGoogle,
   searchSuggestions,
@@ -38,7 +39,7 @@ const PickerMap = GOOGLE_MAPS_KEY
 
 const INDIA_CENTER = [22.9734, 78.6569];
 
-export default function MapPickerModal({ open, onClose, onConfirm }) {
+export default function MapPickerModal({ open, onClose, onConfirm, autoLocate = false }) {
   const [marker, setMarker] = useState(null);
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,8 @@ export default function MapPickerModal({ open, onClose, onConfirm }) {
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestLoading, setSuggestLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState("");
 
   const searchBoxRef = useRef(null);
   const debounceRef = useRef(null);
@@ -71,6 +74,20 @@ export default function MapPickerModal({ open, onClose, onConfirm }) {
     };
   }, [suggestionsOpen]);
 
+  // BookingForm.js's "Current Location" button (outside the map) now just
+  // opens this modal with autoLocate set, instead of doing its own
+  // separate geolocation lookup — fires handleUseCurrentLocation below the
+  // moment the modal actually opens for that reason. Re-fires on a repeat
+  // open (rather than only once ever) since `open` itself flips back to
+  // true each time, but not on every render while it's already open and
+  // the lookup's own state updates are still landing.
+  useEffect(() => {
+    if (open && autoLocate) {
+      handleUseCurrentLocation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoLocate]);
+
   if (!open) return null;
 
   async function handlePick(lat, lng) {
@@ -84,6 +101,30 @@ export default function MapPickerModal({ open, onClose, onConfirm }) {
       setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // The real Geolocation API — fired either by the "Use current location"
+  // button below, or automatically on open via `autoLocate` (see the
+  // effect above). Jumps the map straight to it and drops the pin there,
+  // reusing handlePick so it reverse-geocodes exactly like a manual click
+  // or search result would (Google's geocoding when a key's configured,
+  // same as everything else in this modal — not a separate, less accurate
+  // lookup).
+  async function handleUseCurrentLocation() {
+    setLocateError("");
+    setLocating(true);
+    try {
+      const { lat, lng } = await getCurrentPosition();
+      await handlePick(lat, lng);
+    } catch (err) {
+      setLocateError(
+        err?.code === 1
+          ? "Location permission denied — allow access or search/click instead."
+          : "Couldn't get your current location."
+      );
+    } finally {
+      setLocating(false);
     }
   }
 
@@ -264,6 +305,31 @@ export default function MapPickerModal({ open, onClose, onConfirm }) {
             )}
           </div>
           <PickerMap center={marker ?? INDIA_CENTER} marker={marker} onPick={handlePick} />
+
+          {/* Bottom-right — Google's own pan/rotate widget that used to
+              sit here is turned off (see GoogleMap.js), so this takes its
+              exact spot instead of sitting next to it. */}
+          <div className="absolute right-3 bottom-3 z-10">
+            <button
+              type="button"
+              onClick={handleUseCurrentLocation}
+              disabled={locating}
+              title="Use current location"
+              aria-label="Use current location"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-500 shadow-lg ring-1 ring-slate-900/5 transition-colors hover:text-red-600 disabled:cursor-wait"
+            >
+              {locating ? (
+                <Loader2 className="h-5 w-5 animate-spin text-red-600" />
+              ) : (
+                <LocateFixed className="h-5 w-5" strokeWidth={2} />
+              )}
+            </button>
+            {locateError && (
+              <p className="mt-2 w-48 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-red-600 shadow-lg ring-1 ring-slate-900/5">
+                {locateError}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-6 py-5">

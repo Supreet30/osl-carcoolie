@@ -17,7 +17,7 @@ export default function UsVsMarketHero() {
           its left edge into the page background — same technique/image as
           TeamHero, since this hero is light too. */}
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]">
-        <Image src="/team-hero.png" alt="" fill priority className="object-cover" />
+        <Image src="/finalimages/us-vs-market/hero.JPG" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-white via-white/40 to-transparent" />
       </div>
 
@@ -31,8 +31,8 @@ export default function UsVsMarketHero() {
             <span className="block text-red-600">Move Your Car.</span>
           </h1>
           <p className="mt-6 max-w-lg text-lg leading-relaxed text-slate-600">
-            From pickup to delivery, CarCoolie combines professional handling, transparent
-            pricing and nationwide reach to make car transportation simple, safe and reliable.
+            Most car carriers treat every shipment the same. CarCoolie tailors transport to your
+            vehicle, with live tracking from pickup to delivery.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link

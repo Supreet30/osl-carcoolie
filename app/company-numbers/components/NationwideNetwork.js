@@ -2,13 +2,13 @@ import Image from "next/image";
 import { Link2, MapPin, ThumbsUp } from "lucide-react";
 
 const FEATURES = [
-  { icon: Link2, title: "Strong Network", subtitle: "Across 28+ States" },
+  { icon: Link2, title: "Strong Network", subtitle: "Across 27+ States" },
   { icon: MapPin, title: "650+ Service Locations", subtitle: "And Counting" },
   { icon: ThumbsUp, title: "Thousands of Happy", subtitle: "Journeys Every Month" },
 ];
 
 const STATS = [
-  { value: "28", suffix: "+", label: "States Reached" },
+  { value: "27", suffix: "+", label: "States Reached" },
   { value: "650", suffix: "+", label: "Service Locations" },
   { value: "75K", suffix: "+", label: "Happy Customers" },
 ];
@@ -20,11 +20,12 @@ export default function NationwideNetwork() {
         {/* Left — heading, copy, feature list */}
         <div>
           <h2 className="max-w-xs text-5xl font-extrabold leading-tight tracking-tight text-[#0b1e42]">
-            From One Journey to a <span className="text-red-600">Nationwide</span> Network
+            A Growing Car Transport <span className="text-red-600">Network</span> Across India
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-slate-500">
-            Our growth is not just about numbers — it&apos;s about the growing network, customers
-            and journeys behind them.
+            CarCoolie&apos;s growth is not just about the numbers. It&apos;s the network, the
+            customers, and the journeys behind them, spanning 27+ states and 650+ service
+            locations, with thousands of vehicles moved every month.
           </p>
           <div className="mt-4 h-1 w-10 rounded-full bg-red-600" />
 

@@ -28,12 +28,19 @@ function sameDay(a, b) {
 // A small themed calendar popover — replaces the browser's native
 // <input type="date"> (which can't be restyled and looks inconsistent
 // across OS/browsers) with something that matches the rest of the site.
-export default function DatePicker({ name, value, onChange, min, placeholder = "Select date" }) {
+export default function DatePicker({ name, value, onChange, min, placeholder = "Select date", disabled = false }) {
   const [open, setOpen] = useState(false);
   const selected = parseISO(value);
   const minDate = parseISO(min);
   const [viewMonth, setViewMonth] = useState(selected ?? minDate ?? new Date());
   const containerRef = useRef(null);
+
+  // If this picker gets disabled (e.g. the drop-off date while no pickup
+  // date is set yet) while its popover happens to be open, close it —
+  // there's nothing left that should still be clickable in it.
+  if (disabled && open) {
+    setOpen(false);
+  }
 
   // `min` can change after mount (the drop-off picker's bound moves
   // forward once a pickup date — and its route's minimum transit days —
@@ -94,7 +101,8 @@ export default function DatePicker({ name, value, onChange, min, placeholder = "
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`w-full rounded-xl bg-slate-50 py-3 pr-4 pl-11 text-left text-sm outline-none focus:ring-2 focus:ring-red-500 ${
+        disabled={disabled}
+        className={`w-full rounded-xl bg-slate-50 py-3 pr-4 pl-11 text-left text-sm outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-60 ${
           selected ? "font-medium text-[#0b1e42]" : "text-slate-400"
         }`}
       >

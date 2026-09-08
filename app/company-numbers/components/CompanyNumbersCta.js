@@ -10,7 +10,7 @@ export default function CompanyNumbersCta() {
       {/* Full-bleed, edge-to-edge — unlike the rounded CTA cards elsewhere,
           this section's background spans the whole viewport width. */}
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 w-full opacity-40 sm:w-[65%]">
-        <Image src="/team-hero.png" alt="" fill className="object-cover" />
+        <Image src="/finalimages/company-numbers/hero.JPG" alt="" fill className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-[#0b1220] via-[#0b1220]/85 to-[#0b1220]/40" />
       </div>
       <div aria-hidden className="absolute inset-0 -z-10 bg-linear-to-t from-red-900/20 via-transparent to-transparent" />
@@ -21,7 +21,7 @@ export default function CompanyNumbersCta() {
           Your Car Deserves More Than Just a Ride.
         </h2>
         <p className="mt-6 max-w-md text-lg leading-relaxed text-slate-300">
-          Experience safe, reliable and transparent car transportation backed by a growing
+          Experience safe, reliable, and transparent car transportation backed by a growing
           nationwide network.
         </p>
 

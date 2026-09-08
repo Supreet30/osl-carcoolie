@@ -9,9 +9,6 @@ import { CheckCircle2 } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Images reuse the existing testi*.jpg assets as placeholders (testi1
-// repeats for point 4) — swap each for the real per-point photo once
-// available.
 const POINTS = [
   {
     id: "transparency",
@@ -30,7 +27,7 @@ const POINTS = [
       { value: "100%", label: "WRITTEN QUOTATIONS" },
       { value: "ZERO", label: "HIDDEN CHARGES" },
     ],
-    image: "/testi1.jpg",
+    image: "/finalimages/homepage/aboutus1.JPG",
   },
   {
     id: "handling",
@@ -49,7 +46,7 @@ const POINTS = [
       { value: "100%", label: "PRE-PICKUP INSPECTIONS" },
       { value: "100%", label: "PHOTO-DOCUMENTED PICKUPS" },
     ],
-    image: "/testi2.jpg",
+    image: "/finalimages/homepage/aboutus2.JPG",
   },
   {
     id: "journey",
@@ -67,7 +64,7 @@ const POINTS = [
       { value: "24/7", label: "CUSTOMER SUPPORT" },
       { value: "100%", label: "DOOR TO DOOR DELIVERY" },
     ],
-    image: "/testi3.jpg",
+    image: "/finalimages/homepage/aboutus3.JPG",
   },
   {
     id: "reliability",
@@ -81,10 +78,10 @@ const POINTS = [
       "Complete confidence from pickup to delivery, ensuring peace of mind",
     ],
     stats: [
-      { value: "99.9%", label: "ON-TIME DELIVERY RATE" },
+      { value: ">99.89%", label: "ON-TIME DELIVERY RATE" },
       { value: "100%", label: "CUSTOMER CONFIDENCE" },
     ],
-    image: "/testi1.jpg",
+    image: "/finalimages/homepage/aboutus4.JPG",
   },
 ];
 

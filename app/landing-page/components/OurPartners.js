@@ -28,7 +28,7 @@ export default function OurPartners() {
   return (
     <section className="bg-white py-16 md:py-20">
       <div className="mx-auto max-w-7xl px-6">
-        <p className="text-md font-semibold text-red-600">Our Partners</p>
+        <p className="text-md font-semibold text-red-600">Our Esteemed Clientale</p>
         <h2 className="mt-3 text-6xl font-extrabold tracking-tight text-[#0b1e42]">
           Trusted By <span className="text-red-600">Leading Businesses</span> Across India
         </h2>

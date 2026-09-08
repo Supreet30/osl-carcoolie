@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
 // setOptions() only takes effect before the first importLibrary() call —
@@ -16,6 +16,14 @@ export default function GoogleMap({ center, marker, onPick }) {
   const markerRef = useRef(null);
   const markerCtorRef = useRef(null);
   const onPickRef = useRef(onPick);
+  // Flips once the async Maps script has actually loaded and `mapRef` is
+  // set — the marker-sync effect below depends on it (not just `marker`)
+  // so a marker set while the script is still loading (e.g. "Use current
+  // location" clicked right after the modal opens, before the map has
+  // finished initializing) still gets placed and panned to once it's
+  // ready, instead of that effect silently no-op'ing on a null mapRef and
+  // never getting another chance to run.
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -38,11 +46,20 @@ export default function GoogleMap({ center, marker, onPick }) {
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
+        // The "arrows" pan/rotate widget Google draws bottom-right by
+        // default — removed so MapPickerModal's own "Use current
+        // location" button can sit in that exact spot instead of next to
+        // it. Zoom itself still works fine via scroll/pinch, this only
+        // drops the on-screen +/- (or camera-control) widget.
+        zoomControl: false,
+        rotateControl: false,
+        cameraControl: false,
         clickableIcons: false,
       });
       mapRef.current.addListener("click", (event) => {
         onPickRef.current(event.latLng.lat(), event.latLng.lng());
       });
+      setMapReady(true);
     });
     return () => {
       cancelled = true;
@@ -57,7 +74,7 @@ export default function GoogleMap({ center, marker, onPick }) {
   // programmatically (e.g. "Use current location", or a search result),
   // not just from clicks.
   useEffect(() => {
-    if (!mapRef.current || !markerCtorRef.current) return;
+    if (!mapReady || !mapRef.current || !markerCtorRef.current) return;
     if (!marker) {
       markerRef.current?.setMap(null);
       markerRef.current = null;
@@ -70,7 +87,7 @@ export default function GoogleMap({ center, marker, onPick }) {
       markerRef.current = new markerCtorRef.current({ position, map: mapRef.current });
     }
     mapRef.current.panTo(position);
-  }, [marker]);
+  }, [marker, mapReady]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

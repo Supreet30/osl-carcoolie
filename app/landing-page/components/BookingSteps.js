@@ -9,43 +9,58 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 gsap.registerPlugin(ScrollTrigger);
 
 // Dummy placeholder copy for steps 2-5 — swap for real booking-flow copy
-// once available. Step 1 matches the reference mock verbatim. Images are
-// the real per-step assets from public/steps/.
+// once available. Step 1 matches the reference mock verbatim.
+//
+// `images` is an array, not a single path — chosen per step by what's
+// actually depicted (not just numeric order): every finalimages/homepage
+// steps* photo is used somewhere, including two (steps.JPG, steps6.JPG)
+// that numeric-only matching would have left out. A step with two related
+// shots (e.g. the inspection clipboard *and* the truck-loading ramp, both
+// genuinely "Pickup Order") shows both side by side rather than forcing a
+// single photo to cover everything the description promises.
 const STEPS = [
   {
     number: "01",
     title: "Order Placement",
     description:
       "Digital booking with customized transport planning based on vehicle specifications.",
-    image: "/steps/1.png",
+    // Wide fleet-yard shot (the scale of the operation behind a booking)
+    // paired with the key handover that kicks a booking off.
+    images: ["/finalimages/homepage/steps5.JPG", "/finalimages/homepage/steps3.png"],
   },
   {
     number: "02",
     title: "Team Preview",
     description:
       "Review your assigned driver and carrier team details before confirming the booking.",
-    image: "/steps/2.png",
+    // Meeting the assigned driver face to face.
+    images: ["/finalimages/homepage/steps4.png"],
   },
   {
     number: "03",
     title: "Confirm Payment",
     description:
       "Secure, transparent payment confirmation with an instant digital booking receipt.",
-    image: "/steps/3.png",
+    // Reviewing the signed CarCoolie paperwork — the closest visual match
+    // to a booking receipt among these photos.
+    images: ["/finalimages/homepage/steps6.JPG"],
   },
   {
     number: "04",
     title: "Pickup Order",
     description:
       "Scheduled pickup at your location, with photo documentation before departure.",
-    image: "/steps/4.png",
+    // The pre-pickup inspection (the "photo documentation" itself) next to
+    // the vehicle actually being loaded for departure.
+    images: ["/finalimages/homepage/steps1.JPG", "/finalimages/homepage/steps.JPG"],
   },
   {
     number: "05",
     title: "Tracking & Reviews",
     description:
       "Track your shipment in real time and share your experience once it's delivered.",
-    image: "/steps/5.png",
+    // A real-time tracking dashboard, open on a laptop mid-shipment.
+    images: ["/finalimages/homepage/steps2.JPG"],
   },
 ];
 
@@ -169,15 +184,20 @@ export default function BookingSteps() {
             </div>
           </div>
 
-          {/* Current step's photo */}
-          <div className="relative h-72 w-full overflow-hidden rounded-2xl bg-white ring-1 ring-slate-100 sm:h-96 md:h-104">
-            <Image
-              src={step.image}
-              alt={`${step.title} illustration`}
-              fill
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              className="object-cover"
-            />
+          {/* Current step's photo(s) — two side by side when a single shot
+              doesn't cover everything the step describes (see STEPS above). */}
+          <div className={`grid h-72 gap-2 sm:h-96 md:h-104 ${step.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            {step.images.map((src, i) => (
+              <div key={src} className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-100">
+                <Image
+                  src={src}
+                  alt={`${step.title} illustration${step.images.length > 1 ? ` ${i + 1}` : ""}`}
+                  fill
+                  sizes={step.images.length > 1 ? "(min-width: 1024px) 25vw, 50vw" : "(min-width: 1024px) 50vw, 100vw"}
+                  className="object-cover"
+                />
+              </div>
+            ))}
           </div>
         </div>
       </div>

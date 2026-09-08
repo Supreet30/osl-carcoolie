@@ -14,7 +14,7 @@ const FEATURES = [
   },
   {
     icon: Clock,
-    title: "99.2% On-Time Delivery",
+    title: ">99.89% On-Time Delivery",
     description: "Industry-leading reliability, verified monthly.",
   },
   {

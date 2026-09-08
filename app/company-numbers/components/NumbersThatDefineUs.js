@@ -2,15 +2,15 @@ import Image from "next/image";
 import { Share2 } from "lucide-react";
 
 const TOP_STATS = [
-  { value: "28+", label: "States Reached", subtitle: "Coast to coast coverage", progress: "60%", image: "/usvs1.jpg" },
-  { value: "650+", label: "Service Locations", subtitle: "City & highway hubs", progress: "78%", image: "/usvscta.jpg" },
+  { value: "27+", label: "States Reached", subtitle: "Coast to coast coverage", progress: "60%", image: "/finalimages/company-numbers/service-locs.JPG" },
+  { value: "650+", label: "Service Locations", subtitle: "City & highway hubs", progress: "78%", image: "/finalimages/company-numbers/service-locs.JPG" },
 ];
 
 const BOTTOM_STATS = [
-  { value: "100+", label: "Cities Covered", subtitle: "Coast to coast coverage", progress: "55%", image: "/usvs1.jpg" },
-  { value: "11+", label: "Years Experience", subtitle: "Coast to coast coverage", progress: "70%", image: "/usvscta.jpg" },
-  { value: "28K+", label: "Cars Delivery", subtitle: "Coast to coast coverage", progress: "85%", image: "/usvs1.jpg" },
-  { value: "98.6%", label: "On time Delivery", subtitle: "Coast to coast coverage", progress: "95%", image: "/usvscta.jpg" },
+  { value: "100+", label: "Cities Covered", subtitle: "Coast to coast coverage", progress: "55%", image: "/finalimages/company-numbers/cities-covered.JPG" },
+  { value: "22+", label: "Years Experience", subtitle: "Coast to coast coverage", progress: "70%", image: "/finalimages/company-numbers/years-exp.JPG" },
+  { value: "50K+", label: "Cars Delivery", subtitle: "Coast to coast coverage", progress: "85%", image: "/finalimages/company-numbers/cars-delivery.png" },
+  { value: ">99.89%", label: "On time Delivery", subtitle: "Coast to coast coverage", progress: "99%", image: "/finalimages/company-numbers/on-time-delivery.png" },
 ];
 
 function StatCard({ value, label, subtitle, progress, image }) {
@@ -63,7 +63,7 @@ export default function NumbersThatDefineUs() {
         <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr]">
           {/* Happy Customers — large image card */}
           <div className="relative min-h-100 overflow-hidden rounded-3xl">
-            <Image src="/usvs1.jpg" alt="" fill className="object-cover" />
+            <Image src="/finalimages/company-numbers/happy-cust.JPG" alt="" fill className="object-cover" />
             <div className="absolute inset-0 bg-linear-to-t from-[#0b1220]/95 via-[#0b1220]/70 to-[#0b1220]/20" />
             <div className="absolute inset-0 flex flex-col justify-between p-6">
               <p className="text-xs font-bold tracking-wide text-red-400 uppercase">
@@ -94,7 +94,7 @@ export default function NumbersThatDefineUs() {
 
             {/* Fleet & Transport Partners — wide image card */}
             <div className="relative min-h-40 flex-1 overflow-hidden rounded-3xl">
-              <Image src="/usvscta.jpg" alt="" fill className="object-cover" />
+              <Image src="/finalimages/company-numbers/fleet.JPG" alt="" fill className="object-cover" />
               <div className="absolute inset-0 bg-[#0b1220]/70" />
               <div className="absolute inset-0 flex flex-col justify-center p-6">
                 <p className="text-4xl font-extrabold text-white">150+</p>

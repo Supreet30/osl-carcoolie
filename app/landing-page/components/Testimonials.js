@@ -91,7 +91,7 @@ export default function Testimonials() {
             Testi<span className="text-red-600">monials</span>
           </h2>
           <p className="mt-3 text-3xl font-bold text-[#0b1e42]">
-            Trusted <span className="text-red-600">by the Best</span>
+            Trusted by <span className="text-red-600">Dealers, Manufacturers And Vehicle Owners</span>
           </p>
         </div>
 

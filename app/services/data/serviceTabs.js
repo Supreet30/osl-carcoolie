@@ -13,7 +13,7 @@ export const TABS = [
     services: [
       {
         title: "Door To Door (Half Truck Load)",
-        image: "/contact-hero-truck.png",
+        image: "/finalimages/services/b2c1.png",
         description:
           "Half truck load carriers with pickup and delivery handled right at your doorstep.",
         tagline: ["Door To Door ", "Vehicle Transport"],
@@ -29,7 +29,7 @@ export const TABS = [
       },
       {
         title: "Multiple Cars (Full Truck Load)",
-        image: "/servicehero.png",
+        image: "/finalimages/services/b2c2.JPG",
         description:
           "Dedicated full truck load carriers for moving multiple vehicles together, with faster delivery nationwide.",
         tagline: ["Dedicated Carrier, ", "Maximum Protection"],
@@ -45,7 +45,7 @@ export const TABS = [
       },
       {
         title: "Express Delivery",
-        image: "/contact-hero-truck.png",
+        image: "/finalimages/services/b2c3.jpeg",
         description:
           "Priority vehicle transport on the fastest available route, for when timing matters most.",
         tagline: ["Priority Transit, ", "Fastest Routes"],
@@ -116,7 +116,7 @@ export const TABS = [
       },
       {
         title: "Warehouse",
-        image: "/servicehero.png",
+        image: "/finalimages/services/b2b3.JPG",
         description:
           "End to end warehouse management for dealer and manufacturer vehicle stock.",
         tagline: ["End To End ", "Warehouse Management"],
@@ -132,7 +132,7 @@ export const TABS = [
       },
       {
         title: "Stockyard",
-        image: "/contact-hero-truck.png",
+        image: "/finalimages/services/b2b4.JPG",
         description:
           "Secure, monitored stockyard storage for vehicles in transit or awaiting dispatch.",
         tagline: ["Secure ", "Stockyard Storage"],

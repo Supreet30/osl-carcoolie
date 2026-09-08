@@ -21,11 +21,11 @@ export default function WhatSetsApart() {
               Nationwide Reach, <span className="text-red-600">Local Precision</span>
             </h3>
             <p className="mt-2 max-w-xl text-md leading-relaxed text-slate-500 transition-colors duration-300 group-hover:text-slate-300">
-              From the busy streets of Manhattan to the quiet corners of Montana, our network is
-              optimized for safety and speed.
+              From metro cities to smaller towns, our network is built for both safety and speed,
+              covering 100+ cities and 650+ service locations across India.
             </p>
             <div className="relative mt-4 h-48 w-full overflow-hidden rounded-2xl">
-              <Image src="/usvs1.jpg" alt="" fill className="object-cover" />
+              <Image src="/finalimages/us-vs-market/builtdiff1.JPG" alt="" fill className="object-cover" />
             </div>
           </div>
 
@@ -38,11 +38,11 @@ export default function WhatSetsApart() {
               Safe &amp; <span className="text-red-600">Professional</span>
             </h3>
             <p className="mt-2 text-md leading-relaxed text-slate-500 transition-colors duration-300 group-hover:text-slate-300">
-              Our handlers are certified experts trained in the transport of exotic, luxury, and
-              vintage vehicles.
+              Our handlers are trained professionals experienced in transporting everything from
+              everyday vehicles to premium and vintage cars.
             </p>
             <div className="relative mt-4 h-40 w-full overflow-hidden rounded-2xl">
-              <Image src="/usvs2.jpg" alt="" fill className="object-cover" />
+              <Image src="/finalimages/us-vs-market/builtdiff2.JPG" alt="" fill className="object-cover" />
             </div>
           </div>
         </div>
@@ -57,22 +57,22 @@ export default function WhatSetsApart() {
               Transparent <span className="text-red-600">&amp; Connected</span>
             </h3>
             <p className="mt-2 max-w-md text-md leading-relaxed text-slate-500 transition-colors duration-300 group-hover:text-slate-300">
-              No more guessing games. Our real-time tracking dashboard provides live GPS updates,
-              direct driver messaging, and photo documentation at every milestone.
+              No more guessing. Our real-time tracking dashboard gives you live GPS updates,
+              direct support access, and photo documentation at every milestone.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-600 transition-colors duration-300 group-hover:bg-white/10 group-hover:text-red-400">
                 <MapPin className="h-6 w-6" />
-                Real-Time GPS
+                Real-time GPS Tracking
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-600 transition-colors duration-300 group-hover:bg-white/10 group-hover:text-red-400">
                 <Camera className="h-6 w-6" />
-                Live Photo Logs
+                Live Photo Documentation
               </span>
             </div>
           </div>
           <div className="relative h-48 w-full shrink-0 overflow-hidden rounded-2xl sm:h-56 sm:w-md">
-            <Image src="/usvs3.jpg" alt="" fill className="object-cover" />
+            <Image src="/finalimages/us-vs-market/builtdiff3.JPG" alt="" fill className="object-cover" />
           </div>
         </div>
       </div>

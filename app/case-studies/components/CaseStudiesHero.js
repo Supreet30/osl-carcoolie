@@ -3,10 +3,10 @@ import { MapPin, ShieldCheck, Truck, Users } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
 
 const STATS = [
-  { icon: Truck, value: "75K+", label: "Vehicles Delivered" },
-  { icon: MapPin, value: "28+", label: "States Covered" },
+  { icon: Truck, value: "50K+", label: "Vehicles Delivered" },
+  { icon: MapPin, value: "27+", label: "States Covered" },
   { icon: Users, value: "75K+", label: "Happy Customers" },
-  { icon: ShieldCheck, value: "98%", label: "On-Time Delivery" },
+  { icon: ShieldCheck, value: ">99.89%", label: "On-Time Delivery" },
 ];
 
 export default function CaseStudiesHero() {

@@ -47,7 +47,7 @@ export default function ServicesHero() {
         <div className="relative mx-auto w-full max-w-2xl">
           <div className="relative aspect-[1494/1052] overflow-hidden rounded-[22px] shadow-xl">
             <Image
-              src="/servicehero.png"
+              src="/finalimages/services/hero.JPG"
               alt="CarCoolie car-carrier truck transporting vehicles across India"
               fill
               priority
