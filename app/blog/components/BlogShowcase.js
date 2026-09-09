@@ -31,7 +31,7 @@ const HIGHLIGHTS = [
     tag: "Guides",
     title: "Expert Guides",
     description:
-      "Step-by-step advice on preparing your vehicle, choosing between open and enclosed carriers, and knowing exactly what to expect at every stage of transit.",
+      "Step-by-step advice on preparing your vehicle, choosing between standard and premium enclosed carriers, and knowing exactly what to expect at every stage of transit.",
     image: "/servicehero.png",
   },
   {

@@ -43,7 +43,7 @@ export const FEATURED_STUDIES = [
     solutionHeadline: "Closed-Container Fleet. Tracked Every Mile.",
     resultsHeadline: "Damage Down. Coverage Up.",
     challenge:
-      "A premium car manufacturer needed to reach 15 new Tier-2 cities without compromising on the finish their brand is known for — and open transport alone wasn't going to protect that reputation over long highway stretches.",
+      "A premium car manufacturer needed to reach 15 new Tier-2 cities without compromising on the finish their brand is known for — and standard covered transport alone wasn't going to protect that reputation over long highway stretches.",
     solution:
       "CarCoolie rolled out a dedicated closed-container fleet for the brand's Tier-2 expansion, paired with condition-report photography at every handover and a single point of contact tracking each shipment end to end.",
     results:

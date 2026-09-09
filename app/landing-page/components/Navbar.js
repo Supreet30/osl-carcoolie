@@ -26,7 +26,6 @@ const SERVICES_GROUPS = [
     heading: "For Business to Customers",
     links: [
       { label: "Enclosed Car Carrier", href: "/services" },
-      { label: "Open Car Carrier", href: "/services" },
       { label: "Full Truck Car Carrier", href: "/services" },
       { label: "Half Truck Car Carrier", href: "/services" },
     ],

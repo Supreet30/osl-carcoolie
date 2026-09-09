@@ -107,7 +107,7 @@ export const BLOG_POSTS = [
     title: "Common Myths About Car Transport – Busted!",
     highlight: "Busted!",
     excerpt:
-      "\"It's too expensive\", \"my car will get damaged\", \"open carriers aren't safe\" — we put the most common car transport myths to the test.",
+      "\"It's too expensive\", \"my car will get damaged\", \"live tracking is just a sales pitch\" — we put the most common car transport myths to the test.",
     image: "/servicehero.png",
     author: "Shaily Rana",
     date: "May 12, 2025",
@@ -123,10 +123,10 @@ export const BLOG_POSTS = [
         ],
       },
       {
-        heading: "Myth: open carriers aren't safe enough",
+        heading: "Myth: live tracking is just a nice-to-have",
         paragraphs: [
-          "Open carriers are how the vast majority of new cars reach dealerships worldwide — they're secured with wheel straps at multiple points and built for exactly this job.",
-          "Enclosed carriers exist for extra weather and dust protection on top of that, not because open transport is inherently unsafe.",
+          "It isn't optional on our end. Every carrier we run is fitted with an AIS-140 certified GPS tracking device, the standard the Ministry of Road Transport and Highways mandates for commercial vehicles on national routes.",
+          "What that means for you is simple: live location, transit updates, and an accurate delivery window aren't an add-on, they come standard with every shipment.",
         ],
       },
     ],
@@ -136,10 +136,10 @@ export const BLOG_POSTS = [
     category: "Industry Insights",
     tag: "Industry",
     pill: "Industry Insights",
-    title: "Open vs Enclosed Transport: Which One Should You Choose?",
+    title: "Standard vs Premium Enclosed Transport: Which One Should You Choose?",
     highlight: "Which One Should You Choose?",
     excerpt:
-      "Both get your car there safely — the right choice comes down to budget, vehicle value, and how much weather protection you actually need.",
+      "Every Car Coolie shipment travels on a fully covered carrier as standard — the real choice is whether your vehicle needs our premium, climate-controlled tier on top of that.",
     image: "/contact-hero-truck.png",
     author: "Shruti Singh",
     date: "May 10, 2025",
@@ -148,16 +148,16 @@ export const BLOG_POSTS = [
       "The right carrier isn't the fancier one — it's the one that matches what your car actually needs.",
     sections: [
       {
-        heading: "Open carriers: the default for a reason",
+        heading: "Standard enclosed: the right call for most moves",
         paragraphs: [
-          "Open transport is faster to book, more widely available, and noticeably cheaper — it's the right call for daily drivers, dealer stock transfers, and most household car moves.",
-          "The vehicle is fully secured and insured in transit; it's simply exposed to the weather, the same way it would be on any open road.",
+          "In India, vehicles move on covered, wheel-strapped carriers as standard, not as an upgrade — that's the baseline every Car Coolie shipment gets. It's faster to book and the right call for daily drivers, dealer stock transfers, and most household car moves.",
+          "The vehicle is fully secured and insured in transit, shielded from dust, road debris, and weather the entire way.",
         ],
       },
       {
-        heading: "Enclosed carriers: for when the car needs it",
+        heading: "Premium enclosed: for when the car needs more",
         paragraphs: [
-          "Enclosed transport shields the vehicle from dust, road debris, and weather entirely — the standard choice for luxury, vintage, and high-value performance cars.",
+          "Our premium, climate-controlled enclosed carriers add sealed, temperature-managed transport and private handling on top of the standard cover every shipment already gets — built for luxury, vintage, and high-value performance cars.",
           "It costs more and takes a little longer to schedule, but for a vehicle where even a hairline paint chip matters, that trade-off is usually worth it.",
         ],
       },

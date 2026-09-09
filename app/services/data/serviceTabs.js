@@ -12,7 +12,7 @@ export const TABS = [
     icon: Users,
     services: [
       {
-        title: "Door To Door (Half Truck Load)",
+        title: "Door To Door Mobility",
         image: "/finalimages/services/b2c1.png",
         description:
           "Half truck load carriers with pickup and delivery handled right at your doorstep.",
@@ -22,24 +22,8 @@ export const TABS = [
         highlights: [
           "Professional Loading",
           "Wheel Lock Safety",
-          "Covered Trucks Available",
+          "Covered Carrier Standard",
           "Daily Tracking Updates",
-          "Insurance Support",
-        ],
-      },
-      {
-        title: "Multiple Cars (Full Truck Load)",
-        image: "/finalimages/services/b2c2.JPG",
-        description:
-          "Dedicated full truck load carriers for moving multiple vehicles together, with faster delivery nationwide.",
-        tagline: ["Dedicated Carrier, ", "Maximum Protection"],
-        details:
-          "When you're moving several vehicles at once, a dedicated full truck load carrier keeps everything together and on schedule. There are no shared stops or extra transfers along the way, just a direct run from pickup to your destination with faster delivery across India.",
-        highlights: [
-          "Dedicated Full Truck",
-          "Multiple Vehicles Together",
-          "No Shared Stops",
-          "Faster Pan India Delivery",
           "Insurance Support",
         ],
       },
@@ -60,13 +44,29 @@ export const TABS = [
         ],
       },
       {
+        title: "Multiple Cars",
+        image: "/finalimages/services/b2c2.JPG",
+        description:
+          "Dedicated full truck load carriers for moving multiple vehicles together, with faster delivery nationwide.",
+        tagline: ["Dedicated Carrier, ", "Maximum Protection"],
+        details:
+          "When you're moving several vehicles at once, a dedicated full truck load carrier keeps everything together and on schedule. There are no shared stops or extra transfers along the way, just a direct run from pickup to your destination with faster delivery across India.",
+        highlights: [
+          "Dedicated Full Truck",
+          "Multiple Vehicles Together",
+          "No Shared Stops",
+          "Faster Pan India Delivery",
+          "Insurance Support",
+        ],
+      },
+      {
         title: "Luxury Car Transport",
         image: "/servicehero.png",
         description:
           "Climate safe, fully enclosed carriers built for luxury, exotic and vintage vehicles.",
         tagline: ["Fully Enclosed, ", "Damage Free Transport"],
         details:
-          "Luxury, exotic and vintage vehicles deserve more than an open trailer. Our fully enclosed, climate safe carriers keep your car shielded from weather, dust and prying eyes, with private handling all the way from your door to theirs.",
+          "Luxury, exotic and vintage vehicles deserve more than a standard covered carrier. Our fully enclosed, climate safe carriers keep your car shielded from weather, dust and prying eyes, with private handling all the way from your door to theirs.",
         highlights: [
           "Fully Enclosed Carriers",
           "Climate Safe Transit",
@@ -83,18 +83,18 @@ export const TABS = [
     icon: Building2,
     services: [
       {
-        title: "New Car Transportation From Warehouses",
+        title: "OEM to Dealer PAN India",
         image: "/servicehero.png",
         description:
-          "Scheduled dispatch of new vehicles from warehouses to showrooms, moved safely and on time.",
-        tagline: ["Scheduled ", "Warehouse Dispatch"],
+          "Scheduled dispatch of new vehicles from OEM plants to dealer showrooms, moved safely and on time, PAN India.",
+        tagline: ["Scheduled ", "OEM To Dealer Dispatch"],
         details:
-          "New vehicles need to reach showrooms on schedule, every time. We run structured, recurring dispatch from manufacturer and dealer warehouses straight to showroom floors nationwide, so your inventory is never the reason a sale gets delayed.",
+          "New vehicles need to reach dealership showrooms on schedule, every time. We run structured, recurring dispatch straight from OEM plants to dealer showroom floors across every state in India, so your inventory is never the reason a sale gets delayed.",
         highlights: [
           "Scheduled Dispatch",
-          "Manufacturer And Dealer Warehouses",
+          "OEM Plant To Dealer Showroom",
           "On Time Showroom Delivery",
-          "Nationwide Coverage",
+          "PAN India Coverage",
           "Dedicated Account Manager",
         ],
       },
@@ -115,23 +115,7 @@ export const TABS = [
         ],
       },
       {
-        title: "Warehouse",
-        image: "/finalimages/services/b2b3.JPG",
-        description:
-          "End to end warehouse management for dealer and manufacturer vehicle stock.",
-        tagline: ["End To End ", "Warehouse Management"],
-        details:
-          "Keeping dealer and manufacturer vehicle stock organized takes more than just space. We manage the entire warehouse operation for you, keeping inventory secure, accounted for and ready to dispatch the moment it's needed.",
-        highlights: [
-          "Dealer And Manufacturer Stock",
-          "Organized Inventory",
-          "Secure Storage",
-          "Dispatch Ready Handling",
-          "Dedicated Account Manager",
-        ],
-      },
-      {
-        title: "Stockyard",
+        title: "Vehicle Stockyard Solutions",
         image: "/finalimages/services/b2b4.JPG",
         description:
           "Secure, monitored stockyard storage for vehicles in transit or awaiting dispatch.",
@@ -143,6 +127,22 @@ export const TABS = [
           "In Transit And Pre Dispatch",
           "Consistent Safety Standards",
           "Full Tracking",
+          "Dedicated Account Manager",
+        ],
+      },
+      {
+        title: "Automotive Parts Warehousing",
+        image: "/finalimages/services/b2b3.JPG",
+        description:
+          "Dedicated warehousing for OEM and dealer spare parts, with organized inventory and dispatch ready storage.",
+        tagline: ["Dedicated ", "Parts Warehousing"],
+        details:
+          "Spare parts inventory needs more than shelf space to stay dispatch ready. We manage dedicated warehousing for OEM and dealer automotive parts, keeping stock organized, secure and accounted for, ready to move the moment a service centre or dealership across India needs it.",
+        highlights: [
+          "OEM And Dealer Spare Parts",
+          "Organized Inventory",
+          "Secure Storage",
+          "Dispatch Ready Handling",
           "Dedicated Account Manager",
         ],
       },

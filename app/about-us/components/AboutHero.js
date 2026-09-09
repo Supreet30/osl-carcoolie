@@ -20,8 +20,9 @@ export default function AboutHero() {
             <span className="text-red-600">a Time.</span>
           </h1>
           <p className="mt-8 max-w-md text-base leading-relaxed text-slate-600">
-            A nationwide network of specialized enclosed and open carrier trucks delivering premium
-            vehicle transportation, backed by real-time tracking and uncompromising safety protocols.
+            A nationwide network of specialized, fully enclosed carrier trucks delivering premium
+            vehicle transportation, backed by real-time AIS-140 GPS tracking and uncompromising
+            safety protocols.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
             <a

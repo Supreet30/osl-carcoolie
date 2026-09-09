@@ -14,10 +14,10 @@ gsap.registerPlugin(ScrollTrigger);
 const CARDS = [
   {
     id: "door-to-door",
-    label: "DOOR TO DOOR (PART TRUCK LOAD)",
+    label: "DOOR TO DOOR MOBILITY",
     heading: (
       <>
-        Right-Sized Transport, <span className="text-red-600">Delivered to Your Doorstep</span>
+        Vehicle Pickup & Delivery, <span className="text-red-600">Right to Your Door</span>
       </>
     ),
     description:
@@ -218,9 +218,9 @@ export default function OurServices() {
       <div className="mx-auto w-full max-w-6xl shrink-0">
         <p className="text-md font-semibold text-red-600">Our Services</p>
         <h2 className="mt-3 text-5xl font-extrabold leading-tight text-[#0b1e42]">
-          Choose The <span className="text-red-600">Right Car Carrier</span>
+          Choose the <span className="text-red-600">Right Service</span>
           <br />
-          For Your Shipment
+          That Best Fits Your Needs
         </h2>
       </div>
 

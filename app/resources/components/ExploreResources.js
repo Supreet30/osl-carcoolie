@@ -27,8 +27,8 @@ const CATEGORIES = [
         excerpt: "When DIY towing stops making sense — and what to book instead.A quick pre-pickup checklist to keep your vehicle safe from door to door.A quick pre-pickup checklist to keep your vehicle safe from door to door.",
       },
       {
-        title: "Open vs Enclosed Transport: Which One Should You Choose?",
-        excerpt: "Weighing cost, weather exposure and privacy for your next move.A quick pre-pickup checklist to keep your vehicle safe from door to door.A quick pre-pickup checklist to keep your vehicle safe from door to door.",
+        title: "Standard vs Premium Enclosed Transport: Which One Should You Choose?",
+        excerpt: "Weighing cost and how much extra protection your vehicle actually needs.A quick pre-pickup checklist to keep your vehicle safe from door to door.A quick pre-pickup checklist to keep your vehicle safe from door to door.",
       },
       {
         title: "Understanding Vehicle Insurance During Transit",

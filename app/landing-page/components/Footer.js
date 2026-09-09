@@ -11,7 +11,6 @@ const LINK_GROUPS = [
     title: "Services",
     links: [
       { label: "Enclosed Transport", href: "/landing-page#services" },
-      { label: "Open Carrier", href: "/landing-page#services" },
       { label: "Dealer Logistics", href: "/landing-page#services" },
       { label: "Auction Transport", href: "/landing-page#services" },
     ],

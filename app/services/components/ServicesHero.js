@@ -18,7 +18,7 @@ export default function ServicesHero() {
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
         <div className="max-w-xl">
           <h1 className="text-4xl font-extrabold leading-[1.2] tracking-tight sm:text-5xl lg:text-6xl">
-            <span className="text-[#0b1e42]">Enclosed And Open </span>
+            <span className="text-[#0b1e42]">Fully Enclosed </span>
             <span className="text-red-600">Car Carriers, </span>
             <span className="text-[#0b1e42]">Tracked In </span>
             <span className="text-red-600">Real Time</span>

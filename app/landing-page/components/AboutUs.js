@@ -61,7 +61,7 @@ const POINTS = [
       "Door to door delivery as committed",
     ],
     stats: [
-      { value: "24/7", label: "CUSTOMER SUPPORT" },
+      { value: "750+", label: "TRUCKS ON ROAD" },
       { value: "100%", label: "DOOR TO DOOR DELIVERY" },
     ],
     image: "/finalimages/homepage/aboutus3.JPG",
@@ -78,7 +78,7 @@ const POINTS = [
       "Complete confidence from pickup to delivery, ensuring peace of mind",
     ],
     stats: [
-      { value: ">99.89%", label: "ON-TIME DELIVERY RATE" },
+      { value: "<0.01%", label: "DAMAGE RATIO" },
       { value: "100%", label: "CUSTOMER CONFIDENCE" },
     ],
     image: "/finalimages/homepage/aboutus4.JPG",
@@ -168,9 +168,8 @@ export default function AboutUs() {
       <div className="mx-auto w-full max-w-7xl shrink-0">
         <p className="text-md font-semibold text-red-600">About Us</p>
         <h2 className="mt-3 text-5xl font-extrabold leading-tight text-[#0b1e42]">
-          The OSL Logistics / Car Coolie Difference:
-          <br />
-          <span className="text-red-600">Transparent, Secure, Reliable</span>
+          Why Customers Choose <span className="text-red-600">Car Coolie</span> for Vehicle
+          Transport
         </h2>
       </div>
 
