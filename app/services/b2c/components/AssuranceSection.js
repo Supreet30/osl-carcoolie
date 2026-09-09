@@ -1,13 +1,11 @@
 import Image from "next/image";
 
-// Dummy placeholder photos — public/ doesn't have dedicated shots for a
-// warehouse safety inspector, a driver in-cab, or cash-in-hand, so these
-// reuse the closest existing images until real photography is available.
+// Dedicated shots for all three items live in public/b2cimages.
 const ASSURANCE_ITEMS = [
   {
     heading: "Safety",
     highlight: "Checks",
-    image: "/core.jpg",
+    image: "/b2cimages/safetychecks.jpg",
     paragraphs: [
       "Every vehicle gets a multi-point inspection before and after transit, with a photo condition report at each handover — so nothing about your car's state is left to memory or guesswork.",
       "Trucks and drivers are checked against our own safety standards before a booking is even confirmed, not just once when they're first hired.",
@@ -16,7 +14,7 @@ const ASSURANCE_ITEMS = [
   {
     heading: "Trusted",
     highlight: "Drivers",
-    image: "/contact-hero-truck.png",
+    image: "/b2cimages/trusted-drivers.JPG",
     paragraphs: [
       "Every driver on our network is vetted, trained, and briefed on secure loading and handling before they're allowed to carry a customer's vehicle.",
       "You get the driver's contact and live location for the full journey — not just a booking confirmation and a wait.",
@@ -25,7 +23,7 @@ const ASSURANCE_ITEMS = [
   {
     heading: "Transparent",
     highlight: "Pricing",
-    image: "/cs3.png",
+    image: "/b2cimages/transparentprice.png",
     paragraphs: [
       "The quote you're given upfront is the amount you pay — no hidden loading fees, no last-minute \"convenience\" charges added at delivery.",
       "Every cost — base fare, insurance, and any optional add-ons — is itemized before you confirm, so you always know exactly what you're paying for.",

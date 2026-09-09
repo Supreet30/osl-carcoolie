@@ -86,7 +86,7 @@ export default function B2cHero() {
 
             <div className="relative mt-6 aspect-4/3 overflow-hidden rounded-2xl bg-slate-50">
               <Image
-                src="/b2chero.png"
+                src="/b2cheronew.png"
                 alt="CarCoolie carrier truck transporting a vehicle, tracked from pickup to destination"
                 fill
                 sizes="(max-width: 1023px) 100vw, 40vw"
