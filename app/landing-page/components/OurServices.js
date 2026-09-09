@@ -77,7 +77,16 @@ const CARDS = [
     description:
       "Managing dedicated parts warehouses for OEMs, ensuring streamlined inventory control, secure handling, and timely distribution to support uninterrupted supply chains.",
     badges: [
-      { value: "OEM FOCUSED", label: "Dedicated Warehousing" },
+      {
+        value: (
+          <>
+            OEM
+            <br />
+            FOCUSED
+          </>
+        ),
+        label: "Dedicated Warehousing",
+      },
       { value: "INVENTORY CONTROL", label: "Streamlined Operations" },
       { value: "TIMELY DISTRIBUTION", label: "Reliable Supply Support" },
     ],
