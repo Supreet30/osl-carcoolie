@@ -57,11 +57,18 @@ export default function ServicesShowcase() {
                   isOpen ? "flex-[4]" : "flex-[1]"
                 } min-w-[64px]`}
               >
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => selectService(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectService(i);
+                    }
+                  }}
                   aria-expanded={isOpen}
-                  className="group relative block h-[420px] w-full overflow-hidden rounded-2xl text-left sm:h-[480px]"
+                  className="group relative block h-[420px] w-full cursor-pointer overflow-hidden rounded-2xl text-left sm:h-[480px]"
                 >
                   <Image
                     src={service.image}
@@ -85,9 +92,19 @@ export default function ServicesShowcase() {
                     <p className="mt-2 max-w-md text-md leading-relaxed text-slate-200">
                       {service.description}
                     </p>
-                    <span className="mt-4 inline-flex items-center rounded-full border border-white px-6 py-3 text-md font-semibold transition-colors hover:bg-white hover:text-[#0b1e42]">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectService(i);
+                        document
+                          .getElementById("explore-services")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                      className="mt-4 inline-flex items-center rounded-full border border-white px-6 py-3 text-md font-semibold transition-colors hover:bg-white hover:text-[#0b1e42]"
+                    >
                       Learn More
-                    </span>
+                    </button>
                   </div>
 
                   <div
@@ -99,7 +116,7 @@ export default function ServicesShowcase() {
                       {service.title}
                     </span>
                   </div>
-                </button>
+                </div>
 
                 <span
                   aria-hidden

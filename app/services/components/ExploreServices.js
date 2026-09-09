@@ -9,7 +9,10 @@ export default function ExploreServices() {
   const [taglineStart, taglineEnd] = service.tagline;
 
   return (
-    <section className="relative overflow-hidden bg-white px-6 py-20 sm:py-24">
+    <section
+      id="explore-services"
+      className="relative scroll-mt-32 overflow-hidden bg-white px-6 py-20 sm:py-24"
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"

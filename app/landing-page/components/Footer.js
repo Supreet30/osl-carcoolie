@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Globe, Share2 } from "lucide-react";
+import { TABS } from "../../services/data/serviceTabs";
 
 // Absolute (not bare-hash) hrefs — this Footer is shared across routes
 // (landing page + contact page), so section links must route back to
@@ -9,11 +10,11 @@ import { Globe, Share2 } from "lucide-react";
 const LINK_GROUPS = [
   {
     title: "Services",
-    links: [
-      { label: "Enclosed Transport", href: "/landing-page#services" },
-      { label: "Dealer Logistics", href: "/landing-page#services" },
-      { label: "Auction Transport", href: "/landing-page#services" },
-    ],
+    // Sourced straight from the /services page's own data (serviceTabs.js)
+    // so this list can never drift out of sync with what that page offers.
+    links: TABS.flatMap((tab) =>
+      tab.services.map((service) => ({ label: service.title, href: "/services" }))
+    ),
   },
   {
     title: "Company",

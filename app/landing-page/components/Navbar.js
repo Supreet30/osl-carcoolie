@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Truck } from "lucide-react";
+import { TABS } from "../../services/data/serviceTabs";
 
 // Absolute (not bare-hash) hrefs — this Navbar is shared across routes
 // (landing page + contact page), so section links must route back to
@@ -21,25 +22,14 @@ const SERVICES_HEADING = {
   description: "Choose the right transport for your vehicle",
 };
 
-const SERVICES_GROUPS = [
-  {
-    heading: "For Business to Customers",
-    links: [
-      { label: "Enclosed Car Carrier", href: "/services" },
-      { label: "Full Truck Car Carrier", href: "/services" },
-      { label: "Half Truck Car Carrier", href: "/services" },
-    ],
-  },
-  {
-    heading: "For Business to Business",
-    links: [
-      { label: "Dealer Stock Transfer", href: "/services" },
-      { label: "Manufacturer Plant Dispatch", href: "/services" },
-      { label: "Fleet Relocation", href: "/services" },
-      { label: "Bulk Vehicle Logistics", href: "/services" },
-    ],
-  },
-];
+// Sourced straight from the /services page's own data (serviceTabs.js) so
+// this dropdown can never drift out of sync with what that page actually
+// offers — every link points at /services since that page has no per-service
+// deep link yet.
+const SERVICES_GROUPS = TABS.map((tab) => ({
+  heading: tab.label,
+  links: tab.services.map((service) => ({ label: service.title, href: "/services" })),
+}));
 
 const RESOURCES_HEADING = {
   label: "Resources",
