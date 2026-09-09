@@ -21,31 +21,31 @@ const CARDS = [
       </>
     ),
     description:
-      "Book a part truck load, with pickup and delivery handled at your exact doorstep. Ideal for single vehicles and tighter city routes, without paying for a full truck.",
+      "Get your vehicle picked up and delivered right from your doorstep. Ideal for single vehicles and tighter city routes, with a seamless, hassle-free experience from start to finish.",
     badges: [
-      { value: "DOOR TO DOOR", label: "PICKUP & DELIVERY" },
-      { value: "SINGLE VEHICLE", label: "RIGHT-SIZED LOADS" },
-      { value: "NO FULL TRUCK", label: "COST REQUIRED" },
+      { value: "DOOR TO DOOR", label: "Pickup & Delivery" },
+      { value: "SINGLE VEHICLE", label: "Hassle-Free Movement" },
+      { value: "PAN INDIA", label: "Nationwide Coverage" },
     ],
     cta: "Explore Door to Door",
     image: "/finalimages/homepage/services1.png",
   },
   {
     id: "full-truck-load",
-    label: "FULL TRUCK LOAD",
+    label: "MULTIPLE VEHICLE TRANSPORT",
     heading: (
       <>
         Dedicated Carrier, <span className="text-red-600">Maximum Protection</span>
       </>
     ),
     description:
-      "Book a dedicated full truck load carrier for premium, priority vehicle transportation. Your vehicles travel without shared stops or transfers, with pan-India doorstep delivery.",
+      "Transport multiple vehicles together in a dedicated carrier for enhanced protection and priority handling. Enjoy secure transportation with minimal handling and reliable pan-India delivery.",
     badges: [
-      { value: "DEDICATED", label: "CARRIER" },
-      { value: "NO SHARED", label: "STOPS OR TRANSFERS" },
-      { value: "PAN INDIA", label: "DOORSTEP DELIVERY" },
+      { value: "MULTIPLE VEHICLES", label: "Move Together" },
+      { value: "NO SHARED", label: "Secure Transportation" },
+      { value: "PAN INDIA", label: "Nationwide Delivery" },
     ],
-    cta: "Explore Full Truck Load",
+    cta: "Explore Multi-Vehicle Transport",
     image: "/finalimages/homepage/ourservices2.JPG",
   },
   {
@@ -59,9 +59,9 @@ const CARDS = [
     description:
       "Store vehicles safely in our managed stockyards during transit or before dispatch, with the same tracking and security standards that cover every Car Coolie shipment. Making final delivery to customer, on demand.",
     badges: [
-      { value: "SECURE", label: "MANAGED STORAGE" },
-      { value: "FULL", label: "TRACKING & SECURITY" },
-      { value: "ON DEMAND", label: "FINAL DELIVERY" },
+      { value: "SECURE STORAGE", label: "Managed Stockyards" },
+      { value: "VEHICLE TRACKING", label: "Visibility & Security" },
+      { value: "ON DEMAND", label: "Flexible Dispatch" },
     ],
     cta: "Explore Stockyard Management",
     image: "/finalimages/homepage/ourservices3.JPG",
@@ -77,9 +77,9 @@ const CARDS = [
     description:
       "Managing dedicated parts warehouses for OEMs, ensuring streamlined inventory control, secure handling, and timely distribution to support uninterrupted supply chains.",
     badges: [
-      { value: "OEM", label: "DEDICATED WAREHOUSES" },
-      { value: "STREAMLINED", label: "INVENTORY CONTROL" },
-      { value: "TIMELY", label: "DISTRIBUTION" },
+      { value: "OEM FOCUSED", label: "Dedicated Warehousing" },
+      { value: "INVENTORY CONTROL", label: "Streamlined Operations" },
+      { value: "TIMELY DISTRIBUTION", label: "Reliable Supply Support" },
     ],
     cta: "Explore Warehouse Management",
     image: "/finalimages/homepage/ourservices4.JPG",

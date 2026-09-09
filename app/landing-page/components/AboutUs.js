@@ -24,7 +24,7 @@ const POINTS = [
       "No subcontracting to tier 2 vendors — OSL manages the entire process directly",
     ],
     stats: [
-      { value: "100%", label: "WRITTEN QUOTATIONS" },
+      { value: "TRANSPARENT", label: "PRICING" },
       { value: "ZERO", label: "HIDDEN CHARGES" },
     ],
     image: "/finalimages/homepage/aboutus1.JPG",
@@ -43,8 +43,8 @@ const POINTS = [
       "Your vehicle is never used for unauthorized driving or to carry someone else's luggage",
     ],
     stats: [
-      { value: "100%", label: "PRE-PICKUP INSPECTIONS" },
-      { value: "100%", label: "PHOTO-DOCUMENTED PICKUPS" },
+      { value: "PRE-PICKUP", label: "INSPECTIONS" },
+      { value: "PHOTO-DOCUMENTED", label: "PICKUPS" },
     ],
     image: "/finalimages/homepage/aboutus2.JPG",
   },
@@ -62,7 +62,7 @@ const POINTS = [
     ],
     stats: [
       { value: "750+", label: "TRUCKS ON ROAD" },
-      { value: "100%", label: "DOOR TO DOOR DELIVERY" },
+      { value: "DELIVERY", label: "DOOR TO DOOR" },
     ],
     image: "/finalimages/homepage/aboutus3.JPG",
   },
@@ -79,7 +79,7 @@ const POINTS = [
     ],
     stats: [
       { value: "<0.01%", label: "DAMAGE RATIO" },
-      { value: "100%", label: "CUSTOMER CONFIDENCE" },
+      { value: "100%", label: "CUSTOMER SATISFACTION" },
     ],
     image: "/finalimages/homepage/aboutus4.JPG",
   },
