@@ -3,7 +3,7 @@ import Hero from "./components/Hero";
 import AboutUs from "./components/AboutUs";
 import OurServices from "./components/OurServices";
 import OurPartners from "./components/OurPartners";
-import BookingSteps from "./components/BookingSteps";
+// import BookingSteps from "./components/BookingSteps"; // hidden for now
 import CaseStudies from "./components/CaseStudies";
 import WhyCarcoolie from "./components/WhyCarcoolie";
 import ChairmanMessage from "./components/ChairmanMessage";
@@ -26,7 +26,7 @@ export default function LandingPage() {
       <OurServices />
       <ChairmanMessage />
       <OurPartners />
-      <BookingSteps />
+      {/* <BookingSteps /> hidden for now */}
       <CaseStudies />
       <Testimonials />
       <WhyCarcoolie />
