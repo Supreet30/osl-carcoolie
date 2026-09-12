@@ -1,6 +1,6 @@
 const STATS = [
   { value: "22+", label: "Years Of Excellence" },
-  { value: "50K+", label: "Cars Delivered" },
+  { value: "35L+", label: "Cars Delivered" },
   { value: "27+", label: "States Covered" },
   { value: "800+", label: "Team Members" },
 ];
@@ -14,7 +14,7 @@ export default function AboutStats() {
           Car Coolie Logistics In Numbers
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-base">
-          Over 22 years of experience, 50K+ cars delivered, 27+ states covered and an 800+
+          Over 22 years of experience, 35L+ cars delivered, 27+ states covered and an 800+
           member team make Car Coolie one of India&apos;s most established vehicle transport
           companies.
         </p>

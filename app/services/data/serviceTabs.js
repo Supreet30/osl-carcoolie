@@ -13,7 +13,7 @@ export const TABS = [
     services: [
       {
         title: "Door To Door Mobility",
-        image: "/finalimages/services/b2c1.png",
+        image: "/finalimages/homepage/ourservices1.png",
         description:
           "Seamless vehicle pickup and delivery, with transportation managed from your location to the final destination.",
         tagline: ["Door To Door ", "Vehicle Transport"],
@@ -83,7 +83,7 @@ export const TABS = [
     services: [
       {
         title: "OEM to Dealer PAN India",
-        image: "/servicehero.png",
+        image: "/b2b1.png",
         description:
           "Scheduled dispatch of new vehicles from OEM plants to dealer showrooms, moved safely and on time, PAN India.",
         tagline: ["Scheduled ", "OEM To Dealer Dispatch"],
@@ -99,7 +99,7 @@ export const TABS = [
       },
       {
         title: "Used / Pre-Owned Cars",
-        image: "/contact-hero-truck.png",
+        image: "/finalimages/homepage/ourservices2.JPG",
         description:
           "Secure transport for used and pre-owned vehicles between dealers, auctions and buyers.",
         tagline: ["Secure ", "Pre-Owned Transport"],
@@ -108,14 +108,14 @@ export const TABS = [
         highlights: [
           "Dealer, Auction & Buyer Transfers",
           "Secure Handling",
-          "Real Time Tracking",
+          "GPS Tracking",
           "Full Insurance Coverage",
           "Dedicated Account Manager",
         ],
       },
       {
         title: "Vehicle Stockyard Solutions",
-        image: "/finalimages/services/b2b4.JPG",
+        image: "/finalimages/homepage/ourservices3.png",
         description:
           "Secure, monitored stockyard storage for vehicles in transit or awaiting dispatch.",
         tagline: ["Secure ", "Stockyard Storage"],
@@ -131,7 +131,7 @@ export const TABS = [
       },
       {
         title: "Automotive Parts Warehousing",
-        image: "/finalimages/services/b2b3.JPG",
+        image: "/finalimages/homepage/ourservices4.png",
         description:
           "Dedicated warehousing for OEM and dealer spare parts, with organized inventory and dispatch ready storage.",
         tagline: ["Dedicated ", "Parts Warehousing"],

@@ -94,6 +94,10 @@ export default function InvoiceModal({ open, onClose, booking }) {
               <p className="text-sm text-slate-500">
                 {[billTo?.house, billTo?.street, billTo?.city, billTo?.pin].filter(Boolean).join(", ") || "—"}
               </p>
+              {/* billing.gstin only — never falls back to pickup like billTo
+                  above, since an inherited pickup address doesn't imply an
+                  inherited tax registration number. */}
+              {billing?.gstin && <p className="mt-1 text-xs font-semibold text-slate-500">GSTIN: {billing.gstin}</p>}
             </div>
             <div>
               <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Pickup</p>

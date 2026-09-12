@@ -10,7 +10,7 @@ import { motion } from "motion/react";
 const TESTIMONIALS = [
   {
     quote:
-      "I was nervous about shipping my vintage Mustang from Delhi to Bangalore. Car Coolie's enclosed carrier and real-time tracking gave me complete peace of mind.",
+      "I was nervous about shipping my vintage Mustang from Delhi to Bangalore. Car Coolie's enclosed carrier and GPS tracking gave me complete peace of mind.",
     name: "Animesh Roy",
     role: "Private Collector",
   },

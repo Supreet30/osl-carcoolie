@@ -8,17 +8,25 @@ import EstimateModal from "./EstimateModal";
 import CityDropdown from "./CityDropdown";
 import { CITIES, getCities } from "../lib/pricing";
 
+// One photo per stage of the journey — cycled automatically below so the
+// hero shows pickup -> in transit -> destination on a loop, in step with
+// the route marker above it moving the same way.
 const ROUTE_STOPS = [
-  { label: "PickUp", tone: "outline-red" },
-  { label: "In Transit", tone: "filled-red" },
-  { label: "Destination", tone: "outline-navy" },
+  { label: "PickUp", image: "/finalimages/homepage/ourservices1.png" },
+  { label: "In Transit", image: "/b2cheronew.png" },
+  { label: "Destination", image: "/finalimages/company-numbers/cars-delivery.png" },
 ];
+const STOP_DURATION_MS = 2000;
 
-function RouteMarker({ tone }) {
-  if (tone === "filled-red") {
+// `state` is relative to the currently active stop — "done" (already
+// passed, hollow red), "active" (current stop, solid red) or "upcoming"
+// (not reached yet, hollow navy) — matching the original fixed markers'
+// look for whichever stop happens to be active.
+function RouteMarker({ state }) {
+  if (state === "active") {
     return <span className="relative z-10 h-3 w-3 rounded-full bg-red-600" />;
   }
-  const ring = tone === "outline-red" ? "border-red-500" : "border-[#0b1e42]";
+  const ring = state === "done" ? "border-red-500" : "border-[#0b1e42]";
   return <span className={`relative z-10 h-3 w-3 rounded-full border-2 bg-white ${ring}`} />;
 }
 
@@ -28,12 +36,23 @@ export default function B2cHero() {
   const [toCity, setToCity] = useState("");
   const [showEstimate, setShowEstimate] = useState(false);
   const [cityError, setCityError] = useState("");
+  const [activeStop, setActiveStop] = useState(0);
 
   // Loads from Supabase (if configured) so this dropdown always matches
   // whatever cities the admin panel actually has active — same fetch
   // EstimateModal itself does when it opens.
   useEffect(() => {
     getCities().then(setCities);
+  }, []);
+
+  // Cycles pickup -> in transit -> destination on a loop, same 2s-per-stop
+  // pacing ServiceStepsWheel uses for its own auto-advancing steps.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => {
+      setActiveStop((stop) => (stop + 1) % ROUTE_STOPS.length);
+    }, STOP_DURATION_MS);
+    return () => clearInterval(id);
   }, []);
 
   function handleSubmit(event) {
@@ -79,18 +98,23 @@ export default function B2cHero() {
                 aria-hidden
                 className="absolute top-1/2 left-[16.667%] right-[16.667%] -translate-y-1/2 border-t border-dashed border-red-300"
               />
-              {ROUTE_STOPS.map((stop) => (
-                <RouteMarker key={stop.label} tone={stop.tone} />
+              {ROUTE_STOPS.map((stop, i) => (
+                <RouteMarker
+                  key={stop.label}
+                  state={i < activeStop ? "done" : i === activeStop ? "active" : "upcoming"}
+                />
               ))}
             </div>
 
             <div className="relative mt-6 aspect-4/3 overflow-hidden rounded-2xl bg-slate-50">
               <Image
-                src="/b2cheronew.png"
-                alt="CarCoolie carrier truck transporting a vehicle, tracked from pickup to destination"
+                key={ROUTE_STOPS[activeStop].image}
+                src={ROUTE_STOPS[activeStop].image}
+                alt={`CarCoolie carrier truck — ${ROUTE_STOPS[activeStop].label} stage of a vehicle's journey`}
                 fill
                 sizes="(max-width: 1023px) 100vw, 40vw"
                 className="object-cover"
+                style={{ animation: "fadeIn 0.5s ease-out" }}
               />
             </div>
           </div>

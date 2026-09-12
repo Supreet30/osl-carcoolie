@@ -31,7 +31,7 @@ export default function Hero() {
 
         <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
           Hidden costs, damaged cars and zero visibility ruin vehicle transport for most owners.
-          Car Coolie fixes it with transparent pricing, trained handling, real-time GPS tracking
+          Car Coolie fixes it with transparent pricing, trained handling, GPS tracking
           and full insurance, from a car transport company trusted by 20+ businesses across India.
         </p>
 

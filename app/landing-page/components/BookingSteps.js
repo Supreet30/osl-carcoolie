@@ -58,7 +58,7 @@ const STEPS = [
     number: "05",
     title: "Tracking & Reviews",
     description:
-      "Track your shipment in real time and share your experience once it's delivered.",
+      "Track your shipment in and share your experience once it's delivered.",
     // A real-time tracking dashboard, open on a laptop mid-shipment.
     images: ["/finalimages/homepage/steps2.JPG"],
   },

@@ -21,7 +21,7 @@ export default function AboutHero() {
           </h1>
           <p className="mt-8 max-w-md text-base leading-relaxed text-slate-600">
             A nationwide network of specialized, fully enclosed carrier trucks delivering premium
-            vehicle transportation, backed by real-time AIS-140 GPS tracking and uncompromising
+            vehicle transportation, backed by GPS tracking and uncompromising
             safety protocols.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">

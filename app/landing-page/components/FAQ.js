@@ -18,7 +18,7 @@ const FAQ_ITEMS = [
       "Yes — every vehicle we transport is covered by comprehensive transit insurance from the moment it's loaded until it reaches your doorstep, at no extra cost to you.",
   },
   {
-    question: "Can I track my car in real-time?",
+    question: "Can I track my car?",
     answer:
       "Absolutely. Every shipment includes GPS-enabled live tracking so you always know exactly where your vehicle is, with instant status updates and accurate arrival estimates.",
   },

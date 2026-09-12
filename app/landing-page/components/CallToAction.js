@@ -20,8 +20,8 @@ export default function CallToAction() {
             Book Trusted Car Transport Services Today
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-black">
-            Join 500+ companies that trust Car Coolie for on-time, insured vehicle
-            transport across India. No contracts, no minimums.
+            Join thousands of satisfied Companies &amp; Customers that trust CarCoolie for on-time &amp; damage
+            free transport across India.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">

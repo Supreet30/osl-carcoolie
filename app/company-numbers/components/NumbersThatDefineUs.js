@@ -9,7 +9,7 @@ const TOP_STATS = [
 const BOTTOM_STATS = [
   { value: "100+", label: "Cities Covered", subtitle: "Coast to coast coverage", progress: "55%", image: "/finalimages/company-numbers/cities-covered.JPG" },
   { value: "22+", label: "Years Experience", subtitle: "Coast to coast coverage", progress: "70%", image: "/finalimages/company-numbers/years-exp.JPG" },
-  { value: "50K+", label: "Cars Delivery", subtitle: "Coast to coast coverage", progress: "85%", image: "/finalimages/company-numbers/cars-delivery.png" },
+  { value: "35L+", label: "Cars Delivery", subtitle: "Coast to coast coverage", progress: "85%", image: "/finalimages/company-numbers/cars-delivery.png" },
   { value: ">99.89%", label: "On time Delivery", subtitle: "Coast to coast coverage", progress: "99%", image: "/finalimages/company-numbers/on-time-delivery.png" },
 ];
 

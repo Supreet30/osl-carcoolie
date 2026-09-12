@@ -24,9 +24,9 @@ export default function ServicesHero() {
             <span className="text-red-600">Real Time</span>
           </h1>
           <p className="mt-8 max-w-md text-base leading-relaxed text-slate-600">
-            Whether you&apos;re relocating, purchasing a new vehicle or moving luxury cars, Car Coolie
-            provides secure truck-based vehicle transportation with real-time tracking and nationwide
-            coverage.
+            Whether you&apos;re relocating, purchasing a new vehicle, moving luxury cars or heading out
+            for some adventure tourism,<br /> Car Coolie delivers secure, truck-based vehicle transportation
+            with GPS tracking and nationwide coverage.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
             <a

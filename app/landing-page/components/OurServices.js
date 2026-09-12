@@ -28,7 +28,7 @@ const CARDS = [
       { value: "PAN INDIA", label: "Nationwide Coverage" },
     ],
     cta: "Explore Door to Door",
-    image: "/finalimages/homepage/services1.png",
+    image: "/finalimages/homepage/ourservices1.png",
   },
   {
     id: "full-truck-load",
@@ -41,9 +41,36 @@ const CARDS = [
     description:
       "Transport multiple vehicles together in a dedicated carrier for enhanced protection and priority handling. Enjoy secure transportation with minimal handling and reliable pan-India delivery.",
     badges: [
-      { value: "MULTIPLE VEHICLES", label: "Move Together" },
-      { value: "NO SHARED", label: "Secure Transportation" },
-      { value: "PAN INDIA", label: "Nationwide Delivery" },
+      {
+        value: (
+          <>
+            MULTIPLE
+            <br />
+            VEHICLES
+          </>
+        ),
+        label: "Move Together",
+      },
+      {
+        value: (
+          <>
+            NO
+            <br />
+            SUBCONTRACTING
+          </>
+        ),
+        label: "Secure Transportation",
+      },
+      {
+        value: (
+          <>
+            PAN
+            <br />
+            INDIA
+          </>
+        ),
+        label: "Nationwide Delivery",
+      },
     ],
     cta: "Explore Multi-Vehicle Transport",
     image: "/finalimages/homepage/ourservices2.JPG",
@@ -64,7 +91,7 @@ const CARDS = [
       { value: "ON DEMAND", label: "Flexible Dispatch" },
     ],
     cta: "Explore Stockyard Management",
-    image: "/finalimages/homepage/ourservices3.JPG",
+    image: "/finalimages/homepage/ourservices3.png",
   },
   {
     id: "warehouse",
@@ -91,7 +118,7 @@ const CARDS = [
       { value: "TIMELY DISTRIBUTION", label: "Reliable Supply Support" },
     ],
     cta: "Explore Warehouse Management",
-    image: "/finalimages/homepage/ourservices4.JPG",
+    image: "/finalimages/homepage/ourservices4.png",
   },
 ];
 

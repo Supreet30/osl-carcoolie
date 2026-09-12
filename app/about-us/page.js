@@ -3,8 +3,10 @@ import Testimonials from "../landing-page/components/Testimonials";
 import AboutHero from "./components/AboutHero";
 import AboutStats from "./components/AboutStats";
 import CoreValues from "./components/CoreValues";
+import FoundersSection from "./components/FoundersSection";
 import JoinUsSection from "./components/JoinUsSection";
 import LeadershipSection from "./components/LeadershipSection";
+import OslGroupTimeline from "./components/OslGroupTimeline";
 import WhatWeProvide from "./components/WhatWeProvide";
 
 export const metadata = {
@@ -21,6 +23,8 @@ export default function AboutUsPage() {
       <CoreValues />
       <AboutStats />
       <LeadershipSection />
+      <FoundersSection />
+      <OslGroupTimeline />
       <Testimonials />
       <JoinUsSection />
       <Footer />

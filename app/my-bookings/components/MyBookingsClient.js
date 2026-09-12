@@ -303,6 +303,7 @@ function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsN
             label="Address"
             value={[address.house, address.street, address.landmark, address.city, address.pin].filter(Boolean).join(", ")}
           />
+          {address.gstin && <DetailRow icon={Receipt} label="GSTIN" value={address.gstin} />}
           {!simple &&
             isDriver &&
             (address.capturedLocation ? (

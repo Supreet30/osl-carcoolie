@@ -27,7 +27,7 @@ const POINTS = [
       { value: "TRANSPARENT", label: "PRICING" },
       { value: "ZERO", label: "HIDDEN CHARGES" },
     ],
-    image: "/finalimages/homepage/aboutus1.JPG",
+    image: "/b2cimages/transparentprice.png",
   },
   {
     id: "handling",
@@ -46,7 +46,7 @@ const POINTS = [
       { value: "PRE-PICKUP", label: "INSPECTIONS" },
       { value: "PHOTO-DOCUMENTED", label: "PICKUPS" },
     ],
-    image: "/finalimages/homepage/aboutus2.JPG",
+    image: "/phs.png",
   },
   {
     id: "journey",
@@ -56,12 +56,12 @@ const POINTS = [
       </>
     ),
     bullets: [
-      "Real-time tracking and regular transit updates",
+      "GPS based tracking and regular transit updates",
       "Dedicated customer support throughout the journey",
       "Door to door delivery as committed",
     ],
     stats: [
-      { value: "750+", label: "TRUCKS ON ROAD" },
+      { value: "750+", label: "OUR TRUCKS ON ROAD" },
       { value: "DELIVERY", label: "DOOR TO DOOR" },
     ],
     image: "/finalimages/homepage/aboutus3.JPG",
@@ -80,6 +80,7 @@ const POINTS = [
     stats: [
       { value: "<0.01%", label: "DAMAGE RATIO" },
       { value: "100%", label: "CUSTOMER SATISFACTION" },
+      { value: "850+", label: "FLEET STRENGTH" },
     ],
     image: "/finalimages/homepage/aboutus4.JPG",
   },

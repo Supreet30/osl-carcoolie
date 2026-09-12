@@ -11,7 +11,7 @@ import { ServiceSelectionProvider } from "./context/ServiceSelectionContext";
 export const metadata = {
   title: "Our Services | Car Coolie",
   description:
-    "Explore CarCoolie's secure, truck-based vehicle transportation services with real-time tracking and nationwide coverage.",
+    "Explore CarCoolie's secure, truck-based vehicle transportation services with GPS tracking and nationwide coverage.",
 };
 
 export default function ServicesPage() {

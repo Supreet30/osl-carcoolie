@@ -81,7 +81,7 @@ const CATEGORIES = [
         excerpt: "A closer look at the carriers that move your vehicles nationwide.A quick pre-pickup checklist to keep your vehicle safe from door to door.",
       },
       {
-        title: "Tracking Dashboard: Real-Time Visibility",
+        title: "GPS Tracking Dashboard",
         excerpt: "What live shipment tracking looks like from the customer side.A quick pre-pickup checklist to keep your vehicle safe from door to door.",
       },
     ],

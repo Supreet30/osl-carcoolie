@@ -405,6 +405,11 @@ create table if not exists booking_addresses (
   unique (booking_id, type)
 );
 
+-- Optional GSTIN for a GST invoice — only meaningful on the billing row
+-- (same "leftover columns stay null on legs where they don't apply" spirit
+-- as method/captured_*/slot_date/time_slot on the pickup/dropoff rows).
+alter table booking_addresses add column if not exists gstin text;
+
 -- Vehicle documents (section 3). One row per document type per booking;
 -- `status` is what the admin panel's "docs verification" screen edits.
 create table if not exists booking_documents (

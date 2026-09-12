@@ -464,6 +464,10 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     // Only styled uppercase via CSS above (textTransform) — the stored
     // value needs the same normalization, not just the on-screen look.
     const registrationNumber = (formData.get("registration_number") || "").toString().trim().toUpperCase() || null;
+    // Same normalization as registrationNumber above — independent of
+    // billingMode, since a GSTIN doesn't have to match whichever address
+    // (pickup/destination/custom) the booking is billed to.
+    const gstin = (formData.get("billing_gstin") || "").toString().trim().toUpperCase() || null;
 
     const booking = {
       estimate,
@@ -508,6 +512,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               landmark: formData.get("pickup_landmark"),
               city: formData.get("pickup_city"),
               pin: formData.get("pickup_pin"),
+              gstin,
             }
           : billingMode === "destination"
             ? {
@@ -518,6 +523,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 landmark: formData.get("dropoff_landmark"),
                 city: formData.get("dropoff_city"),
                 pin: formData.get("dropoff_pin"),
+                gstin,
               }
             : {
                 fullName: formData.get("billing_fullName"),
@@ -527,6 +533,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 landmark: formData.get("billing_landmark"),
                 city: formData.get("billing_city"),
                 pin: formData.get("billing_pin"),
+                gstin,
               },
       documents: uploads,
     };
@@ -888,6 +895,22 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           <p className="mt-1 pl-7 text-xs text-slate-400">No destination address was collected (Self Pickup).</p>
         )}
 
+        {/* Independent of which address gets billed above — a GST-registered
+            customer's GSTIN doesn't have to match the pickup/drop-off/custom
+            address, so this stays visible (and optional) in every mode. */}
+        <div className="mt-5">
+          <TextField
+            label="GSTIN (Optional - for a GST invoice)"
+            name="billing_gstin"
+            type="text"
+            placeholder="e.g. 07AAAAA0000A1Z5"
+            pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}"
+            maxLength={15}
+            title="Enter a valid 15-character GSTIN"
+            style={{ textTransform: "uppercase" }}
+          />
+        </div>
+
         {billingMode === "custom" && (
           <div className="mt-5">
             {billingCustomRequired && (
@@ -902,14 +925,14 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="billing_fullName"
                 type="text"
                 placeholder="e.g. Rahul Sharma"
-                required={billingCustomRequired}
+                required
               />
               <TextField
                 label="Phone Number"
                 name="billing_phone"
                 type="tel"
                 placeholder="+91 98765 43210"
-                required={billingCustomRequired}
+                required
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -918,14 +941,14 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="billing_house"
                 type="text"
                 placeholder="B-24, 2nd Floor"
-                required={billingCustomRequired}
+                required
               />
               <TextField
                 label="Street / Area Name"
                 name="billing_street"
                 type="text"
                 placeholder="Connaught Place"
-                required={billingCustomRequired}
+                required
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -935,7 +958,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="billing_city"
                 type="text"
                 placeholder="New Delhi"
-                required={billingCustomRequired}
+                required
               />
               <TextField
                 label="PIN Code"
@@ -943,7 +966,10 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 type="text"
                 inputMode="numeric"
                 placeholder="110001"
-                required={billingCustomRequired}
+                pattern="[0-9]{6}"
+                maxLength={6}
+                title="Enter a 6-digit PIN code"
+                required
               />
             </div>
           </div>

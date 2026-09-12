@@ -3,7 +3,7 @@ import { Gauge, MapPin, Truck } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
 
 const STATS = [
-  { icon: Truck, value: "50K+", label: "Cars Delivered" },
+  { icon: Truck, value: "35L+", label: "Cars Delivered" },
   { icon: MapPin, value: "450+", label: "Cities Covered" },
   { icon: Gauge, value: "98%", label: "Customer Satisfaction" },
 ];

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Zap, Network, Clock, Shield, BarChart3, FileCheck, ArrowRight } from "lucide-react";
+import { Zap, Network, Clock, ShieldCheck, BarChart3, FileCheck, ArrowRight } from "lucide-react";
 
 const FEATURES = [
   {
@@ -18,9 +18,9 @@ const FEATURES = [
     description: "Industry-leading reliability, verified monthly.",
   },
   {
-    icon: Shield,
-    title: "Full Coverage",
-    description: "Every vehicle shipment insured from pickup to drop-off.",
+    icon: ShieldCheck,
+    title: "<0.01% Damage Ratio",
+    description: "Industry-leading care in handling, verified monthly.",
   },
   {
     icon: BarChart3,

@@ -123,6 +123,7 @@ function addressToRow(bookingId, type, address) {
     landmark: address.landmark || null,
     city: address.city || null,
     pin: address.pin || null,
+    gstin: address.gstin || null,
     method: address.method || "driver",
     captured_address: address.capturedLocation?.address ?? null,
     captured_lat: address.capturedLocation?.lat ?? null,
@@ -142,6 +143,7 @@ function addressRowToJs(row) {
     landmark: row.landmark,
     city: row.city,
     pin: row.pin,
+    gstin: row.gstin,
     method: row.method,
     capturedLocation: row.captured_address
       ? { address: row.captured_address, lat: row.captured_lat, lng: row.captured_lng }

@@ -57,13 +57,13 @@ export default function WhatSetsApart() {
               Transparent <span className="text-red-600">&amp; Connected</span>
             </h3>
             <p className="mt-2 max-w-md text-md leading-relaxed text-slate-500 transition-colors duration-300 group-hover:text-slate-300">
-              No more guessing. Our real-time tracking dashboard gives you live GPS updates,
+              No more guessing. Our GPS tracking dashboard gives you live GPS updates,
               direct support access, and photo documentation at every milestone.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-600 transition-colors duration-300 group-hover:bg-white/10 group-hover:text-red-400">
                 <MapPin className="h-6 w-6" />
-                Real-time GPS Tracking
+                GPS Tracking
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-600 transition-colors duration-300 group-hover:bg-white/10 group-hover:text-red-400">
                 <Camera className="h-6 w-6" />
