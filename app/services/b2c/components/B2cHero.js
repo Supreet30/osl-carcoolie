@@ -14,7 +14,7 @@ import { CITIES, getCities } from "../lib/pricing";
 const ROUTE_STOPS = [
   { label: "PickUp", image: "/finalimages/homepage/ourservices1.png" },
   { label: "In Transit", image: "/b2cheronew.png" },
-  { label: "Destination", image: "/finalimages/company-numbers/cars-delivery.png" },
+  { label: "Destination", image: "/finalimages/homepage/steps4.png" },
 ];
 const STOP_DURATION_MS = 2000;
 
