@@ -1,4 +1,4 @@
-import { MapPin, MapPinned, Package, Smile, Truck, Users } from "lucide-react";
+import { MapPin, MapPinned, Package, Truck, Users } from "lucide-react";
 
 const STATS = [
   { icon: Truck, value: "750+", label: "Trucks On Road Per Day" },
@@ -6,7 +6,6 @@ const STATS = [
   { icon: Package, value: "35L+", label: "Deliveries Completed" },
   { icon: MapPinned, value: "22+", label: "Years of Experience" },
   { icon: MapPin, value: "650+", label: "Service Locations All Over India" },
-  { icon: Smile, value: "75k+", label: "Happy Customers Reached" },
 ];
 
 export default function StatsSection() {
@@ -23,7 +22,7 @@ export default function StatsSection() {
           Vehicle Transport At Scale, <span className="text-red-600">Backed By Data</span>
         </h2>
 
-        <div className="mt-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
           {STATS.map(({ icon: Icon, value, label }) => (
             <div
               key={label}

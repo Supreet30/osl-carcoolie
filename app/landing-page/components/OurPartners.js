@@ -39,17 +39,17 @@ export default function OurPartners() {
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-linear-to-r from-white to-transparent sm:w-32" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-linear-to-l from-white to-transparent sm:w-32" />
 
-        <div className="flex w-max items-center gap-3 animate-[marquee_25s_linear_infinite] group-hover:[animation-play-state:paused] sm:gap-5">
+        <div className="flex w-max items-center gap-6 animate-[marquee_25s_linear_infinite] group-hover:[animation-play-state:paused] sm:gap-10">
           {MARQUEE_LOGOS.map((logo, i) => (
             <div
               key={`${logo.name}-${i}`}
-              className="flex h-20 w-36 shrink-0 items-center justify-center sm:h-24 sm:w-44"
+              className="flex h-24 w-44 shrink-0 items-center justify-center sm:h-32 sm:w-56"
             >
               <Image
                 src={logo.src}
                 alt={logo.name}
-                width={176}
-                height={132}
+                width={224}
+                height={176}
                 className="h-full w-auto object-contain"
               />
             </div>

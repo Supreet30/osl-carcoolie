@@ -29,8 +29,8 @@ export default function Hero() {
           Always Safe. Always On Time. <span className="text-red-600">Always Tracked.</span>
         </h1>
 
-        <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-          Hidden costs, damaged cars and zero visibility ruin vehicle transport for most owners.
+        <p className="mx-auto mt-6 max-w-3xl text-base leading-relaxed text-slate-300 sm:text-lg">
+          Hidden costs, damaged cars and zero visibility ruin vehicle transport for most owners.<br />
           Car Coolie fixes it with transparent pricing, trained handling, GPS tracking
           and full insurance, from a car transport company trusted by 20+ businesses across India.
         </p>

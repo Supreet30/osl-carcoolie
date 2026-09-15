@@ -13,7 +13,7 @@ import { CITIES, getCities } from "../lib/pricing";
 // the route marker above it moving the same way.
 const ROUTE_STOPS = [
   { label: "PickUp", image: "/finalimages/homepage/ourservices1.png" },
-  { label: "In Transit", image: "/b2cheronew.png" },
+  { label: "In Transit", image: "/finalimages/services/b2c3.jpeg" },
   { label: "Destination", image: "/finalimages/homepage/steps4.png" },
 ];
 const STOP_DURATION_MS = 2000;

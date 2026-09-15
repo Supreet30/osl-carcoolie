@@ -61,7 +61,7 @@ export default function CoreValues() {
           <div className="relative mx-auto w-full max-w-xl pb-8 sm:pb-10">
             <div className="relative h-full min-h-105 overflow-hidden rounded-3xl shadow-xl">
               <Image
-                src="/finalimages/about/groupimg.JPG"
+                src="/missionvision.png"
                 alt="The Car Coolie team on-site, standing together at the yard"
                 fill
                 sizes="(max-width: 1023px) 100vw, 50vw"

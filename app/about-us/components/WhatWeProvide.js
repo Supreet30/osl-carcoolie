@@ -25,7 +25,7 @@ const MILESTONES = [
   {
     number: "04",
     year: "2026",
-    description: "Launch of Retail Relocation Business",
+    description: "Launch of Digital Vehicle Relocation Services via App & Website",
     icon: Sparkles,
   },
 ];
