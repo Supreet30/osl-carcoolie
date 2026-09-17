@@ -371,6 +371,50 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // 1/2 above), so there's nothing to copy.
   const pickupAddressAvailable = pickupMethod === "driver";
   const dropoffAddressAvailable = dropoffMethod === "driver";
+
+  // GSTIN field stays name="billing_gstin" (read via FormData on submit,
+  // like every other field in this form) but is also mirrored into state
+  // here purely to drive the "Verifying… -> Company Name" lookup below —
+  // the two don't conflict since FormData reads the input's live DOM value
+  // regardless of whether it's also controlled.
+  const [gstin, setGstin] = useState("");
+  // "idle" | "checking" | "verified" | "not_found" | "error"
+  const [gstStatus, setGstStatus] = useState("idle");
+  const [gstCompanyName, setGstCompanyName] = useState(null);
+  const GSTIN_RE = /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}$/;
+
+  useEffect(() => {
+    if (!GSTIN_RE.test(gstin)) {
+      setGstStatus("idle");
+      setGstCompanyName(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setGstStatus("checking");
+    setGstCompanyName(null);
+    // Small debounce so a still-typing GSTIN (which only happens to pass
+    // the 15-char regex mid-edit if characters are reordered/pasted) doesn't
+    // fire a lookup per keystroke.
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/verify-gst?gstin=${encodeURIComponent(gstin)}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.flag && data.tradeName) {
+          setGstStatus("verified");
+          setGstCompanyName(data.tradeName);
+        } else {
+          setGstStatus("not_found");
+        }
+      } catch {
+        if (!cancelled) setGstStatus("error");
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [gstin]);
   // Neither source exists — the manual fields are the only option, so they
   // stop being optional.
   const billingCustomRequired = !pickupAddressAvailable && !dropoffAddressAvailable;
@@ -908,7 +952,29 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             maxLength={15}
             title="Enter a valid 15-character GSTIN"
             style={{ textTransform: "uppercase" }}
+            value={gstin}
+            onChange={(event) => setGstin(event.target.value.toUpperCase())}
           />
+          {gstStatus === "checking" && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…
+            </p>
+          )}
+          {gstStatus === "verified" && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" /> {gstCompanyName}
+            </p>
+          )}
+          {gstStatus === "not_found" && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" /> GSTIN not found — double-check for a typo.
+            </p>
+          )}
+          {gstStatus === "error" && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+              <AlertTriangle className="h-3.5 w-3.5" /> Couldn&apos;t verify right now — you can still continue.
+            </p>
+          )}
         </div>
 
         {billingMode === "custom" && (

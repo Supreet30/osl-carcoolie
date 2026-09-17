@@ -124,12 +124,18 @@ create table if not exists cities (
   is_active boolean not null default true
 );
 
-insert into cities (name, pincode_prefixes) values
-  ('Delhi', '{11}'),
-  ('Chandigarh', '{16}'),
-  ('Mumbai', '{40}'),
-  ('Bangalore', '{56}')
-on conflict (name) do nothing;
+-- Idempotent add for a project that already has this table from before
+-- state existed — the customer-facing city pickers group by this to save
+-- scrolling a long flat list; a null here (city added before this column,
+-- or admin skipped it) groups under an "Other" bucket rather than breaking.
+alter table cities add column if not exists state text;
+
+insert into cities (name, state, pincode_prefixes) values
+  ('Delhi', 'Delhi', '{11}'),
+  ('Chandigarh', 'Chandigarh', '{16}'),
+  ('Mumbai', 'Maharashtra', '{40}'),
+  ('Bangalore', 'Karnataka', '{56}')
+on conflict (name) do update set state = excluded.state;
 
 -- ---------------------------------------------------------------------
 -- Routes — directional A→B and B→A pricing, independently editable by
@@ -141,7 +147,11 @@ create table if not exists routes (
   id uuid primary key default gen_random_uuid(),
   from_city_id uuid not null references cities (id) on delete cascade,
   to_city_id uuid not null references cities (id) on delete cascade,
-  distance_km integer not null,
+  -- Nullable — a route can be entered from a price sheet that has freight
+  -- price and transit time but no distance (EstimateModal.js's "~X km"
+  -- line just omits itself when this is null instead of requiring a value
+  -- up front); fill it in later from the admin panel once known.
+  distance_km integer,
   base_price numeric(10, 2) not null,
   -- Minimum transit days for this direction — the booking form's drop-off
   -- date picker disables every date from (pickup + 1) through
@@ -159,6 +169,10 @@ create table if not exists routes (
 
 -- Idempotent add for installs that ran this file before min_days existed.
 alter table routes add column if not exists min_days integer not null default 1;
+
+-- Idempotent for installs that created this table back when distance_km was
+-- required — see the column comment above for why it's optional now.
+alter table routes alter column distance_km drop not null;
 
 drop trigger if exists routes_set_updated_at on routes;
 create trigger routes_set_updated_at before update on routes
@@ -216,6 +230,30 @@ on conflict (name) do update set price_multiplier = excluded.price_multiplier;
 -- Superseded by 'Luxury Sedan' / 'Luxury SUV' above — deactivated rather
 -- than deleted so any past booking referencing it by id still resolves.
 update vehicle_types set is_active = false where name = 'Luxury';
+
+-- Flags which Makes (e.g. "BMW") count as luxury — the makes themselves
+-- aren't stored here, they come from the distinct values already in
+-- vehicle_models.make; this table just marks a subset of those as luxury
+-- for the admin panel's "Luxury Makes" picker on the Vehicle Types page.
+create table if not exists luxury_makes (
+  id uuid primary key default gen_random_uuid(),
+  make text not null unique,
+  created_at timestamptz not null default now()
+);
+
+-- Single editable multiplier applied on top of a booking's vehicle-type
+-- surcharge when its make is in luxury_makes above — e.g. a Mercedes SUV
+-- costs more than a Honda SUV even though both are the same vehicle_type.
+-- `id boolean primary key default true` + the check constraint is the usual
+-- Postgres trick for a table that can only ever hold one row.
+create table if not exists luxury_settings (
+  id boolean primary key default true,
+  load_factor numeric(6, 3) not null default 1.2,
+  constraint luxury_settings_singleton check (id)
+);
+
+insert into luxury_settings (id, load_factor) values (true, 1.2)
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
 -- Vehicle models — the "Get an Estimate" modal's Make/Model fields are
@@ -365,6 +403,15 @@ alter table bookings add column if not exists vehicle_registration_number text;
 alter table bookings add column if not exists vehicle_make text;
 alter table bookings add column if not exists vehicle_model text;
 
+-- vehicle_type_id originally had no ON DELETE behavior, so Postgres
+-- defaulted to NO ACTION and blocked deleting a vehicle_types row that any
+-- booking referenced — even though vehicle_type_label above already
+-- snapshots the type name for display, so the booking doesn't actually need
+-- the FK to survive. Re-pointed to SET NULL to match that intent.
+alter table bookings drop constraint if exists bookings_vehicle_type_id_fkey;
+alter table bookings add constraint bookings_vehicle_type_id_fkey
+  foreign key (vehicle_type_id) references vehicle_types (id) on delete set null;
+
 create index if not exists bookings_customer_id_idx on bookings (customer_id);
 create index if not exists bookings_status_idx on bookings (status);
 
@@ -489,6 +536,8 @@ alter table admin_users enable row level security;
 alter table cities enable row level security;
 alter table routes enable row level security;
 alter table vehicle_types enable row level security;
+alter table luxury_makes enable row level security;
+alter table luxury_settings enable row level security;
 alter table vehicle_models enable row level security;
 alter table add_on_services enable row level security;
 alter table coupons enable row level security;
@@ -548,6 +597,16 @@ drop policy if exists "vehicle_types readable" on vehicle_types;
 create policy "vehicle_types readable" on vehicle_types for select using (true);
 drop policy if exists "vehicle_types admin write" on vehicle_types;
 create policy "vehicle_types admin write" on vehicle_types for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+drop policy if exists "luxury_makes readable" on luxury_makes;
+create policy "luxury_makes readable" on luxury_makes for select using (true);
+drop policy if exists "luxury_makes admin write" on luxury_makes;
+create policy "luxury_makes admin write" on luxury_makes for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+drop policy if exists "luxury_settings readable" on luxury_settings;
+create policy "luxury_settings readable" on luxury_settings for select using (true);
+drop policy if exists "luxury_settings admin write" on luxury_settings;
+create policy "luxury_settings admin write" on luxury_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 
 drop policy if exists "vehicle_models readable" on vehicle_models;
 create policy "vehicle_models readable" on vehicle_models for select using (true);

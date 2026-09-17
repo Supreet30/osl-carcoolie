@@ -30,6 +30,7 @@ import {
   getCities,
   getRoute,
   getVehicleModels,
+  groupCitiesByState,
   validateCoupon,
 } from "../lib/pricing";
 import { saveEstimate } from "../lib/bookingStore";
@@ -74,7 +75,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
   const [showAddOns, setShowAddOns] = useState(false);
 
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const { route, minDays, vehicleSurcharge, addOnsTotal, addOnBreakdown, selectedAddOns, serviceCharge, gst, subtotal } = estimate;
+  const { route, minDays, vehicleSurcharge, addOnsTotal, addOnBreakdown, selectedAddOns, subtotal } = estimate;
   // "flat" coupons are a straight rupee amount off; "percent" ones are a
   // percentage of the subtotal — mirrors computeEstimate()'s discount logic
   // in lib/pricing.js. Clamped to the subtotal so a flat coupon bigger than
@@ -115,11 +116,9 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       dropoffMethod,
       routePrice: route.price,
       vehicleSurcharge,
-      serviceCharge,
       addOnsTotal,
       addOnBreakdown,
       selectedAddOns,
-      gst,
       subtotal,
       coupon: appliedCoupon,
       discount,
@@ -143,7 +142,8 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
             <p className="mt-0.5 text-sm font-extrabold text-[#0b1e42]">{[make, model].filter(Boolean).join(" ")}</p>
           )}
           <p className="mt-0.5 text-sm text-slate-500">
-            ~{route.distanceKm.toLocaleString("en-IN")} km &bull; {vehicleType}
+            {route.distanceKm != null && `~${route.distanceKm.toLocaleString("en-IN")} km • `}
+            {vehicleType}
           </p>
         </div>
       </div>
@@ -155,20 +155,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
             <span className="text-slate-600">
               Transportation ({route.fromCity} &rarr; {route.toCity})
             </span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(route.price)}</span>
-          </div>
-          {vehicleSurcharge !== 0 && (
-            <div className="flex items-center justify-between py-2.5 text-sm">
-              <span className="text-slate-600">Vehicle Type ({vehicleType})</span>
-              <span className={`font-semibold ${vehicleSurcharge > 0 ? "text-[#0b1e42]" : "text-green-600"}`}>
-                {vehicleSurcharge > 0 ? "+" : "-"}
-                {formatINR(Math.abs(vehicleSurcharge))}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center justify-between py-2.5 text-sm">
-            <span className="text-slate-600">Service Charges</span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(serviceCharge)}</span>
+            <span className="font-semibold text-[#0b1e42]">{formatINR(route.price + vehicleSurcharge)}</span>
           </div>
           {addOnsTotal > 0 && (
             <>
@@ -197,10 +184,6 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
               )}
             </>
           )}
-          <div className="flex items-center justify-between py-2.5 text-sm">
-            <span className="text-slate-600">GST (18%)</span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(gst)}</span>
-          </div>
         </div>
       </div>
 
@@ -246,16 +229,12 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
             <span>-{formatINR(discount)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between py-2">
-          <span className="text-slate-500">Tax (GST)</span>
-          <span className="text-slate-600">Included</span>
-        </div>
       </div>
 
       <div className="flex items-center justify-between rounded-2xl bg-red-50 p-4">
         <div>
           <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
-          <p className="text-xs text-slate-400">Inclusive of all taxes</p>
+          <p className="text-xs text-slate-400">Inclusive of GST and all taxes</p>
         </div>
         <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
       </div>
@@ -397,7 +376,7 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
     // Supabase fetch inside computeEstimate is usually much faster than
     // this — it reads as "calculating" rather than a flash of content.
     const [computed] = await Promise.all([
-      computeEstimate({ fromCity, toCity, vehicleType, selectedAddOns }),
+      computeEstimate({ fromCity, toCity, vehicleType, make, selectedAddOns }),
       new Promise((resolve) => setTimeout(resolve, 1400)),
     ]);
     setEstimate(computed);
@@ -533,7 +512,7 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                       placeholder="Select city"
                       value={fromCity}
                       onChange={setFromCity}
-                      options={cities.filter((city) => city !== toCity)}
+                      options={groupCitiesByState(cities.filter((c) => c.name !== toCity))}
                     />
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
@@ -544,7 +523,7 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                       placeholder="Select city"
                       value={toCity}
                       onChange={setToCity}
-                      options={cities.filter((city) => city !== fromCity)}
+                      options={groupCitiesByState(cities.filter((c) => c.name !== fromCity))}
                     />
                   </label>
                 </div>

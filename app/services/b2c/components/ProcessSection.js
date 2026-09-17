@@ -10,7 +10,10 @@ const STEPS = [
 function StepCard({ icon: Icon, label, title }) {
   return (
     <div className="relative">
-      <div className="relative overflow-hidden rounded-l-2xl bg-linear-to-r from-white to-red-50 py-4 pr-16 pl-20 shadow-md sm:pl-24">
+      <div
+        className="relative overflow-hidden rounded-l-2xl bg-linear-to-r from-white to-red-50 py-4 pr-16 pl-20 drop-shadow-md sm:pl-24"
+        style={{ clipPath: "polygon(0 0, calc(100% - 4rem) 0, 100% 50%, calc(100% - 4rem) 100%, 0 100%)" }}
+      >
         <p className="text-[11px] font-extrabold tracking-wide text-red-500 uppercase">{label}</p>
         <p className="mt-0.5 text-xl font-extrabold text-[#0b1e42] sm:text-2xl">{title}</p>
 

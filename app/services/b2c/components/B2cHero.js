@@ -6,7 +6,7 @@ import { AlertCircle, ArrowRight } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
 import CityDropdown from "./CityDropdown";
-import { CITIES, getCities } from "../lib/pricing";
+import { CITIES, getCities, groupCitiesByState } from "../lib/pricing";
 
 // One photo per stage of the journey — cycled automatically below so the
 // hero shows pickup -> in transit -> destination on a loop, in step with
@@ -148,7 +148,7 @@ export default function B2cHero() {
                 iconClassName="text-red-500"
                 value={fromCity}
                 onChange={setFromCity}
-                cities={cities.filter((city) => city !== toCity)}
+                cities={groupCitiesByState(cities.filter((c) => c.name !== toCity))}
               />
 
               <CityDropdown
@@ -157,7 +157,7 @@ export default function B2cHero() {
                 iconClassName="text-[#0b1e42]"
                 value={toCity}
                 onChange={setToCity}
-                cities={cities.filter((city) => city !== fromCity)}
+                cities={groupCitiesByState(cities.filter((c) => c.name !== fromCity))}
               />
 
               {cityError && (

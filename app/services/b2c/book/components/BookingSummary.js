@@ -88,21 +88,10 @@ export default function BookingSummary({ estimate, details }) {
 
             <div className="mt-5 flex flex-col gap-2 border-t border-white/10 pt-5 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">Transportation Base</span>
-                <span className="font-semibold text-white">{formatINR(estimate.routePrice)}</span>
-              </div>
-              {Boolean(estimate.vehicleSurcharge) && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Vehicle Type ({estimate.vehicleType})</span>
-                  <span className={`font-semibold ${estimate.vehicleSurcharge > 0 ? "text-white" : "text-green-400"}`}>
-                    {estimate.vehicleSurcharge > 0 ? "+" : "-"}
-                    {formatINR(Math.abs(estimate.vehicleSurcharge))}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">Pickup Service Fee</span>
-                <span className="font-semibold text-white">{formatINR(estimate.serviceCharge)}</span>
+                <span className="text-slate-300">Transportation</span>
+                <span className="font-semibold text-white">
+                  {formatINR(estimate.routePrice + (estimate.vehicleSurcharge || 0))}
+                </span>
               </div>
               {estimate.addOnsTotal > 0 && (
                 <div className="flex items-center justify-between">
@@ -110,10 +99,6 @@ export default function BookingSummary({ estimate, details }) {
                   <span className="font-semibold text-white">{formatINR(estimate.addOnsTotal)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">GST (18%)</span>
-                <span className="font-semibold text-white">{formatINR(estimate.gst)}</span>
-              </div>
               {estimate.coupon && (
                 <div className="flex items-center justify-between text-green-400">
                   <span>Promo: {estimate.coupon.code}</span>
@@ -126,7 +111,7 @@ export default function BookingSummary({ estimate, details }) {
               <p className="text-base font-extrabold text-white">Estimated Total</p>
               <div className="text-right">
                 <p className="text-2xl font-extrabold text-white">{formatINR(estimate.total)}</p>
-                <p className="text-[11px] text-slate-400">Estimate &bull; final quote after review</p>
+                <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
               </div>
             </div>
           </>

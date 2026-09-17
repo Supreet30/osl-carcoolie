@@ -6,7 +6,29 @@
 
 import { isSupabaseConfigured, supabase } from "../../../../lib/supabaseClient";
 
-export const CITIES = ["Delhi", "Chandigarh", "Mumbai", "Bangalore"];
+export const CITIES = [
+  { name: "Delhi", state: "Delhi" },
+  { name: "Chandigarh", state: "Chandigarh" },
+  { name: "Mumbai", state: "Maharashtra" },
+  { name: "Bangalore", state: "Karnataka" },
+];
+
+// Groups a {name, state}[] list (CITIES, or getCities()'s live result) by
+// state for the pickup/destination pickers — a city with no state (added
+// before that column existed, or left blank) groups under "Other" instead
+// of being dropped. Shape matches what Dropdown.js/CityDropdown.js expect
+// for grouped options: [{ label, options: string[] }].
+export function groupCitiesByState(cities) {
+  const groups = new Map();
+  for (const c of cities) {
+    const key = c.state || "Other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c.name);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, names]) => ({ label, options: names.sort((a, b) => a.localeCompare(b)) }));
+}
 
 // First 2 digits of an Indian PIN code map (roughly) to these 4 demo cities.
 // Kept local/synchronous — it's a cheap heuristic run on every keystroke on
@@ -57,8 +79,12 @@ function getLocalRoute(fromCity, toCity) {
   };
 }
 
-export const SERVICE_CHARGE = 1000;
-export const GST_RATE = 0.18;
+// Multiplier applied on top of the whole pre-tax estimate (route + vehicle
+// type + add-ons) when the customer's vehicle make is in the admin's
+// "Luxury Makes" list — matches carcoolie-admin's luxury_settings.load_factor,
+// which is what getLuxuryLoadFactor() below actually reads; this is only the
+// offline fallback for when Supabase isn't configured/reachable.
+export const LUXURY_LOAD_FACTOR = 1.2;
 
 // Vehicle type changes the price via a multiplier on the route's base
 // transportation price, not a flat rupee amount — so the surcharge scales
@@ -113,10 +139,16 @@ function validateCouponLocal(code) {
 
 // ---- Live (Supabase-backed) fetchers, each with a local fallback ----
 
+// Every fetcher below only falls back to the local dummy data when Supabase
+// isn't configured, or the query itself errored (network/RLS/schema issue)
+// — NOT merely when the table came back empty. A configured, reachable
+// Supabase with zero rows (e.g. an admin deleted everything) is a real
+// state to reflect as empty, not something to paper over with fake demo
+// data; `!error && data?.length` used to conflate the two.
 export async function getCities() {
   if (isSupabaseConfigured) {
-    const { data, error } = await supabase.from("cities").select("name").eq("is_active", true).order("name");
-    if (!error && data?.length) return data.map((c) => c.name);
+    const { data, error } = await supabase.from("cities").select("name, state").eq("is_active", true).order("name");
+    if (!error) return data.map((c) => ({ name: c.name, state: c.state || null }));
   }
   return CITIES;
 }
@@ -128,7 +160,7 @@ export async function getAddOnServices() {
       .select("key, label, subtitle, price")
       .eq("is_active", true)
       .order("created_at");
-    if (!error && data?.length) return data;
+    if (!error) return data;
   }
   return ADD_ON_SERVICES;
 }
@@ -140,8 +172,7 @@ export async function getVehicleTypes() {
       .select("name, price_multiplier")
       .eq("is_active", true)
       .order("price_multiplier");
-    if (!error && data?.length)
-      return data.map((v) => ({ name: v.name, priceMultiplier: Number(v.price_multiplier) }));
+    if (!error) return data.map((v) => ({ name: v.name, priceMultiplier: Number(v.price_multiplier) }));
   }
   return VEHICLE_TYPES;
 }
@@ -154,8 +185,7 @@ export async function getVehicleModels() {
       .eq("is_active", true)
       .order("make")
       .order("model");
-    if (!error && data?.length)
-      return data.map((v) => ({ make: v.make, model: v.model, vehicleType: v.vehicle_type?.name ?? null }));
+    if (!error) return data.map((v) => ({ make: v.make, model: v.model, vehicleType: v.vehicle_type?.name ?? null }));
   }
   return VEHICLE_MODELS;
 }
@@ -168,20 +198,38 @@ export async function getRoute(fromCity, toCity) {
       .from("routes")
       .select("distance_km, base_price, min_days, from_city:from_city_id(name), to_city:to_city_id(name)")
       .eq("is_active", true);
-    if (!error && data?.length) {
+    if (!error) {
       const match = data.find((r) => r.from_city?.name === fromCity && r.to_city?.name === toCity);
-      if (match) {
-        return {
-          fromCity,
-          toCity,
-          distanceKm: match.distance_km,
-          price: Math.round(match.base_price),
-          minDays: match.min_days ?? 1,
-        };
-      }
+      return match
+        ? {
+            fromCity,
+            toCity,
+            distanceKm: match.distance_km,
+            price: Math.round(match.base_price),
+            minDays: match.min_days ?? 1,
+          }
+        : null;
     }
   }
   return getLocalRoute(fromCity, toCity);
+}
+
+// Case-insensitive — the make typed/picked in the estimate form doesn't
+// necessarily match the casing of whatever's in the admin's luxury_makes
+// table (e.g. "maruti" vs "Maruti" both exist as separate catalog rows).
+export async function isLuxuryMake(make) {
+  if (!make || !isSupabaseConfigured) return false;
+  const { data, error } = await supabase.from("luxury_makes").select("make");
+  if (error || !data) return false;
+  return data.some((row) => row.make.toLowerCase() === make.toLowerCase());
+}
+
+export async function getLuxuryLoadFactor() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase.from("luxury_settings").select("load_factor").eq("id", true).maybeSingle();
+    if (!error && data) return Number(data.load_factor);
+  }
+  return LUXURY_LOAD_FACTOR;
 }
 
 export async function validateCoupon(code) {
@@ -199,7 +247,7 @@ export async function validateCoupon(code) {
   return validateCouponLocal(code);
 }
 
-export async function computeEstimate({ fromCity, toCity, vehicleType, selectedAddOns = [], couponCode }) {
+export async function computeEstimate({ fromCity, toCity, vehicleType, make, selectedAddOns = [], couponCode }) {
   const route = await getRoute(fromCity, toCity);
   if (!route) return null;
 
@@ -209,15 +257,28 @@ export async function computeEstimate({ fromCity, toCity, vehicleType, selectedA
   // multiplier resolves to 0 (no line shown), SUV/Luxury show a surcharge,
   // Hatchback's sub-1.0 multiplier shows a discount.
   const vehiclePriceMultiplier = vehicleTypes.find((v) => v.name === vehicleType)?.priceMultiplier ?? 1;
-  const vehicleSurcharge = Math.round(route.price * (vehiclePriceMultiplier - 1));
+  const rawVehicleSurcharge = Math.round(route.price * (vehiclePriceMultiplier - 1));
+
+  const isLuxury = await isLuxuryMake(make);
+  const luxuryLoadFactor = isLuxury ? await getLuxuryLoadFactor() : 1;
+  // The luxury multiplier applies to the vehicle/transportation cost only —
+  // never to flat-fee add-ons like Insurance — and is folded directly into
+  // vehicleSurcharge here (rather than applied separately at the end) so
+  // every place that displays "route.price + vehicleSurcharge" as the
+  // Transportation total automatically shows the luxury-inclusive figure,
+  // and subtotal below is a plain, reconcilable sum instead of hiding an
+  // extra multiplication the customer can't see the reason for.
+  const vehicleSurcharge = Math.round((route.price + rawVehicleSurcharge) * luxuryLoadFactor) - route.price;
 
   const addOnCatalog = await getAddOnServices();
   const addOnBreakdown = addOnCatalog.filter((a) => selectedAddOns.includes(a.key));
   const addOnsTotal = addOnBreakdown.reduce((sum, a) => sum + Number(a.price), 0);
 
-  const base = route.price + vehicleSurcharge + SERVICE_CHARGE + addOnsTotal;
-  const gst = Math.round(base * GST_RATE);
-  const subtotal = base + gst;
+  // No separate service charge or GST line anymore — GST (and any other
+  // applicable tax) is treated as baked into this figure rather than added
+  // on top and itemized; see the "Inclusive of GST and all taxes" note
+  // wherever this total is displayed.
+  const subtotal = route.price + vehicleSurcharge + addOnsTotal;
 
   const coupon = await validateCoupon(couponCode);
   // "flat" coupons are a straight rupee amount off — clamp to the subtotal
@@ -241,8 +302,8 @@ export async function computeEstimate({ fromCity, toCity, vehicleType, selectedA
     addOnsTotal,
     addOnBreakdown,
     selectedAddOns,
-    serviceCharge: SERVICE_CHARGE,
-    gst,
+    isLuxury,
+    luxuryLoadFactor,
     subtotal,
     coupon,
     discount,

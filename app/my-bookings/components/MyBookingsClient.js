@@ -203,20 +203,11 @@ function PriceBreakdownCard({ booking }) {
       <div className="mt-3 flex flex-col divide-y divide-slate-100">
         <PriceRow
           label={`Transportation (${estimate.fromCity ?? "—"} → ${estimate.toCity ?? "—"})`}
-          value={formatINR(estimate.routePrice ?? 0)}
+          value={formatINR((estimate.routePrice ?? 0) + (estimate.vehicleSurcharge || 0))}
         />
-        {Boolean(estimate.vehicleSurcharge) && (
-          <PriceRow
-            label={`Vehicle Type (${estimate.vehicleType})`}
-            value={`${estimate.vehicleSurcharge > 0 ? "+" : "-"}${formatINR(Math.abs(estimate.vehicleSurcharge))}`}
-            negative={estimate.vehicleSurcharge < 0}
-          />
-        )}
-        <PriceRow label="Service Charges" value={formatINR(estimate.serviceCharge ?? 0)} />
         {estimate.addOnBreakdown?.map((a) => (
           <PriceRow key={a.key ?? a.label} label={a.label} value={formatINR(a.price)} />
         ))}
-        <PriceRow label="GST" value={formatINR(estimate.gst ?? 0)} />
         {Boolean(estimate.discount) && (
           <PriceRow
             label={
@@ -231,7 +222,10 @@ function PriceBreakdownCard({ booking }) {
       </div>
 
       <div className="mt-4 flex items-center justify-between rounded-2xl bg-red-50 p-4">
-        <span className="text-sm font-extrabold text-[#0b1e42] uppercase">{finalQuote ? "Final Amount" : "Estimated Total"}</span>
+        <div>
+          <span className="text-sm font-extrabold text-[#0b1e42] uppercase">{finalQuote ? "Final Amount" : "Estimated Total"}</span>
+          <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
+        </div>
         <span className="text-xl font-extrabold text-red-600">{formatINR(finalQuote ?? estimate.total)}</span>
       </div>
 

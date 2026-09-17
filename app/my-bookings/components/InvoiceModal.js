@@ -18,11 +18,11 @@ export default function InvoiceModal({ open, onClose, booking }) {
 
   const lineItems = estimate
     ? [
-        { label: `Transportation (${estimate.fromCity} → ${estimate.toCity})`, amount: estimate.routePrice },
-        estimate.vehicleSurcharge ? { label: `Vehicle Type (${estimate.vehicleType})`, amount: estimate.vehicleSurcharge } : null,
-        { label: "Service Charges", amount: estimate.serviceCharge },
+        {
+          label: `Transportation (${estimate.fromCity} → ${estimate.toCity})`,
+          amount: estimate.routePrice + (estimate.vehicleSurcharge || 0),
+        },
         estimate.addOnsTotal ? { label: "Value Added Services", amount: estimate.addOnsTotal } : null,
-        { label: "GST", amount: estimate.gst },
         estimate.discount ? { label: `Discount${estimate.coupon ? ` (${estimate.coupon.code})` : ""}`, amount: -estimate.discount } : null,
       ].filter(Boolean)
     : [];
@@ -130,9 +130,12 @@ export default function InvoiceModal({ open, onClose, booking }) {
                 ))}
               </div>
               <div className="mt-4 flex items-center justify-between rounded-2xl bg-red-50 p-4">
-                <span className="text-sm font-extrabold text-[#0b1e42] uppercase">
-                  {booking.finalQuote ? "Final Amount" : "Estimated Total"}
-                </span>
+                <div>
+                  <span className="text-sm font-extrabold text-[#0b1e42] uppercase">
+                    {booking.finalQuote ? "Final Amount" : "Estimated Total"}
+                  </span>
+                  <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
+                </div>
                 <span className="text-xl font-extrabold text-red-600">{formatINR(booking.finalQuote ?? estimate.total)}</span>
               </div>
             </div>
