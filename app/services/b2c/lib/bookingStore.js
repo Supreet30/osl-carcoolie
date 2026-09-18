@@ -189,7 +189,7 @@ function rowToBooking(row, { addresses = [], documents = [], addons = [], charge
     midwayRequested: Boolean(row.midway_requested_at),
     finalPaid: row.final_paid,
     finalRequested: Boolean(row.final_requested_at),
-    charges: charges.map((c) => ({ id: c.id, label: c.label, amount: c.amount })),
+    charges: charges.map((c) => ({ id: c.id, label: c.label, amount: c.amount, receiptUrl: c.receipt_url ?? null })),
     chargesTotal,
     // What's left to collect: whatever the final quote didn't already get
     // covered by the advance/midway/final checkpoints, plus any
@@ -382,10 +382,27 @@ async function updateBookingSupabase(id, updates) {
     .single();
   if (error) throw error;
 
+  // Whether a given payment type already has a successful row logged for
+  // this booking — guards every insert below against double-logging a real
+  // payment (a double-click on "Pay Now", or this same request landing
+  // twice from a flaky connection retry), which the disabled-while-paying
+  // button in PaymentClient.js only prevents client-side, not at the DB.
+  async function alreadyPaid(type) {
+    const { data, error: checkError } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("booking_id", row.id)
+      .eq("type", type)
+      .eq("status", "success")
+      .maybeSingle();
+    if (checkError) throw checkError;
+    return Boolean(data);
+  }
+
   // Log the 10% advance as its own payments row (the audit trail the admin
   // panel's booking detail page reads), not just the running total on the
   // booking itself.
-  if ("advancePaid" in updates) {
+  if ("advancePaid" in updates && !(await alreadyPaid("advance"))) {
     const { error: paymentError } = await supabase.from("payments").insert({
       booking_id: row.id,
       type: "advance",
@@ -398,7 +415,7 @@ async function updateBookingSupabase(id, updates) {
 
   // Same audit-trail logging as the advance above, for the 50%
   // mid-transit checkpoint.
-  if ("midwayPaid" in updates) {
+  if ("midwayPaid" in updates && !(await alreadyPaid("midway"))) {
     const { error: paymentError } = await supabase.from("payments").insert({
       booking_id: row.id,
       type: "midway",
@@ -416,7 +433,7 @@ async function updateBookingSupabase(id, updates) {
   // panel's audit trail) shows what the customer actually owed on the
   // quote itself separately from whatever admin-added charges (pickup,
   // dropoff, tolls) rode along with this same checkout.
-  if ("finalPaid" in updates) {
+  if ("finalPaid" in updates && !(await alreadyPaid("balance"))) {
     const chargesTotal = children.charges.reduce((sum, c) => sum + Number(c.amount), 0);
     const baseAmount = Math.max(0, Math.round(updates.finalPaid - chargesTotal));
     const paymentRows = [
@@ -569,4 +586,17 @@ export async function updateBookingDocument(bookingCode, docType, file) {
     },
   };
   saveBookingsLocal(bookings);
+}
+
+// Mints a short-lived signed URL for a receipt the admin attached to an
+// additional charge (booking_charges.receipt_url) — same private
+// booking-documents bucket and pattern as the admin panel's
+// getDocumentSignedUrl, just called from the customer side. Only
+// meaningful when Supabase is actually configured; there's nothing to
+// sign for a purely local-storage booking.
+export async function getChargeReceiptUrl(path) {
+  if (!isSupabaseConfigured || !path) return null;
+  const { data, error } = await supabase.storage.from("booking-documents").createSignedUrl(path, 120);
+  if (error) throw error;
+  return data.signedUrl;
 }

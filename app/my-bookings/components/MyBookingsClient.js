@@ -29,7 +29,14 @@ import {
   User,
   Wind,
 } from "lucide-react";
-import { BOOKING_STATUS, STATUS_STEPS, getBooking, getBookings, updateBookingDocument } from "../../services/b2c/lib/bookingStore";
+import {
+  BOOKING_STATUS,
+  STATUS_STEPS,
+  getBooking,
+  getBookings,
+  getChargeReceiptUrl,
+  updateBookingDocument,
+} from "../../services/b2c/lib/bookingStore";
 import { formatINR } from "../../services/b2c/lib/pricing";
 
 // Same number the site-wide WhatsApp CTA (app/components/Whatsapp.jsx) uses
@@ -194,8 +201,22 @@ function PriceRow({ label, value, muted, negative }) {
 // quote / advance paid), so this reads as the definitive record for the
 // booking rather than just what was estimated up front.
 function PriceBreakdownCard({ booking }) {
-  const { estimate, finalQuote, advancePaid, midwayPaid, charges, chargesTotal, remainingBalance } = booking;
+  const { estimate, finalQuote, advancePaid, midwayPaid, finalPaid, charges, chargesTotal, remainingBalance } = booking;
   if (!estimate) return null;
+
+  // Opens a blank tab synchronously (so it isn't caught by popup blockers
+  // once the async signed-URL fetch below resolves) and points it at the
+  // receipt once the URL comes back.
+  async function handleViewReceipt(path) {
+    const win = window.open("", "_blank");
+    try {
+      const url = await getChargeReceiptUrl(path);
+      if (url && win) win.location.href = url;
+      else win?.close();
+    } catch {
+      win?.close();
+    }
+  }
 
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
@@ -297,7 +318,21 @@ function PriceBreakdownCard({ booking }) {
           <p className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Additional Charges</p>
           <div className="mt-2 flex flex-col divide-y divide-slate-100">
             {charges.map((c) => (
-              <PriceRow key={c.id} label={c.label} value={formatINR(c.amount)} />
+              <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{c.label}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {c.receiptUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleViewReceipt(c.receiptUrl)}
+                      className="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-200"
+                    >
+                      <Receipt className="h-3 w-3" /> View Receipt
+                    </button>
+                  )}
+                  <span className="text-sm text-slate-600">{formatINR(c.amount)}</span>
+                </span>
+              </div>
             ))}
           </div>
         </div>

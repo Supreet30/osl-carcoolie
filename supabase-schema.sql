@@ -560,10 +560,16 @@ create table if not exists booking_charges (
   label text not null,
   amount numeric(10, 2) not null,
   added_by uuid references admin_users (id),
+  -- Optional proof of an ad-hoc charge (a toll receipt, a repair invoice,
+  -- etc.) — object path in the booking-documents bucket, same storage
+  -- convention as booking_documents.file_url. Only offered for custom
+  -- charges, not the reserved "Pickup Charges"/"Dropoff Charges" labels.
+  receipt_url text,
   created_at timestamptz not null default now()
 );
 
 create index if not exists booking_charges_booking_id_idx on booking_charges (booking_id);
+alter table booking_charges add column if not exists receipt_url text;
 
 -- 10% advance + 50% midway + remaining balance payments.
 create table if not exists payments (
