@@ -90,7 +90,12 @@ export default function BookingSummary({ estimate, details }) {
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">Transportation</span>
                 <span className="font-semibold text-white">
-                  {formatINR(estimate.routePrice + (estimate.vehicleSurcharge || 0))}
+                  {formatINR(
+                    estimate.routePrice +
+                      (estimate.vehicleSurcharge || 0) +
+                      (estimate.pickupCharge || 0) +
+                      (estimate.dropoffCharge || 0)
+                  )}
                 </span>
               </div>
               {estimate.addOnsTotal > 0 && (
@@ -111,7 +116,7 @@ export default function BookingSummary({ estimate, details }) {
               <p className="text-base font-extrabold text-white">Estimated Total</p>
               <div className="text-right">
                 <p className="text-2xl font-extrabold text-white">{formatINR(estimate.total)}</p>
-                <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
+                <p className="text-[11px] text-slate-400">Incl. of all taxes</p>
               </div>
             </div>
           </>

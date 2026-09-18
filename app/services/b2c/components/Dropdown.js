@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 
 // A custom listbox that replaces a bare native <select> inside "Get an
@@ -15,6 +16,15 @@ import { Check, ChevronDown, Search } from "lucide-react";
 // groupCitiesByState() — to render section headers (used for the city
 // pickers), which also turns on the search box below (Make/Model/Year stay
 // short flat lists that don't need one).
+//
+// The panel renders through a portal into document.body, positioned by
+// real screen coordinates (not CSS position:absolute nested in the normal
+// tree) — every field here lives inside the estimate modal's scrollable
+// form (overflow-y-auto) inside an overflow-hidden form/shell, all needed
+// for the modal's own scrolling to work. A plain absolutely-positioned
+// panel got silently clipped the moment it grew past whichever of those
+// ancestors' edges came first, instead of floating on top like it's
+// supposed to.
 function OptionButton({ option, value, onChange, setOpen }) {
   const selected = option === value;
   return (
@@ -39,14 +49,37 @@ function OptionButton({ option, value, onChange, setOpen }) {
 export default function Dropdown({ icon: Icon, iconClassName, placeholder, value, onChange, options, disabled }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef = useRef(null);
+  const [rect, setRect] = useState(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
   const searchInputRef = useRef(null);
   const isGrouped = options.length > 0 && typeof options[0] === "object";
+
+  // Recomputes the trigger's screen position whenever it might have moved
+  // — on open, and on any scroll (capture:true so it also catches the
+  // modal's own inner scroll container, not just the window) or resize
+  // while open, so the portaled panel keeps tracking the field instead of
+  // drifting once the form is scrolled.
+  useEffect(() => {
+    if (!open) return undefined;
+    function updateRect() {
+      if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect());
+    }
+    updateRect();
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => {
+      window.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
     function handlePointerDown(event) {
-      if (!containerRef.current?.contains(event.target)) setOpen(false);
+      if (triggerRef.current?.contains(event.target)) return;
+      if (panelRef.current?.contains(event.target)) return;
+      setOpen(false);
     }
     function handleKeyDown(event) {
       if (event.key === "Escape") setOpen(false);
@@ -77,8 +110,9 @@ export default function Dropdown({ icon: Icon, iconClassName, placeholder, value
       : options;
 
   return (
-    <span className="relative mt-2 block" ref={containerRef}>
+    <span className="relative mt-2 block">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
@@ -95,51 +129,55 @@ export default function Dropdown({ icon: Icon, iconClassName, placeholder, value
         className={`pointer-events-none absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
       />
 
-      <div
-        role="listbox"
-        className={`absolute top-full left-0 z-20 w-full pt-2 transition-all duration-200 ${
-          open ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0"
-        }`}
-      >
-        <div className="rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-900/5">
-          {isGrouped && options.length > 0 && (
-            <div className="relative px-1 pt-1 pb-2">
-              <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search cities…"
-                className="w-full rounded-xl bg-slate-50 py-2.5 pr-3 pl-10 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-          )}
-          <div className="max-h-56 overflow-y-auto">
-            {options.length === 0 ? (
-              <p className="px-3 py-2.5 text-sm text-slate-400">No options available.</p>
-            ) : isGrouped ? (
-              <>
-                {filteredGroups.length === 0 && (
-                  <p className="px-3 py-2.5 text-sm text-slate-400">No cities match &ldquo;{search}&rdquo;.</p>
-                )}
-                {filteredGroups.map((group) => (
-                  <div key={group.label}>
-                    <p className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">{group.label}</p>
-                    {group.options.map((option) => (
-                      <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
+      {open &&
+        rect &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="listbox"
+            style={{ position: "fixed", top: rect.bottom + 8, left: rect.left, width: rect.width, zIndex: 1000 }}
+          >
+            <div className="rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-900/5">
+              {isGrouped && options.length > 0 && (
+                <div className="relative px-1 pt-1 pb-2">
+                  <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search cities…"
+                    className="w-full rounded-xl bg-slate-50 py-2.5 pr-3 pl-10 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              )}
+              <div className="max-h-56 overflow-y-auto">
+                {options.length === 0 ? (
+                  <p className="px-3 py-2.5 text-sm text-slate-400">No options available.</p>
+                ) : isGrouped ? (
+                  <>
+                    {filteredGroups.length === 0 && (
+                      <p className="px-3 py-2.5 text-sm text-slate-400">No cities match &ldquo;{search}&rdquo;.</p>
+                    )}
+                    {filteredGroups.map((group) => (
+                      <div key={group.label}>
+                        <p className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">{group.label}</p>
+                        {group.options.map((option) => (
+                          <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
+                        ))}
+                      </div>
                     ))}
-                  </div>
-                ))}
-              </>
-            ) : (
-              options.map((option) => (
-                <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
-              ))
-            )}
-          </div>
-        </div>
-      </div>
+                  </>
+                ) : (
+                  options.map((option) => (
+                    <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </span>
   );
 }

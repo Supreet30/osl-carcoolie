@@ -1,12 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
-import CityDropdown from "./CityDropdown";
-import { CITIES, getCities, groupCitiesByState } from "../lib/pricing";
+import { getRoute } from "../lib/pricing";
+
+const PIN_REGEX = /^\d{6}$/;
+
+// Small status note under a PIN field. PIN code is the only way to set a
+// city here now — no dropdown fallback — so "not_matched"/"error" can't
+// point at one; they just ask for a different/rechecked PIN instead.
+function PincodeStatus({ status }) {
+  if (status.status === "checking") {
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+        <Loader2 className="h-3 w-3 animate-spin" /> Detecting city…
+      </span>
+    );
+  }
+  if (status.status === "matched") {
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
+        <CheckCircle2 className="h-3 w-3" /> Detected: {status.city}
+      </span>
+    );
+  }
+  if (status.status === "not_matched") {
+    return (
+      <span className="mt-1.5 block text-xs text-amber-600">
+        We don&apos;t recognize this PIN code as a serviced city yet — double-check it or try a nearby one.
+      </span>
+    );
+  }
+  if (status.status === "error") {
+    return <span className="mt-1.5 block text-xs text-slate-400">Couldn&apos;t check this PIN right now — please try again.</span>;
+  }
+  return null;
+}
 
 // One photo per stage of the journey — cycled automatically below so the
 // hero shows pickup -> in transit -> destination on a loop, in step with
@@ -31,19 +63,97 @@ function RouteMarker({ state }) {
 }
 
 export default function B2cHero() {
-  const [cities, setCities] = useState(CITIES);
+  // fromCity/toCity are never picked directly anymore — PIN code is the
+  // only input, resolved to a city via /api/resolve-pincode below. Still
+  // needed as state: EstimateModal wants a city (not a PIN) to pre-fill,
+  // and the route preview looks itself up by city.
   const [fromCity, setFromCity] = useState("");
   const [toCity, setToCity] = useState("");
+  const [pickupPin, setPickupPin] = useState("");
+  const [destinationPin, setDestinationPin] = useState("");
+  const [pickupPinStatus, setPickupPinStatus] = useState({ status: "idle" });
+  const [destinationPinStatus, setDestinationPinStatus] = useState({ status: "idle" });
   const [showEstimate, setShowEstimate] = useState(false);
   const [cityError, setCityError] = useState("");
+  // While the route-exists check (getRoute) is in flight, after the PIN
+  // checks above already passed — brief, but worth a disabled/labeled
+  // button so a slow connection doesn't look like a dead click.
+  const [checkingRoute, setCheckingRoute] = useState(false);
   const [activeStop, setActiveStop] = useState(0);
+  const cityErrorRef = useRef(null);
 
-  // Loads from Supabase (if configured) so this dropdown always matches
-  // whatever cities the admin panel actually has active — same fetch
-  // EstimateModal itself does when it opens.
+  // Scrolls the error into view the moment one appears, regardless of
+  // which check set it (PIN format, same city, or no route) — the form
+  // sits well down the page, so a silently-appearing error above/below the
+  // fold is easy to miss otherwise.
   useEffect(() => {
-    getCities().then(setCities);
-  }, []);
+    if (cityError) cityErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [cityError]);
+
+  // Keeps each field numeric-as-you-type and caps it at 6 digits, matching
+  // a real Indian PIN code.
+  function handlePinInput(setter) {
+    return (event) => setter(event.target.value.replace(/\D/g, "").slice(0, 6));
+  }
+
+  // Resolves a 6-digit PIN to one of our serviced cities via
+  // /api/resolve-pincode (see that route — it's proxied server-side).
+  // Debounced. Always sets fromCity on a match, even when it equals the
+  // other leg's city — handleSubmit's fromCity===toCity check is what
+  // reports that case accurately; silently skipping the set here would
+  // leave toCity/fromCity empty while the status still claims "Detected",
+  // producing a misleading "enter a valid PIN" error instead.
+  useEffect(() => {
+    if (!PIN_REGEX.test(pickupPin)) {
+      setPickupPinStatus({ status: "idle" });
+      return undefined;
+    }
+    let cancelled = false;
+    setPickupPinStatus({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/resolve-pincode?pincode=${pickupPin}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.matched) setFromCity(data.city);
+        setPickupPinStatus(
+          data.matched ? { status: "matched", city: data.city, pin: pickupPin } : { status: "not_matched" }
+        );
+      } catch {
+        if (!cancelled) setPickupPinStatus({ status: "error" });
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pickupPin]);
+
+  useEffect(() => {
+    if (!PIN_REGEX.test(destinationPin)) {
+      setDestinationPinStatus({ status: "idle" });
+      return undefined;
+    }
+    let cancelled = false;
+    setDestinationPinStatus({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/resolve-pincode?pincode=${destinationPin}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.matched) setToCity(data.city);
+        setDestinationPinStatus(
+          data.matched ? { status: "matched", city: data.city, pin: destinationPin } : { status: "not_matched" }
+        );
+      } catch {
+        if (!cancelled) setDestinationPinStatus({ status: "error" });
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [destinationPin]);
 
   // Cycles pickup -> in transit -> destination on a loop, same 2s-per-stop
   // pacing ServiceStepsWheel uses for its own auto-advancing steps.
@@ -55,29 +165,43 @@ export default function B2cHero() {
     return () => clearInterval(id);
   }, []);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     if (!fromCity || !toCity) {
-      setCityError("Select both a pickup and destination city.");
+      setCityError("Enter a valid pickup and destination PIN code.");
       return;
     }
     if (fromCity === toCity) {
-      setCityError("Pickup and destination can't be the same city.");
+      setCityError("Pickup and destination PIN codes resolve to the same city.");
       return;
     }
+
     setCityError("");
+    setCheckingRoute(true);
+    const route = await getRoute(fromCity, toCity);
+    setCheckingRoute(false);
+    if (!route) {
+      setCityError("We don't have a route between these two cities yet.");
+      return;
+    }
+
     setShowEstimate(true);
   }
 
   return (
     <>
-      <section className="relative isolate overflow-hidden bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-20">
+      <section className="relative isolate bg-white px-6 pt-32 pb-16 sm:pt-40 sm:pb-20">
+      {/* Clips just this decorative blob (it's offset past the section's own
+          edges) instead of the whole section — overflow-hidden on the
+          section itself used to also clip the city dropdowns' floating
+          panels the moment they grew taller than the hero, cutting them off
+          against whatever section happened to sit below instead of letting
+          them float on top of it. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-28 -left-28 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]" />
+      </div>
       <Navbar />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-28 -left-28 -z-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
-      />
 
       <div className="relative mx-auto grid w-full max-w-6xl items-start gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
         <div>
@@ -135,33 +259,42 @@ export default function B2cHero() {
           <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-100 sm:p-10 lg:mt-12">
             <h2 className="text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">Get Your Estimated Quote</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              Select your pickup and destination city to get a quick transportation estimate.
+              Enter your pickup and destination PIN code — we&apos;ll detect the city for you — to get a quick
+              transportation estimate.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-              {/* Each dropdown excludes whatever's already picked in the
-                  other one — Delhi selected as source means Delhi can't even
-                  be picked as destination, not just rejected on submit. */}
-              <CityDropdown
-                label="Source City"
-                placeholder="Select pickup city"
-                iconClassName="text-red-500"
-                value={fromCity}
-                onChange={setFromCity}
-                cities={groupCitiesByState(cities.filter((c) => c.name !== toCity))}
-              />
-
-              <CityDropdown
-                label="Destination City"
-                placeholder="Select destination city"
-                iconClassName="text-[#0b1e42]"
-                value={toCity}
-                onChange={setToCity}
-                cities={groupCitiesByState(cities.filter((c) => c.name !== fromCity))}
-              />
+              <div className="grid gap-5">
+                <label className="block">
+                  <span className="block text-xs font-bold tracking-wide text-slate-500 uppercase">Pickup PIN Code</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pickupPin}
+                    onChange={handlePinInput(setPickupPin)}
+                    placeholder="e.g. 110001"
+                    className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+                  />
+                  <PincodeStatus status={pickupPinStatus} />
+                </label>
+                <label className="block">
+                  <span className="block text-xs font-bold tracking-wide text-slate-500 uppercase">Destination PIN Code</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={destinationPin}
+                    onChange={handlePinInput(setDestinationPin)}
+                    placeholder="e.g. 400001"
+                    className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+                  />
+                  <PincodeStatus status={destinationPinStatus} />
+                </label>
+              </div>
 
               {cityError && (
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+                <p ref={cityErrorRef} className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                   {cityError}
                 </p>
@@ -169,10 +302,19 @@ export default function B2cHero() {
 
               <button
                 type="submit"
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700"
+                disabled={checkingRoute}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700 disabled:cursor-wait disabled:opacity-80"
               >
-                Get Estimated Quote
-                <ArrowRight className="h-4 w-4" />
+                {checkingRoute ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Checking Route…
+                  </>
+                ) : (
+                  <>
+                    Get Estimated Quote
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </form>
 
@@ -189,6 +331,10 @@ export default function B2cHero() {
         onClose={() => setShowEstimate(false)}
         initialFromCity={fromCity}
         initialToCity={toCity}
+        initialPickupPin={pickupPin}
+        initialDestinationPin={destinationPin}
+        initialPickupPinStatus={pickupPinStatus}
+        initialDestinationPinStatus={destinationPinStatus}
       />
     </>
   );

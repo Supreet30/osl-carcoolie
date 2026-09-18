@@ -86,6 +86,18 @@ function getLocalRoute(fromCity, toCity) {
 // offline fallback for when Supabase isn't configured/reachable.
 export const LUXURY_LOAD_FACTOR = 1.2;
 
+// Route prices in the `routes` table (and the local fallback) are stored
+// exclusive of GST, so it's computed and added here rather than baked into
+// those numbers.
+export const GST_RATE = 0.18;
+
+// Flat fee added when the customer opts for a CarCoolie driver (instead of
+// self drop-off/pickup) on either leg — covers the driver making a special
+// trip to the customer's location rather than the hub. Each leg is
+// independent: choosing a driver for both pickup and drop-off adds both.
+export const DRIVER_PICKUP_CHARGE = 1000;
+export const DRIVER_DROPOFF_CHARGE = 1000;
+
 // Vehicle type changes the price via a multiplier on the route's base
 // transportation price, not a flat rupee amount — so the surcharge scales
 // with distance (a longer, pricier route gets a bigger SUV surcharge, a
@@ -247,7 +259,16 @@ export async function validateCoupon(code) {
   return validateCouponLocal(code);
 }
 
-export async function computeEstimate({ fromCity, toCity, vehicleType, make, selectedAddOns = [], couponCode }) {
+export async function computeEstimate({
+  fromCity,
+  toCity,
+  vehicleType,
+  make,
+  selectedAddOns = [],
+  couponCode,
+  pickupMethod,
+  dropoffMethod,
+}) {
   const route = await getRoute(fromCity, toCity);
   if (!route) return null;
 
@@ -274,37 +295,44 @@ export async function computeEstimate({ fromCity, toCity, vehicleType, make, sel
   const addOnBreakdown = addOnCatalog.filter((a) => selectedAddOns.includes(a.key));
   const addOnsTotal = addOnBreakdown.reduce((sum, a) => sum + Number(a.price), 0);
 
-  // No separate service charge or GST line anymore — GST (and any other
-  // applicable tax) is treated as baked into this figure rather than added
-  // on top and itemized; see the "Inclusive of GST and all taxes" note
-  // wherever this total is displayed.
-  const subtotal = route.price + vehicleSurcharge + addOnsTotal;
+  const pickupCharge = pickupMethod === "driver" ? DRIVER_PICKUP_CHARGE : 0;
+  const dropoffCharge = dropoffMethod === "driver" ? DRIVER_DROPOFF_CHARGE : 0;
+
+  // Route price, vehicle surcharge, add-ons, and driver pickup/drop-off
+  // fees are all stored/priced exclusive of GST — this is the taxable
+  // value GST_RATE below applies to.
+  const subtotal = route.price + vehicleSurcharge + addOnsTotal + pickupCharge + dropoffCharge;
+  const gst = Math.round(subtotal * GST_RATE);
 
   const coupon = await validateCoupon(couponCode);
   // "flat" coupons are a straight rupee amount off — clamp to the subtotal
   // so a flat coupon bigger than the order (or stacked with other charges)
   // can never push the total negative. "percent" coupons can't exceed the
   // subtotal by construction (value is 0-100), but Math.round + clamp keeps
-  // both branches consistent.
+  // both branches consistent. Discount is off the pre-tax subtotal, not the
+  // GST-inclusive total — GST itself isn't discounted.
   const discount = coupon
     ? Math.min(
         coupon.type === "flat" ? Math.round(coupon.value) : Math.round(subtotal * (coupon.value / 100)),
         subtotal
       )
     : 0;
-  const total = subtotal - discount;
+  const total = subtotal + gst - discount;
 
   return {
     route,
     vehicleType: vehicleType || null,
     minDays: route.minDays ?? 1,
     vehicleSurcharge,
+    pickupCharge,
+    dropoffCharge,
     addOnsTotal,
     addOnBreakdown,
     selectedAddOns,
     isLuxury,
     luxuryLoadFactor,
     subtotal,
+    gst,
     coupon,
     discount,
     total,

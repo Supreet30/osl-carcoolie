@@ -5,15 +5,18 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
+  Building2,
   Check,
   CheckCircle2,
   CreditCard,
   Download,
+  ExternalLink,
   FileCheck,
   FileSignature,
   FileText,
   Fingerprint,
   IdCard,
+  Info,
   Loader2,
   LocateFixed,
   Map,
@@ -31,22 +34,55 @@ import MapPickerModal from "./MapPickerModal";
 
 // Driving License is dropped from this list — `license` stays defined in
 // the DB's document_type enum (Postgres can't drop an enum value once
-// added), it's just never offered here anymore. `downloadUrl` (Customer
-// Authority Letter only) points at a blank, fillable copy of the letter to
-// print/sign/scan and re-upload — see public/documents/.
+// added), it's just never offered here anymore. `downloadUrl` (NOC and
+// Customer Authority Letter) points at a blank, fillable copy of that
+// document to print/sign/scan and re-upload — see public/documents/.
+// `description` drives the info icon's hover tooltip on each card.
 const DOCUMENT_TYPES = [
-  { key: "puc", label: "PUC", icon: Wind },
-  { key: "noc", label: "NOC", icon: FileCheck },
-  { key: "rc", label: "RC Card", icon: FileText },
-  { key: "aadhaar", label: "Aadhaar", icon: Fingerprint },
-  { key: "insurance", label: "Insurance", icon: Shield },
+  {
+    key: "puc",
+    label: "PUC",
+    icon: Wind,
+    description: "Pollution Under Control certificate — proves your vehicle meets emission standards.",
+  },
+  {
+    key: "noc",
+    label: "NOC",
+    icon: FileCheck,
+    downloadUrl: "/documents/noc-format.pdf",
+    description: "No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport.",
+  },
+  {
+    key: "rc",
+    label: "RC Card",
+    icon: FileText,
+    description: "Registration Certificate — proves vehicle ownership and registration details.",
+  },
+  {
+    key: "aadhaar",
+    label: "Aadhaar",
+    icon: Fingerprint,
+    description: "Government-issued identity proof of the vehicle owner.",
+  },
+  {
+    key: "insurance",
+    label: "Insurance",
+    icon: Shield,
+    description: "Valid vehicle insurance policy covering the transit period.",
+  },
   {
     key: "authority_letter",
     label: "Customer Authority Letter",
     icon: FileSignature,
     downloadUrl: "/documents/customer-authority-letter-format.pdf",
+    description: "A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle.",
   },
-  { key: "pan", label: "PAN Card", icon: IdCard },
+  {
+    key: "pan",
+    label: "PAN Card",
+    icon: IdCard,
+    description: "Permanent Account Number card — identity/tax proof of the vehicle owner.",
+  },
 ];
 
 const PICKUP_METHODS = [
@@ -60,6 +96,15 @@ const DROPOFF_METHODS = [
 ];
 
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
+
+// Placeholder until real per-city hub data exists — every leg shows the
+// same dummy hub name/address (with the leg's own city appended) rather
+// than nothing at all, so the "within 50km" question below has a concrete
+// reference point to ask about.
+const CARCOOLIE_HUB = {
+  name: "CarCoolie Hub",
+  address: "Plot 14, Sector 6, Industrial Growth Centre",
+};
 
 // The labels drop AM/PM (they're always a daytime business-hours slot), so
 // this is the only unambiguous place "01:00" means 1pm, not 1am — used to
@@ -90,9 +135,9 @@ function isTimeSlotDisabled(slot, dateISO) {
   return isTimeSlotPast(slot, dateISO);
 }
 
-// Adds `days` calendar days to an ISO (YYYY-MM-DD) date string — used to
-// turn the route's minimum transit days into the drop-off date picker's
-// `min` bound (see minDropoffISO below).
+// Adds `days` calendar days to an ISO (YYYY-MM-DD) date string — used both
+// for the pickup date picker's earliest-selectable bound and for computing
+// the expected delivery date from the route's minimum transit days.
 function addDaysISO(iso, days) {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(y, m - 1, d);
@@ -140,7 +185,7 @@ function TextField({ label, ...props }) {
       {label}
       <input
         {...props}
-        className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+        className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500 focus:ring-2 focus:ring-red-500"
       />
     </label>
   );
@@ -194,6 +239,75 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {captured.address}
         </p>
+      )}
+    </div>
+  );
+}
+
+// Shown under both Pickup and Drop-off Method — self mode still needs this
+// (it's where the customer goes to drop off/collect the car), driver mode
+// shows it too as the reference point for the 50km question below it.
+// `withinHub` is null until the customer picks an answer, so the warning
+// only ever appears after an explicit "No" — never on load.
+function HubLocationCard({ city, showProximityCheck, withinHub, onWithinHubChange, name }) {
+  const fullAddress = `${CARCOOLIE_HUB.address}${city ? `, ${city}` : ""}`;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${CARCOOLIE_HUB.name} ${fullAddress}`)}`;
+
+  return (
+    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-[#0b1e42]">
+            <Building2 className="h-4 w-4 shrink-0 text-red-500" strokeWidth={2} />
+            {CARCOOLIE_HUB.name}
+            {city ? ` – ${city}` : ""}
+          </p>
+          <p className="mt-1 pl-6 text-xs text-slate-500">{fullAddress}</p>
+        </div>
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-red-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-red-50"
+        >
+          <MapPin className="h-3.5 w-3.5 shrink-0" />
+          View on Map
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </a>
+      </div>
+
+      {showProximityCheck && (
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <p className="text-xs font-semibold text-[#0b1e42]">Is your location within 50km of this hub?</p>
+          <div className="mt-2 flex gap-5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <input
+                type="radio"
+                name={name}
+                checked={withinHub === true}
+                onChange={() => onWithinHubChange(true)}
+                className="h-3.5 w-3.5 accent-red-600"
+              />
+              Yes
+            </label>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <input
+                type="radio"
+                name={name}
+                checked={withinHub === false}
+                onChange={() => onWithinHubChange(false)}
+                className="h-3.5 w-3.5 accent-red-600"
+              />
+              No
+            </label>
+          </div>
+          {withinHub === false && (
+            <p className="mt-3 flex items-start gap-1.5 text-xs font-semibold text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Additional charges may apply for locations beyond 50km from the hub.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -281,21 +395,23 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const [pickupMethod, setPickupMethod] = useState(estimate?.pickupMethod ?? "self");
   const [pickupLocation, setPickupLocation] = useState(null);
   const [pickupDate, setPickupDate] = useState(estimate?.date ?? "");
-  // No default slot pre-selected (matches dropoffTimeSlot below) — every
-  // slot starts disabled until a date is actually picked, so nothing
-  // should already look chosen before then either.
+  // No default slot pre-selected — every slot starts disabled until a date
+  // is actually picked, so nothing should already look chosen before then.
   const [timeSlot, setTimeSlot] = useState(null);
+  // Self-declared for now (see HubLocationCard) — null until the customer
+  // actually answers, true/false after. Not yet wired into pricing; just
+  // surfaces the "extra charges may apply" note when they say "No".
+  const [pickupWithinHub, setPickupWithinHub] = useState(null);
 
   const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(null);
-  const [dropoffDate, setDropoffDate] = useState("");
-  const [dropoffTimeSlot, setDropoffTimeSlot] = useState(null);
+  const [dropoffWithinHub, setDropoffWithinHub] = useState(null);
 
   // `estimate` loads from localStorage after mount (see BookingPageClient.js
   // — it's null on first render), so the useState defaults above miss it.
-  // Adjusting state during render, same pattern as lastMinDropoffISO below:
-  // once estimateLoaded flips true, pull the methods off whatever estimate
-  // actually came back (still "self"/"self" if there wasn't one).
+  // Adjusting state during render, same pattern as lastEarliestPickupISO
+  // below: once estimateLoaded flips true, pull the methods off whatever
+  // estimate actually came back (still "self"/"self" if there wasn't one).
   const [lastEstimateLoaded, setLastEstimateLoaded] = useState(estimateLoaded);
   if (estimateLoaded !== lastEstimateLoaded) {
     setLastEstimateLoaded(estimateLoaded);
@@ -321,9 +437,9 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const allTodaySlotsPast = TIME_SLOTS.every((slot) => TIME_SLOT_START_HOUR[slot] <= new Date().getHours());
   const earliestPickupISO = allTodaySlotsPast ? addDaysISO(todayISO, 1) : todayISO;
 
-  // Same "adjusting state during render" idea as minDropoffISO below:
-  // clears an already-picked pickup date of today if today's slots run out
-  // from under it while the form is still open.
+  // Adjusting state during render — clears an already-picked pickup date of
+  // today if today's slots run out from under it while the form is still
+  // open.
   const [lastEarliestPickupISO, setLastEarliestPickupISO] = useState(earliestPickupISO);
   if (earliestPickupISO !== lastEarliestPickupISO) {
     setLastEarliestPickupISO(earliestPickupISO);
@@ -333,26 +449,13 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   }
 
   // The route's minimum transit days (admin-set per direction in Route
-  // Pricing — see routes.min_days) gates how soon a drop-off can be
-  // scheduled after the chosen pickup date: minDays=3 and pickup=day 1
-  // disables days 2-4, leaving day 5 onward selectable. Falls back to 1
-  // (same as the DB column's default) if the estimate predates this field
-  // or wasn't loaded from a real route.
+  // Pricing — see routes.min_days) — falls back to 1 (same as the DB
+  // column's default) if the estimate predates this field or wasn't loaded
+  // from a real route. Drives the expected delivery date below rather than
+  // gating a drop-off date picker — the customer no longer picks their own
+  // drop-off date/slot, it's just pickup date + this many days.
   const minTransitDays = estimate?.minDays ?? 1;
-  const minDropoffISO = pickupDate ? addDaysISO(pickupDate, minTransitDays + 1) : earliestPickupISO;
-
-  // Adjusting state during render (not in an effect — see the same
-  // pattern in EstimateModal.js) rather than setState-in-an-effect:
-  // clears an already-picked drop-off date if changing the pickup date
-  // pushes the minimum past it, so a stale, now-invalid date can't get
-  // silently submitted.
-  const [lastMinDropoffISO, setLastMinDropoffISO] = useState(minDropoffISO);
-  if (minDropoffISO !== lastMinDropoffISO) {
-    setLastMinDropoffISO(minDropoffISO);
-    if (dropoffDate && dropoffDate < minDropoffISO) {
-      setDropoffDate("");
-    }
-  }
+  const expectedDeliveryISO = pickupDate ? addDaysISO(pickupDate, minTransitDays) : null;
 
   const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
   // Which button opened the modal — "current" auto-fires MapPickerModal's
@@ -383,44 +486,34 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const [gstCompanyName, setGstCompanyName] = useState(null);
   const GSTIN_RE = /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}$/;
 
-  useEffect(() => {
-    if (!GSTIN_RE.test(gstin)) {
-      setGstStatus("idle");
-      setGstCompanyName(null);
-      return undefined;
-    }
-    let cancelled = false;
+  // Manual now — hits the real verify-gst API only when the customer
+  // clicks Verify, not on every keystroke. Editing the field after a
+  // result (see the input's onChange below) resets status back to "idle"
+  // so a stale "verified"/"not found" badge never lingers over a GSTIN
+  // that's since changed.
+  async function handleVerifyGstin() {
+    if (!GSTIN_RE.test(gstin)) return;
     setGstStatus("checking");
     setGstCompanyName(null);
-    // Small debounce so a still-typing GSTIN (which only happens to pass
-    // the 15-char regex mid-edit if characters are reordered/pasted) doesn't
-    // fire a lookup per keystroke.
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/verify-gst?gstin=${encodeURIComponent(gstin)}`);
-        const data = await res.json();
-        if (cancelled) return;
-        if (data.flag && data.tradeName) {
-          setGstStatus("verified");
-          setGstCompanyName(data.tradeName);
-        } else {
-          setGstStatus("not_found");
-        }
-      } catch {
-        if (!cancelled) setGstStatus("error");
+    try {
+      const res = await fetch(`/api/verify-gst?gstin=${encodeURIComponent(gstin)}`);
+      const data = await res.json();
+      if (data.flag && data.tradeName) {
+        setGstStatus("verified");
+        setGstCompanyName(data.tradeName);
+      } else {
+        setGstStatus("not_found");
       }
-    }, 400);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [gstin]);
+    } catch {
+      setGstStatus("error");
+    }
+  }
   // Neither source exists — the manual fields are the only option, so they
   // stop being optional.
   const billingCustomRequired = !pickupAddressAvailable && !dropoffAddressAvailable;
 
-  // Adjusting state during render (same pattern as lastMinDropoffISO
-  // below): if the leg billingMode currently points at just stopped
+  // Adjusting state during render (same pattern as lastEarliestPickupISO
+  // above): if the leg billingMode currently points at just stopped
   // collecting an address (its method switched to Self), fall back to the
   // manual fields instead of silently staying on a source that's gone.
   if (billingMode === "pickup" && !pickupAddressAvailable) {
@@ -526,6 +619,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         pin: formData.get("pickup_pin"),
         method: pickupMethod,
         capturedLocation: pickupLocation,
+        withinHubRadius: pickupWithinHub,
         date: formData.get("pickup_date"),
         timeSlot,
       },
@@ -539,8 +633,13 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         pin: formData.get("dropoff_pin"),
         method: dropoffMethod,
         capturedLocation: dropoffLocation,
-        date: formData.get("dropoff_date"),
-        timeSlot: dropoffTimeSlot,
+        withinHubRadius: dropoffWithinHub,
+        // No longer customer-picked — expected delivery date is computed
+        // from the pickup date + the route's minimum transit days instead
+        // (see expectedDeliveryISO above); there's no drop-off time slot
+        // concept anymore either.
+        date: expectedDeliveryISO,
+        timeSlot: null,
       },
       // Copies the pickup/destination address straight over rather than
       // relying on (empty, hidden) billing_* fields when one of the "Same
@@ -652,6 +751,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 inputMode="numeric"
                 defaultValue={estimate?.pickupPin ?? ""}
                 placeholder="110001"
+                readOnly={Boolean(estimate?.pickupPin)}
+                title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : undefined}
               />
             </div>
           </>
@@ -680,6 +781,14 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               onOpenMap={() => handleOpenMap("pickup")}
             />
           )}
+
+          <HubLocationCard
+            city={estimate?.fromCity}
+            showProximityCheck={pickupMethod === "driver"}
+            withinHub={pickupWithinHub}
+            onWithinHubChange={setPickupWithinHub}
+            name="pickup_within_hub_radius"
+          />
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <label className="block text-sm font-semibold text-[#0b1e42]">
@@ -751,6 +860,10 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 inputMode="numeric"
                 defaultValue={estimate?.destinationPin ?? ""}
                 placeholder="400001"
+                readOnly={Boolean(estimate?.destinationPin)}
+                title={
+                  estimate?.destinationPin ? "Set from your estimate — get a new estimate to change it" : undefined
+                }
               />
             </div>
           </>
@@ -779,52 +892,29 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             />
           )}
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <label className="block text-sm font-semibold text-[#0b1e42]">
-              Select Date
-              <span className="mt-2 block">
-                <DatePicker
-                  name="dropoff_date"
-                  value={dropoffDate}
-                  onChange={setDropoffDate}
-                  min={minDropoffISO}
-                  disabled={!pickupDate}
-                />
-              </span>
-              <span className="mt-1.5 block text-xs font-normal text-slate-400">
-                {pickupDate
-                  ? `Minimum ${minTransitDays} day${minTransitDays === 1 ? "" : "s"} transit — earliest ${formatISOShort(minDropoffISO)}`
-                  : "Select a pickup date first."}
-              </span>
-            </label>
+          <HubLocationCard
+            city={estimate?.toCity}
+            showProximityCheck={dropoffMethod === "driver"}
+            withinHub={dropoffWithinHub}
+            onWithinHubChange={setDropoffWithinHub}
+            name="dropoff_within_hub_radius"
+          />
 
-            <div>
-              <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {TIME_SLOTS.map((slot) => {
-                  const selected = dropoffTimeSlot === slot;
-                  const past = isTimeSlotDisabled(slot, dropoffDate);
-                  return (
-                    <button
-                      key={slot}
-                      type="button"
-                      disabled={past}
-                      onClick={() => setDropoffTimeSlot(slot)}
-                      title={past ? (dropoffDate ? "This time slot has already passed today" : "Select a date first") : undefined}
-                      className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
-                        selected
-                          ? "bg-red-600 text-white"
-                          : past
-                            ? "cursor-not-allowed bg-slate-50 text-slate-300 ring-1 ring-slate-100"
-                            : "bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Read-only — replaces what used to be a customer-pickable
+              drop-off date/time slot. Just pickup date + the route's
+              minimum transit days (see expectedDeliveryISO above). */}
+          <div className="mt-6">
+            <p className="text-sm font-semibold text-[#0b1e42]">Expected Delivery Date</p>
+            {expectedDeliveryISO ? (
+              <p className="mt-2 text-sm font-semibold text-[#0b1e42]">
+                {formatISOShort(expectedDeliveryISO)}
+                <span className="ml-1.5 font-normal text-slate-400">
+                  ({minTransitDays} day{minTransitDays === 1 ? "" : "s"} transit from pickup)
+                </span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">Select a pickup date above to see the expected delivery date.</p>
+            )}
           </div>
         </div>
       </SectionCard>
@@ -844,7 +934,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           />
 
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {DOCUMENT_TYPES.map(({ key, label, icon: Icon, downloadUrl }) => {
+            {DOCUMENT_TYPES.map(({ key, label, icon: Icon, downloadUrl, description }) => {
               const state = uploads[key];
               return (
                 <div
@@ -855,6 +945,18 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                       : "border-slate-200 bg-white hover:border-red-200"
                   }`}
                 >
+                  {description && (
+                    <span
+                      tabIndex={0}
+                      aria-label={description}
+                      className="group absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#0b1e42] focus:bg-slate-100 focus:text-[#0b1e42] focus:outline-none"
+                    >
+                      <Info className="h-3.5 w-3.5" strokeWidth={2} />
+                      <span className="pointer-events-none absolute top-full left-0 z-10 mt-2 w-44 rounded-md bg-[#0b1e42] px-2.5 py-1.5 text-left text-[10px] leading-snug font-semibold whitespace-normal text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
+                        {description}
+                      </span>
+                    </span>
+                  )}
                   {downloadUrl && (
                     <a
                       href={downloadUrl}
@@ -943,18 +1045,35 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             customer's GSTIN doesn't have to match the pickup/drop-off/custom
             address, so this stays visible (and optional) in every mode. */}
         <div className="mt-5">
-          <TextField
-            label="GSTIN (Optional - for a GST invoice)"
-            name="billing_gstin"
-            type="text"
-            placeholder="e.g. 07AAAAA0000A1Z5"
-            pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}"
-            maxLength={15}
-            title="Enter a valid 15-character GSTIN"
-            style={{ textTransform: "uppercase" }}
-            value={gstin}
-            onChange={(event) => setGstin(event.target.value.toUpperCase())}
-          />
+          <label className="block text-sm font-semibold text-[#0b1e42]">
+            GSTIN (Optional - for a GST invoice)
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                name="billing_gstin"
+                type="text"
+                placeholder="e.g. 07AAAAA0000A1Z5"
+                pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}"
+                maxLength={15}
+                title="Enter a valid 15-character GSTIN"
+                style={{ textTransform: "uppercase" }}
+                value={gstin}
+                onChange={(event) => {
+                  setGstin(event.target.value.toUpperCase());
+                  setGstStatus("idle");
+                  setGstCompanyName(null);
+                }}
+                className="min-w-0 flex-1 rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+              />
+              <button
+                type="button"
+                disabled={!GSTIN_RE.test(gstin) || gstStatus === "checking"}
+                onClick={handleVerifyGstin}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[#0b1e42] px-4 py-3 text-xs font-bold text-white transition-colors hover:bg-[#0b1e42]/90 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {gstStatus === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+              </button>
+            </div>
+          </label>
           {gstStatus === "checking" && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…

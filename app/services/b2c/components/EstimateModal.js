@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -22,15 +22,12 @@ import {
 } from "lucide-react";
 import {
   ADD_ON_SERVICES,
-  CITIES,
   VEHICLE_MODELS,
   computeEstimate,
   formatINR,
   getAddOnServices,
-  getCities,
   getRoute,
   getVehicleModels,
-  groupCitiesByState,
   validateCoupon,
 } from "../lib/pricing";
 import { saveEstimate } from "../lib/bookingStore";
@@ -52,6 +49,36 @@ const DROPOFF_METHODS = [
   { key: "self", label: "Self Pickup", subtitle: "Collect the car from our hub", icon: MapPin },
   { key: "driver", label: "CarCoolie Driver Drop-off", subtitle: "Driver delivers car to your location", icon: User },
 ];
+
+// Small status note under a PIN field — reflects pickupPinStatus /
+// destinationPinStatus from the resolution effects above.
+function PincodeStatus({ status }) {
+  if (status.status === "checking") {
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+        <Loader2 className="h-3 w-3 animate-spin" /> Detecting city…
+      </span>
+    );
+  }
+  if (status.status === "matched") {
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
+        <CheckCircle2 className="h-3 w-3" /> Detected: {status.city}
+      </span>
+    );
+  }
+  if (status.status === "not_matched") {
+    return (
+      <span className="mt-1.5 block text-xs text-amber-600">
+        We don&apos;t recognize this PIN code as a serviced city yet — double-check it or try a nearby one.
+      </span>
+    );
+  }
+  if (status.status === "error") {
+    return <span className="mt-1.5 block text-xs text-slate-400">Couldn&apos;t check this PIN right now — please try again.</span>;
+  }
+  return null;
+}
 
 function LoadingView() {
   return (
@@ -75,18 +102,20 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
   const [showAddOns, setShowAddOns] = useState(false);
 
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const { route, minDays, vehicleSurcharge, addOnsTotal, addOnBreakdown, selectedAddOns, subtotal } = estimate;
+  const { route, minDays, vehicleSurcharge, pickupCharge, dropoffCharge, addOnsTotal, addOnBreakdown, selectedAddOns, subtotal, gst } =
+    estimate;
   // "flat" coupons are a straight rupee amount off; "percent" ones are a
   // percentage of the subtotal — mirrors computeEstimate()'s discount logic
   // in lib/pricing.js. Clamped to the subtotal so a flat coupon bigger than
-  // the order can never push the total negative.
+  // the order can never push the total negative. Discount is off the
+  // pre-tax subtotal — GST itself isn't discounted.
   const discount = appliedCoupon
     ? Math.min(
         appliedCoupon.type === "flat" ? Math.round(appliedCoupon.value) : Math.round(subtotal * (appliedCoupon.value / 100)),
         subtotal
       )
     : 0;
-  const total = subtotal - discount;
+  const total = subtotal + gst - discount;
 
   async function handleApplyCoupon() {
     setApplyingCoupon(true);
@@ -116,10 +145,13 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       dropoffMethod,
       routePrice: route.price,
       vehicleSurcharge,
+      pickupCharge,
+      dropoffCharge,
       addOnsTotal,
       addOnBreakdown,
       selectedAddOns,
       subtotal,
+      gst,
       coupon: appliedCoupon,
       discount,
       total,
@@ -155,7 +187,9 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
             <span className="text-slate-600">
               Transportation ({route.fromCity} &rarr; {route.toCity})
             </span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(route.price + vehicleSurcharge)}</span>
+            <span className="font-semibold text-[#0b1e42]">
+              {formatINR(route.price + vehicleSurcharge + pickupCharge + dropoffCharge)}
+            </span>
           </div>
           {addOnsTotal > 0 && (
             <>
@@ -232,10 +266,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       </div>
 
       <div className="flex items-center justify-between rounded-2xl bg-red-50 p-4">
-        <div>
-          <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
-          <p className="text-xs text-slate-400">Inclusive of GST and all taxes</p>
-        </div>
+        <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
         <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
       </div>
 
@@ -251,7 +282,16 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
   );
 }
 
-export default function EstimateModal({ open, onClose, initialFromCity, initialToCity }) {
+export default function EstimateModal({
+  open,
+  onClose,
+  initialFromCity,
+  initialToCity,
+  initialPickupPin,
+  initialDestinationPin,
+  initialPickupPinStatus,
+  initialDestinationPinStatus,
+}) {
   const [step, setStep] = useState("form");
   const [fromCity, setFromCity] = useState(initialFromCity ?? "");
   const [toCity, setToCity] = useState(initialToCity ?? "");
@@ -265,15 +305,31 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
   // Decorative — collected but not part of the estimate, same as before
   // this was a native <select>.
   const [registrationYear, setRegistrationYear] = useState("");
-  const [pickupPin, setPickupPin] = useState("");
-  const [destinationPin, setDestinationPin] = useState("");
+  const [pickupPin, setPickupPin] = useState(initialPickupPin ?? "");
+  const [destinationPin, setDestinationPin] = useState(initialDestinationPin ?? "");
+  // "idle" | "checking" | "matched" | "not_matched" | "error", plus the
+  // `pin` it applies to — drives the small status note under each PIN
+  // field. City is derived from the PIN alone now (no manual picker), so
+  // "matched" is also what makes fromCity/toCity valid for the estimate at
+  // all. Seeded from the hero's own already-resolved status (see
+  // initialPickupPinStatus below) so a PIN the customer already typed
+  // there doesn't get silently re-checked here too.
+  const [pickupPinStatus, setPickupPinStatus] = useState(initialPickupPinStatus ?? { status: "idle" });
+  const [destinationPinStatus, setDestinationPinStatus] = useState(initialDestinationPinStatus ?? { status: "idle" });
   const [pickupMethod, setPickupMethod] = useState("self");
   const [dropoffMethod, setDropoffMethod] = useState("self");
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [routeError, setRouteError] = useState("");
   const [estimate, setEstimate] = useState(null);
-  const [cities, setCities] = useState(CITIES);
   const [addOnCatalog, setAddOnCatalog] = useState(ADD_ON_SERVICES);
+  const routeErrorRef = useRef(null);
+
+  // Same reasoning as B2cHero.js's cityError effect — this form scrolls
+  // internally and the error sits partway down it, easy to miss if it
+  // appears while the customer's scrolled elsewhere in the modal.
+  useEffect(() => {
+    if (routeError) routeErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [routeError]);
 
   const makes = [...new Set(vehicleModels.map((v) => v.make))];
   const modelsForMake = vehicleModels.filter((v) => v.make === make).map((v) => v.model);
@@ -292,28 +348,101 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
 
   // Adjusting state during render (React's documented alternative to an
   // effect for this) rather than setState-in-an-effect: carries over
-  // whatever the B2cHero city dropdowns already had selected the moment
-  // this modal opens, without re-snapping fromCity/toCity back on every
-  // render while it's open (which would fight the user's own selection
-  // inside the modal).
+  // whatever PIN codes (and the cities they'd already resolved to) the
+  // B2cHero quote card had the moment this modal opens, without
+  // re-snapping these fields back on every render while it's open (which
+  // would fight the customer's own edits inside the modal).
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
       setFromCity(initialFromCity ?? "");
       setToCity(initialToCity ?? "");
+      setPickupPin(initialPickupPin ?? "");
+      setDestinationPin(initialDestinationPin ?? "");
+      setPickupPinStatus(initialPickupPinStatus ?? { status: "idle" });
+      setDestinationPinStatus(initialDestinationPinStatus ?? { status: "idle" });
     }
   }
 
   useEffect(() => {
     if (!open) return;
     // Refreshes from Supabase (if configured) every time the modal opens —
-    // falls back to the static CITIES/ADD_ON_SERVICES/VEHICLE_MODELS already
+    // falls back to the static ADD_ON_SERVICES/VEHICLE_MODELS already
     // shown above if it's not configured or the fetch fails.
-    getCities().then(setCities);
     getAddOnServices().then(setAddOnCatalog);
     getVehicleModels().then(setVehicleModels);
   }, [open]);
+
+  // Resolves a 6-digit PIN to one of our serviced cities via
+  // /api/resolve-pincode (proxied server-side — see that route for why).
+  // City is derived from the PIN alone now — there's no dropdown to
+  // auto-fill, fromCity/toCity ARE the resolved city. Debounced so it
+  // doesn't fire on every keystroke while still typing toward 6 digits.
+  // Always sets the city on a match, even when it equals the other leg's
+  // city — handleSubmit's fromCity===toCity check is what reports that
+  // case accurately; skipping the set here would leave the city empty
+  // while the status still claims "Detected", producing a misleading
+  // "enter a valid PIN" error instead of the real one.
+  useEffect(() => {
+    if (!PIN_REGEX.test(pickupPin)) {
+      setPickupPinStatus({ status: "idle" });
+      return undefined;
+    }
+    // Already resolved for this exact PIN — the hero quote card just
+    // handed this over already matched, so don't re-check it here too.
+    // Anything short of a confirmed match (idle/checking/not_matched/error)
+    // still gets a fresh attempt, since those aren't results worth trusting.
+    if (pickupPinStatus.status === "matched" && pickupPinStatus.pin === pickupPin) return undefined;
+    let cancelled = false;
+    setPickupPinStatus({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/resolve-pincode?pincode=${pickupPin}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.matched) setFromCity(data.city);
+        setPickupPinStatus(
+          data.matched ? { status: "matched", city: data.city, pin: pickupPin } : { status: "not_matched" }
+        );
+      } catch {
+        if (!cancelled) setPickupPinStatus({ status: "error" });
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pickupPinStatus is read, not a trigger; re-resolving whenever it changes would fight the customer's own pincode-driven pick
+  }, [pickupPin]);
+
+  useEffect(() => {
+    if (!PIN_REGEX.test(destinationPin)) {
+      setDestinationPinStatus({ status: "idle" });
+      return undefined;
+    }
+    if (destinationPinStatus.status === "matched" && destinationPinStatus.pin === destinationPin) return undefined;
+    let cancelled = false;
+    setDestinationPinStatus({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/resolve-pincode?pincode=${destinationPin}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.matched) setToCity(data.city);
+        setDestinationPinStatus(
+          data.matched ? { status: "matched", city: data.city, pin: destinationPin } : { status: "not_matched" }
+        );
+      } catch {
+        if (!cancelled) setDestinationPinStatus({ status: "error" });
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- destinationPinStatus is read, not a trigger; re-resolving whenever it changes would fight the customer's own pincode-driven pick
+  }, [destinationPin]);
 
   if (!open) return null;
 
@@ -345,14 +474,6 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
       setRouteError("We couldn't determine a vehicle type for that model.");
       return;
     }
-    if (!fromCity || !toCity) {
-      setRouteError("Select both a pickup and destination location.");
-      return;
-    }
-    if (fromCity === toCity) {
-      setRouteError("Pickup and destination can't be the same city.");
-      return;
-    }
     if (!pickupPin.trim() || !destinationPin.trim()) {
       setRouteError("Enter both a pickup and destination PIN code.");
       return;
@@ -363,6 +484,17 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
     }
     if (pickupPin === destinationPin) {
       setRouteError("Pickup and destination PIN codes can't be the same.");
+      return;
+    }
+    // City is derived from the PIN codes above (see the resolution effects)
+    // — if either still hasn't resolved to one by now, there's no city to
+    // look a route up for yet.
+    if (!fromCity || !toCity) {
+      setRouteError("We couldn't detect a city for one of those PIN codes — please double-check them.");
+      return;
+    }
+    if (fromCity === toCity) {
+      setRouteError("Pickup and destination PIN codes resolve to the same city.");
       return;
     }
     const route = await getRoute(fromCity, toCity);
@@ -376,7 +508,7 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
     // Supabase fetch inside computeEstimate is usually much faster than
     // this — it reads as "calculating" rather than a flash of content.
     const [computed] = await Promise.all([
-      computeEstimate({ fromCity, toCity, vehicleType, make, selectedAddOns }),
+      computeEstimate({ fromCity, toCity, vehicleType, make, selectedAddOns, pickupMethod, dropoffMethod }),
       new Promise((resolve) => setTimeout(resolve, 1400)),
     ]);
     setEstimate(computed);
@@ -503,33 +635,6 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                 </div>
                 <div className="mt-4 grid gap-5 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-[#0b1e42]">
-                    Pickup Location
-                    {/* Excludes whatever's picked as the destination — a
-                        city can't be its own route. */}
-                    <Dropdown
-                      icon={MapPin}
-                      iconClassName="text-red-500"
-                      placeholder="Select city"
-                      value={fromCity}
-                      onChange={setFromCity}
-                      options={groupCitiesByState(cities.filter((c) => c.name !== toCity))}
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-[#0b1e42]">
-                    Destination Location
-                    <Dropdown
-                      icon={MapPin}
-                      iconClassName="text-[#0b1e42]"
-                      placeholder="Select city"
-                      value={toCity}
-                      onChange={setToCity}
-                      options={groupCitiesByState(cities.filter((c) => c.name !== fromCity))}
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                  <label className="block text-sm font-semibold text-[#0b1e42]">
                     Source Pincode
                     <input
                       type="text"
@@ -540,6 +645,7 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                       placeholder="Enter pickup PIN code"
                       className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
                     />
+                    <PincodeStatus status={pickupPinStatus} />
                   </label>
                   <label className="block text-sm font-semibold text-[#0b1e42]">
                     Destination Pincode
@@ -552,9 +658,15 @@ export default function EstimateModal({ open, onClose, initialFromCity, initialT
                       placeholder="Enter destination PIN code"
                       className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
                     />
+                    <PincodeStatus status={destinationPinStatus} />
                   </label>
                 </div>
-                {routeError && <p className="mt-3 text-xs font-semibold text-red-600">{routeError}</p>}
+
+                {routeError && (
+                  <p ref={routeErrorRef} className="mt-3 text-xs font-semibold text-red-600">
+                    {routeError}
+                  </p>
+                )}
               </div>
 
               <div>

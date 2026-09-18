@@ -134,7 +134,6 @@ export default function InvoiceModal({ open, onClose, booking }) {
                   <span className="text-sm font-extrabold text-[#0b1e42] uppercase">
                     {booking.finalQuote ? "Final Amount" : "Estimated Total"}
                   </span>
-                  <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
                 </div>
                 <span className="text-xl font-extrabold text-red-600">{formatINR(booking.finalQuote ?? estimate.total)}</span>
               </div>

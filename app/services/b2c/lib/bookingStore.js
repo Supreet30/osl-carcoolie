@@ -20,7 +20,9 @@ export const BOOKING_STATUS = {
   QUOTE_SENT: "quote_sent",
   ADVANCE_PAID: "advance_paid",
   CONFIRMED: "confirmed",
+  MIDWAY_PAID: "midway_paid",
   IN_TRANSIT: "in_transit",
+  OUT_FOR_DELIVERY: "out_for_delivery",
   DELIVERED: "delivered",
 };
 
@@ -34,9 +36,11 @@ export const STATUS_STEPS = [
   { key: "docs_sent", label: "Documents Sent for Review" },
   { key: BOOKING_STATUS.DOCS_REVIEW, label: "Documents Under Review" },
   { key: BOOKING_STATUS.QUOTE_SENT, label: "Final Quote Generated" },
-  { key: BOOKING_STATUS.ADVANCE_PAID, label: "Advance Paid (30%)" },
+  { key: BOOKING_STATUS.ADVANCE_PAID, label: "Advance Paid (10%)" },
   { key: BOOKING_STATUS.CONFIRMED, label: "Booking Confirmed" },
+  { key: BOOKING_STATUS.MIDWAY_PAID, label: "50% Payment Received" },
   { key: BOOKING_STATUS.IN_TRANSIT, label: "In Transit" },
+  { key: BOOKING_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
   { key: BOOKING_STATUS.DELIVERED, label: "Delivered" },
 ];
 
@@ -128,6 +132,10 @@ function addressToRow(bookingId, type, address) {
     captured_address: address.capturedLocation?.address ?? null,
     captured_lat: address.capturedLocation?.lat ?? null,
     captured_lng: address.capturedLocation?.lng ?? null,
+    // null = never asked/answered (self method, or driver method left
+    // unanswered) — not the same as false ("No"), so this stays a
+    // nullable boolean rather than defaulting to true/false.
+    within_hub_radius: typeof address.withinHubRadius === "boolean" ? address.withinHubRadius : null,
     slot_date: address.date || null,
     time_slot: address.timeSlot || null,
   };
@@ -148,6 +156,7 @@ function addressRowToJs(row) {
     capturedLocation: row.captured_address
       ? { address: row.captured_address, lat: row.captured_lat, lng: row.captured_lng }
       : null,
+    withinHubRadius: row.within_hub_radius,
     date: row.slot_date,
     timeSlot: row.time_slot,
   };
@@ -168,13 +177,36 @@ function documentRowsToJs(rows) {
   return documents;
 }
 
-function rowToBooking(row, { addresses = [], documents = [], addons = [] } = {}) {
+function rowToBooking(row, { addresses = [], documents = [], addons = [], charges = [] } = {}) {
+  const chargesTotal = charges.reduce((sum, c) => sum + Number(c.amount), 0);
   return {
     id: row.booking_code,
     status: row.status,
     createdAt: row.created_at,
     finalQuote: row.final_quote,
     advancePaid: row.advance_paid,
+    midwayPaid: row.midway_paid,
+    midwayRequested: Boolean(row.midway_requested_at),
+    finalPaid: row.final_paid,
+    finalRequested: Boolean(row.final_requested_at),
+    charges: charges.map((c) => ({ id: c.id, label: c.label, amount: c.amount })),
+    chargesTotal,
+    // What's left to collect: whatever the final quote didn't already get
+    // covered by the advance/midway/final checkpoints, plus any
+    // admin-added charges (pickup, dropoff, tolls, etc.). Once final_paid
+    // is in, this settles back to just whatever's been charged since (a
+    // late-added charge still shows as outstanding, rather than always
+    // reading zero the moment the final payment clears).
+    remainingBalance:
+      row.final_quote != null
+        ? Math.round(
+            Number(row.final_quote) -
+              Number(row.advance_paid ?? 0) -
+              Number(row.midway_paid ?? 0) -
+              Number(row.final_paid ?? 0) +
+              chargesTotal
+          )
+        : null,
     registrationNumber: row.vehicle_registration_number ?? null,
     estimate: {
       fromCity: row.from_city?.name ?? null,
@@ -185,6 +217,8 @@ function rowToBooking(row, { addresses = [], documents = [], addons = [] } = {})
       model: row.vehicle_model ?? null,
       routePrice: row.route_price,
       vehicleSurcharge: row.vehicle_surcharge ?? 0,
+      pickupCharge: row.pickup_charge ?? 0,
+      dropoffCharge: row.dropoff_charge ?? 0,
       serviceCharge: row.service_charge,
       addOnsTotal: row.addons_total,
       selectedAddOns: addons.map((a) => a.add_on_service?.key).filter(Boolean),
@@ -212,12 +246,13 @@ const BOOKING_SELECT =
   "*, from_city:from_city_id(name), to_city:to_city_id(name), vehicle_type:vehicle_type_id(name)";
 
 async function fetchBookingChildren(bookingId) {
-  const [{ data: addresses }, { data: documents }, { data: addons }] = await Promise.all([
+  const [{ data: addresses }, { data: documents }, { data: addons }, { data: charges }] = await Promise.all([
     supabase.from("booking_addresses").select("*").eq("booking_id", bookingId),
     supabase.from("booking_documents").select("*").eq("booking_id", bookingId),
     supabase.from("booking_addons").select("price_at_booking, add_on_service:add_on_service_id(key, label)").eq("booking_id", bookingId),
+    supabase.from("booking_charges").select("*").eq("booking_id", bookingId).order("created_at"),
   ]);
-  return { addresses: addresses ?? [], documents: documents ?? [], addons: addons ?? [] };
+  return { addresses: addresses ?? [], documents: documents ?? [], addons: addons ?? [], charges: charges ?? [] };
 }
 
 async function createBookingSupabase(bookingData) {
@@ -245,6 +280,8 @@ async function createBookingSupabase(bookingData) {
       distance_km: estimate?.distanceKm ?? null,
       route_price: estimate?.routePrice ?? null,
       vehicle_surcharge: estimate?.vehicleSurcharge ?? 0,
+      pickup_charge: estimate?.pickupCharge ?? 0,
+      dropoff_charge: estimate?.dropoffCharge ?? 0,
       service_charge: estimate?.serviceCharge ?? null,
       addons_total: estimate?.addOnsTotal ?? 0,
       gst_amount: estimate?.gst ?? null,
@@ -334,6 +371,8 @@ async function updateBookingSupabase(id, updates) {
   if ("status" in updates) patch.status = updates.status;
   if ("finalQuote" in updates) patch.final_quote = updates.finalQuote;
   if ("advancePaid" in updates) patch.advance_paid = updates.advancePaid;
+  if ("midwayPaid" in updates) patch.midway_paid = updates.midwayPaid;
+  if ("finalPaid" in updates) patch.final_paid = updates.finalPaid;
 
   const { data: row, error } = await supabase
     .from("bookings")
@@ -343,7 +382,7 @@ async function updateBookingSupabase(id, updates) {
     .single();
   if (error) throw error;
 
-  // Log the 30% advance as its own payments row (the audit trail the admin
+  // Log the 10% advance as its own payments row (the audit trail the admin
   // panel's booking detail page reads), not just the running total on the
   // booking itself.
   if ("advancePaid" in updates) {
@@ -357,7 +396,45 @@ async function updateBookingSupabase(id, updates) {
     if (paymentError) throw paymentError;
   }
 
+  // Same audit-trail logging as the advance above, for the 50%
+  // mid-transit checkpoint.
+  if ("midwayPaid" in updates) {
+    const { error: paymentError } = await supabase.from("payments").insert({
+      booking_id: row.id,
+      type: "midway",
+      amount: updates.midwayPaid,
+      status: "success",
+      paid_at: new Date().toISOString(),
+    });
+    if (paymentError) throw paymentError;
+  }
+
   const children = await fetchBookingChildren(row.id);
+
+  // Same again for the final/remaining balance — split into up to two rows
+  // rather than one blended figure, so the payments list (and the admin
+  // panel's audit trail) shows what the customer actually owed on the
+  // quote itself separately from whatever admin-added charges (pickup,
+  // dropoff, tolls) rode along with this same checkout.
+  if ("finalPaid" in updates) {
+    const chargesTotal = children.charges.reduce((sum, c) => sum + Number(c.amount), 0);
+    const baseAmount = Math.max(0, Math.round(updates.finalPaid - chargesTotal));
+    const paymentRows = [
+      { booking_id: row.id, type: "balance", amount: baseAmount, status: "success", paid_at: new Date().toISOString() },
+    ];
+    if (chargesTotal > 0) {
+      paymentRows.push({
+        booking_id: row.id,
+        type: "charges",
+        amount: chargesTotal,
+        status: "success",
+        paid_at: new Date().toISOString(),
+      });
+    }
+    const { error: paymentError } = await supabase.from("payments").insert(paymentRows);
+    if (paymentError) throw paymentError;
+  }
+
   return rowToBooking(row, children);
 }
 
@@ -370,6 +447,11 @@ async function updateBookingSupabase(id, updates) {
 // plain update by id wouldn't even find one. Resets status back to
 // "uploaded" and clears any previous rejection, exactly like a first-time
 // upload, so it re-enters the admin's review queue.
+//
+// Before that overwrite happens, whatever was already in the row (the
+// rejected file included) is archived into booking_document_versions —
+// otherwise the admin would lose the old file and its rejection reason the
+// instant the customer re-uploaded, with no way to compare old vs new.
 async function updateBookingDocumentSupabase(bookingCode, docType, file) {
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
@@ -377,6 +459,25 @@ async function updateBookingDocumentSupabase(bookingCode, docType, file) {
     .eq("booking_code", bookingCode)
     .single();
   if (bookingError) throw bookingError;
+
+  const { data: existing } = await supabase
+    .from("booking_documents")
+    .select("file_name, file_size_mb, file_url, status, rejection_reason")
+    .eq("booking_id", booking.id)
+    .eq("doc_type", docType)
+    .maybeSingle();
+  if (existing?.file_url) {
+    const { error: archiveError } = await supabase.from("booking_document_versions").insert({
+      booking_id: booking.id,
+      doc_type: docType,
+      file_name: existing.file_name,
+      file_size_mb: existing.file_size_mb,
+      file_url: existing.file_url,
+      status: existing.status,
+      rejection_reason: existing.rejection_reason,
+    });
+    if (archiveError) throw archiveError;
+  }
 
   const fileUrl = await uploadDocumentFile(booking.id, docType, file);
   if (!fileUrl) throw new Error("The file couldn't be uploaded — please try again.");

@@ -31,10 +31,19 @@ do $$ begin
     'quote_sent',    -- matches BOOKING_STATUS.QUOTE_SENT
     'advance_paid',  -- matches BOOKING_STATUS.ADVANCE_PAID
     'confirmed',     -- matches BOOKING_STATUS.CONFIRMED
+    'midway_paid',   -- matches BOOKING_STATUS.MIDWAY_PAID
     'in_transit',    -- matches BOOKING_STATUS.IN_TRANSIT
+    'out_for_delivery', -- matches BOOKING_STATUS.OUT_FOR_DELIVERY
     'delivered'      -- matches BOOKING_STATUS.DELIVERED
   );
 exception when duplicate_object then null; end $$;
+
+-- `midway_paid`/`out_for_delivery` were added to an already-shipped enum —
+-- same situation as `billing` on leg_type below, needed for an existing
+-- project to pick up the new values since `create type` above only runs
+-- once.
+alter type booking_status add value if not exists 'midway_paid' after 'confirmed';
+alter type booking_status add value if not exists 'out_for_delivery' after 'in_transit';
 
 do $$ begin
   create type leg_method as enum ('self', 'driver'); -- self drop-off/pickup vs CarCoolie driver
@@ -71,8 +80,16 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type payment_type as enum ('advance', 'balance');
+  create type payment_type as enum ('advance', 'midway', 'balance', 'charges');
 exception when duplicate_object then null; end $$;
+
+-- `midway`/`charges` were added to an already-shipped enum — same pattern
+-- as booking_status.midway_paid above. `charges` is logged as its own row
+-- (rather than folded into `balance`'s amount) whenever the final payment
+-- includes admin-added booking_charges, so the two stay visibly separate
+-- in the payments audit trail instead of one blended figure.
+alter type payment_type add value if not exists 'midway' after 'advance';
+alter type payment_type add value if not exists 'charges' after 'balance';
 
 do $$ begin
   create type payment_status as enum ('pending', 'success', 'failed');
@@ -369,6 +386,13 @@ create table if not exists bookings (
   -- as a plain amount so it still reads correctly even if the vehicle
   -- type's multiplier changes later. See computeEstimate() in pricing.js.
   vehicle_surcharge numeric(10, 2) not null default 0,
+  -- Flat ₹1000 fee each, added at estimate time when the customer opts for
+  -- a CarCoolie driver (leg_method 'driver') instead of self drop-off/
+  -- pickup on that leg — see DRIVER_PICKUP_CHARGE/DRIVER_DROPOFF_CHARGE in
+  -- pricing.js. Independent of each other; both apply if both legs use a
+  -- driver.
+  pickup_charge numeric(10, 2) not null default 0,
+  dropoff_charge numeric(10, 2) not null default 0,
   service_charge numeric(10, 2),
   addons_total numeric(10, 2) not null default 0,
   gst_amount numeric(10, 2),
@@ -380,9 +404,26 @@ create table if not exists bookings (
   destination_pin text,
 
   -- Set by the admin after document review — the customer then pays a
-  -- 30% advance against this.
+  -- 10% advance against this, then a 50% checkpoint once the booking is
+  -- confirmed (see BOOKING_STATUS.MIDWAY_PAID), before the vehicle moves to
+  -- in_transit. Whatever's left of final_quote (plus booking_charges below)
+  -- is settled on delivery.
   final_quote numeric(10, 2),
   advance_paid numeric(10, 2),
+  midway_paid numeric(10, 2),
+  -- Set when the admin clicks "Send Payment Request" on the 50% checkpoint
+  -- — gates the customer's self-serve payment page the same way sending
+  -- the final quote gates the 10% advance, rather than the 50% becoming
+  -- payable the instant the booking is confirmed.
+  midway_requested_at timestamptz,
+  -- The last leg — whatever's left of final_quote once the advance/midway
+  -- checkpoints and booking_charges are accounted for (see
+  -- bookingStore.js's remainingBalance). Same send/manual pattern as the
+  -- 50% checkpoint, gated behind BOOKING_STATUS.OUT_FOR_DELIVERY rather
+  -- than a separate "paid" status — admin still marks Delivered
+  -- separately once it's in.
+  final_paid numeric(10, 2),
+  final_requested_at timestamptz,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -402,6 +443,12 @@ alter table bookings add column if not exists vehicle_surcharge numeric(10, 2) n
 alter table bookings add column if not exists vehicle_registration_number text;
 alter table bookings add column if not exists vehicle_make text;
 alter table bookings add column if not exists vehicle_model text;
+alter table bookings add column if not exists midway_paid numeric(10, 2);
+alter table bookings add column if not exists midway_requested_at timestamptz;
+alter table bookings add column if not exists final_paid numeric(10, 2);
+alter table bookings add column if not exists final_requested_at timestamptz;
+alter table bookings add column if not exists pickup_charge numeric(10, 2) not null default 0;
+alter table bookings add column if not exists dropoff_charge numeric(10, 2) not null default 0;
 
 -- vehicle_type_id originally had no ON DELETE behavior, so Postgres
 -- defaulted to NO ACTION and blocked deleting a vehicle_types row that any
@@ -457,6 +504,12 @@ create table if not exists booking_addresses (
 -- as method/captured_*/slot_date/time_slot on the pickup/dropoff rows).
 alter table booking_addresses add column if not exists gstin text;
 
+-- Self-declared answer to "is your location within 50km of the hub?" —
+-- only asked (and only shown to the customer) when method is 'driver', so
+-- null means either "self method" or "driver but not answered yet", not
+-- "answered no". See HubLocationCard in BookingForm.js.
+alter table booking_addresses add column if not exists within_hub_radius boolean;
+
 -- Vehicle documents (section 3). One row per document type per booking;
 -- `status` is what the admin panel's "docs verification" screen edits.
 create table if not exists booking_documents (
@@ -474,7 +527,45 @@ create table if not exists booking_documents (
   unique (booking_id, doc_type)
 );
 
--- 30% advance + remaining balance payments.
+-- Snapshot of whatever was in a booking_documents row right before a
+-- re-upload replaced it (see updateBookingDocumentSupabase in
+-- bookingStore.js) — booking_documents itself stays one row per doc_type
+-- (that unique constraint above), so without this, a rejected file's
+-- rejection reason and the file itself would be gone the moment the
+-- customer re-uploaded. Lets the admin compare the previous (often
+-- rejected) upload against the new one side by side.
+create table if not exists booking_document_versions (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references bookings (id) on delete cascade,
+  doc_type document_type not null,
+  file_name text,
+  file_size_mb numeric(6, 2),
+  file_url text,
+  status document_status,
+  rejection_reason text,
+  replaced_at timestamptz not null default now()
+);
+
+create index if not exists booking_document_versions_booking_id_idx on booking_document_versions (booking_id);
+
+-- Ad-hoc charges the admin adds against a booking (pickup charges, tolls,
+-- waiting time, anything not known at estimate time) — free-form label +
+-- amount rather than fixed columns, since these are arbitrary and
+-- open-ended. Summed into the customer's remaining balance on delivery
+-- (final_quote - advance_paid - midway_paid + sum(booking_charges.amount) —
+-- see bookingStore.js's rowToBooking()).
+create table if not exists booking_charges (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references bookings (id) on delete cascade,
+  label text not null,
+  amount numeric(10, 2) not null,
+  added_by uuid references admin_users (id),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists booking_charges_booking_id_idx on booking_charges (booking_id);
+
+-- 10% advance + 50% midway + remaining balance payments.
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references bookings (id) on delete cascade,
@@ -545,6 +636,8 @@ alter table bookings enable row level security;
 alter table booking_addons enable row level security;
 alter table booking_addresses enable row level security;
 alter table booking_documents enable row level security;
+alter table booking_document_versions enable row level security;
+alter table booking_charges enable row level security;
 alter table payments enable row level security;
 alter table booking_status_history enable row level security;
 
@@ -663,6 +756,30 @@ create policy "booking_documents owner insert" on booking_documents for insert w
 );
 drop policy if exists "booking_documents admin verify" on booking_documents;
 create policy "booking_documents admin verify" on booking_documents for update using (is_admin_or_anon());
+
+-- document versions: same owner/admin read as booking_documents; inserted
+-- by the customer's own re-upload flow (see updateBookingDocumentSupabase),
+-- so the insert check matches booking_documents' owner insert, not an
+-- admin-only one.
+drop policy if exists "booking_document_versions owner read" on booking_document_versions;
+create policy "booking_document_versions owner read" on booking_document_versions for select using (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
+drop policy if exists "booking_document_versions owner insert" on booking_document_versions;
+create policy "booking_document_versions owner insert" on booking_document_versions for insert with check (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
+
+-- charges: customer/admin can read (so the customer sees what they'll owe
+-- on delivery), only admin adds/removes them.
+drop policy if exists "booking_charges owner read" on booking_charges;
+create policy "booking_charges owner read" on booking_charges for select using (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
+drop policy if exists "booking_charges admin insert" on booking_charges;
+create policy "booking_charges admin insert" on booking_charges for insert with check (is_admin_or_anon());
+drop policy if exists "booking_charges admin delete" on booking_charges;
+create policy "booking_charges admin delete" on booking_charges for delete using (is_admin_or_anon());
 
 drop policy if exists "payments via booking" on payments;
 create policy "payments via booking" on payments for all using (

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Calendar,
+  Car,
   CheckCircle2,
   Circle,
   Clock,
@@ -30,7 +31,6 @@ import {
 } from "lucide-react";
 import { BOOKING_STATUS, STATUS_STEPS, getBooking, getBookings, updateBookingDocument } from "../../services/b2c/lib/bookingStore";
 import { formatINR } from "../../services/b2c/lib/pricing";
-import InvoiceModal from "./InvoiceModal";
 
 // Same number the site-wide WhatsApp CTA (app/components/Whatsapp.jsx) uses
 // — kept as its own constant here since an enquiry from a booking's detail
@@ -61,7 +61,9 @@ const STATUS_BADGE_STYLES = {
   [BOOKING_STATUS.QUOTE_SENT]: "bg-blue-50 text-blue-700",
   [BOOKING_STATUS.ADVANCE_PAID]: "bg-violet-50 text-violet-700",
   [BOOKING_STATUS.CONFIRMED]: "bg-teal-50 text-teal-700",
+  [BOOKING_STATUS.MIDWAY_PAID]: "bg-indigo-50 text-indigo-700",
   [BOOKING_STATUS.IN_TRANSIT]: "bg-orange-50 text-orange-700",
+  [BOOKING_STATUS.OUT_FOR_DELIVERY]: "bg-pink-50 text-pink-700",
   [BOOKING_STATUS.DELIVERED]: "bg-green-50 text-green-700",
 };
 
@@ -192,7 +194,7 @@ function PriceRow({ label, value, muted, negative }) {
 // quote / advance paid), so this reads as the definitive record for the
 // booking rather than just what was estimated up front.
 function PriceBreakdownCard({ booking }) {
-  const { estimate, finalQuote, advancePaid } = booking;
+  const { estimate, finalQuote, advancePaid, midwayPaid, charges, chargesTotal, remainingBalance } = booking;
   if (!estimate) return null;
 
   return (
@@ -203,7 +205,12 @@ function PriceBreakdownCard({ booking }) {
       <div className="mt-3 flex flex-col divide-y divide-slate-100">
         <PriceRow
           label={`Transportation (${estimate.fromCity ?? "—"} → ${estimate.toCity ?? "—"})`}
-          value={formatINR((estimate.routePrice ?? 0) + (estimate.vehicleSurcharge || 0))}
+          value={formatINR(
+            (estimate.routePrice ?? 0) +
+              (estimate.vehicleSurcharge || 0) +
+              (estimate.pickupCharge || 0) +
+              (estimate.dropoffCharge || 0)
+          )}
         />
         {estimate.addOnBreakdown?.map((a) => (
           <PriceRow key={a.key ?? a.label} label={a.label} value={formatINR(a.price)} />
@@ -224,15 +231,14 @@ function PriceBreakdownCard({ booking }) {
       <div className="mt-4 flex items-center justify-between rounded-2xl bg-red-50 p-4">
         <div>
           <span className="text-sm font-extrabold text-[#0b1e42] uppercase">{finalQuote ? "Final Amount" : "Estimated Total"}</span>
-          <p className="text-[11px] text-slate-400">Inclusive of GST and all taxes</p>
         </div>
         <span className="text-xl font-extrabold text-red-600">{formatINR(finalQuote ?? estimate.total)}</span>
       </div>
 
       {finalQuote && (
         <PriceRow
-          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Advance Due (30%)</span>}
-          value={formatINR(finalQuote * 0.3)}
+          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Advance Due (10%)</span>}
+          value={formatINR(finalQuote * 0.1)}
         />
       )}
       {typeof advancePaid === "number" && (
@@ -240,6 +246,70 @@ function PriceBreakdownCard({ booking }) {
           label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Advance Paid</span>}
           value={formatINR(advancePaid)}
         />
+      )}
+      {finalQuote && typeof advancePaid === "number" && typeof midwayPaid !== "number" && (
+        <PriceRow
+          label={
+            <span className="flex items-center gap-1">
+              <CreditCard className="h-3 w-3" /> {booking.midwayRequested ? "50% Payment Due" : "50% Payment (Upcoming)"}
+            </span>
+          }
+          value={formatINR(finalQuote * 0.5)}
+        />
+      )}
+      {typeof midwayPaid === "number" && (
+        <PriceRow
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> 50% Payment Paid</span>}
+          value={formatINR(midwayPaid)}
+        />
+      )}
+      {finalQuote && typeof midwayPaid === "number" && typeof finalPaid !== "number" && (
+        <PriceRow
+          label={
+            <span className="flex items-center gap-1">
+              <CreditCard className="h-3 w-3" />{" "}
+              {booking.finalRequested ? "Final Payment Due" : "Final Payment (Upcoming)"} (
+              {Math.round((((remainingBalance ?? 0) - chargesTotal) / finalQuote) * 100)}%)
+            </span>
+          }
+          value={formatINR((remainingBalance ?? 0) - chargesTotal)}
+        />
+      )}
+      {Boolean(chargesTotal) && typeof finalPaid !== "number" && (
+        <PriceRow
+          label={
+            <span className="flex items-center gap-1">
+              <CreditCard className="h-3 w-3" /> Additional Charges Due
+            </span>
+          }
+          value={formatINR(chargesTotal)}
+        />
+      )}
+      {typeof finalPaid === "number" && (
+        <PriceRow
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Final Payment Paid</span>}
+          value={formatINR(finalPaid)}
+        />
+      )}
+
+      {charges?.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <p className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Additional Charges</p>
+          <div className="mt-2 flex flex-col divide-y divide-slate-100">
+            {charges.map((c) => (
+              <PriceRow key={c.id} label={c.label} value={formatINR(c.amount)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {typeof remainingBalance === "number" && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+          <span className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">
+            Remaining Balance{chargesTotal ? " (incl. charges)" : ""}
+          </span>
+          <span className="text-sm font-extrabold text-[#0b1e42]">{formatINR(remainingBalance)}</span>
+        </div>
       )}
     </div>
   );
@@ -266,6 +336,13 @@ function DetailRow({ icon: Icon, label, value }) {
 // contact + address.
 function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsNote }) {
   const isDriver = !simple && address?.method === "driver";
+  const isDropoff = title === "Drop-off";
+  // Self pickup/drop-off never collects an address at all — showing
+  // "Address: —" for every one of those (the common case) just reads as
+  // noise; only show the row once there's something to show.
+  const addressLine = address
+    ? [address.house, address.street, address.landmark, address.city, address.pin].filter(Boolean).join(", ")
+    : "";
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
       <div className="flex items-center justify-between gap-2">
@@ -292,11 +369,7 @@ function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsN
         <div className="mt-4 flex flex-col gap-2">
           <DetailRow icon={User} label="Contact" value={address.fullName} />
           <DetailRow icon={Phone} label="Phone" value={address.phone} />
-          <DetailRow
-            icon={MapPin}
-            label="Address"
-            value={[address.house, address.street, address.landmark, address.city, address.pin].filter(Boolean).join(", ")}
-          />
+          {addressLine && <DetailRow icon={MapPin} label="Address" value={addressLine} />}
           {address.gstin && <DetailRow icon={Receipt} label="GSTIN" value={address.gstin} />}
           {!simple &&
             isDriver &&
@@ -309,7 +382,18 @@ function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsN
                 No pickup/drop-off location captured yet
               </p>
             ))}
-          {!simple && (
+          {/* Drop-off no longer has a customer-picked time slot — its date
+              is the computed expected delivery date instead (see
+              BookingForm.js), so it gets its own label and drops the row
+              entirely rather than showing "Time Slot: —" for every booking. */}
+          {!simple && isDropoff && (
+            <DetailRow
+              icon={Calendar}
+              label="Expected Delivery Date"
+              value={address.date ? new Date(address.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null}
+            />
+          )}
+          {!simple && !isDropoff && (
             <>
               <DetailRow icon={Calendar} label="Date" value={address.date ? new Date(address.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null} />
               <DetailRow icon={Clock} label="Time Slot" value={address.timeSlot} />
@@ -398,7 +482,6 @@ function BookingDetailView({ booking, onBookingChange }) {
       ? "Same as Destination"
       : null;
   const [tab, setTab] = useState("summary");
-  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   // Re-uploading a rejected document — a fresh pick reaches
   // handleDocFileSelected via the same hidden-input trigger pattern
@@ -477,6 +560,14 @@ function BookingDetailView({ booking, onBookingChange }) {
         )}
       </div>
 
+      {(estimate?.make || estimate?.model || estimate?.vehicleType || booking.registrationNumber) && (
+        <p className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-[#0b1e42]">
+          <Car className="h-3.5 w-3.5 text-red-600" strokeWidth={2} />
+          {[estimate?.make, estimate?.model].filter(Boolean).join(" ") || estimate?.vehicleType || "Vehicle"}
+          {booking.registrationNumber && <span className="font-normal text-slate-400">&bull; {booking.registrationNumber}</span>}
+        </p>
+      )}
+
       {/* Summary = every booking detail (addresses, final quote/payment,
           testing controls); Status = just the tracking chart, kept
           separate so checking progress doesn't mean scrolling past
@@ -513,17 +604,54 @@ function BookingDetailView({ booking, onBookingChange }) {
                 <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Quote</p>
                 <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote)}</p>
                 <p className="mt-2 text-sm text-slate-300">
-                  Reviewed and confirmed by our team. Pay a 30% advance to lock in your booking.
+                  Reviewed and confirmed by our team. Pay a 10% advance to lock in your booking.
                 </p>
                 <Link
                   href={`/payment?bookingId=${booking.id}`}
                   className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
                 >
-                  Proceed to Payment (30% Advance)
+                  Proceed to Payment (10% Advance)
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             )}
+
+            {booking.status === BOOKING_STATUS.CONFIRMED && booking.finalQuote && booking.midwayRequested && (
+              <div className="rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
+                <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
+                <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * 0.5)}</p>
+                <p className="mt-2 text-sm text-slate-300">
+                  Your booking is confirmed. Pay the 50% checkpoint to keep your shipment moving to transit.
+                </p>
+                <Link
+                  href={`/payment?bookingId=${booking.id}`}
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+                >
+                  Proceed to Payment (50%)
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
+
+            {booking.status === BOOKING_STATUS.OUT_FOR_DELIVERY &&
+              booking.finalQuote &&
+              booking.finalRequested &&
+              typeof booking.finalPaid !== "number" && (
+                <div className="rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
+                  <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Payment</p>
+                  <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.remainingBalance ?? 0)}</p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Your vehicle is out for delivery. Pay your remaining balance to complete the booking.
+                  </p>
+                  <Link
+                    href={`/payment?bookingId=${booking.id}`}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+                  >
+                    Proceed to Payment (Final Balance)
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              )}
 
             <div className="grid gap-6 sm:grid-cols-2">
               <AddressDetailCard title="Pickup" icon={MapPin} address={pickup} />
@@ -543,14 +671,6 @@ function BookingDetailView({ booking, onBookingChange }) {
             <PriceBreakdownCard booking={booking} />
 
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setInvoiceOpen(true)}
-                className="flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#0b1e42] shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-slate-50"
-              >
-                <FileText className="h-4 w-4 text-red-600" strokeWidth={2} />
-                Invoice
-              </button>
               <a
                 href={enquiryUrl}
                 target="_blank"
@@ -564,8 +684,6 @@ function BookingDetailView({ booking, onBookingChange }) {
           </>
         )}
       </div>
-
-      <InvoiceModal open={invoiceOpen} onClose={() => setInvoiceOpen(false)} booking={booking} />
     </div>
   );
 }

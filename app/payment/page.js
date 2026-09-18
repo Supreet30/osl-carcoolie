@@ -4,8 +4,8 @@ import Footer from "../landing-page/components/Footer";
 import PaymentClient from "./components/PaymentClient";
 
 export const metadata = {
-  title: "Advance Payment | Car Coolie",
-  description: "Pay your 30% advance to confirm your CarCoolie vehicle transport booking.",
+  title: "Payment | Car Coolie",
+  description: "Pay your CarCoolie vehicle transport booking's advance or 50% checkpoint online.",
 };
 
 export default function PaymentPage() {

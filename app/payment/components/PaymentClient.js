@@ -7,7 +7,54 @@ import { ArrowRight, CheckCircle2, CreditCard, Loader2, Lock, ShieldCheck } from
 import { BOOKING_STATUS, getBooking, updateBooking } from "../../services/b2c/lib/bookingStore";
 import { formatINR } from "../../services/b2c/lib/pricing";
 
-const ADVANCE_RATE = 0.3;
+// Which booking status this page collects money for, and what paying moves
+// the booking to next. Keyed by the CURRENT status so this page can tell,
+// from booking.status alone, whether there's actually anything payable
+// right now — a booking sitting in some other status (still docs_review,
+// or already past midway_paid) has nothing due here.
+const PAYMENT_STAGES = {
+  [BOOKING_STATUS.QUOTE_SENT]: {
+    amountFn: (booking) => Math.round(booking.finalQuote * 0.1),
+    heading: "Advance Payment",
+    subheading: "Pay a 10% advance to move this booking forward. The remaining balance is settled on delivery.",
+    dueLabel: "Advance Due Now (10%)",
+    targetStatus: BOOKING_STATUS.ADVANCE_PAID,
+    paidField: "advancePaid",
+    successHeading: "Advance Payment Received",
+  },
+  [BOOKING_STATUS.CONFIRMED]: {
+    amountFn: (booking) => Math.round(booking.finalQuote * 0.5),
+    heading: "50% Payment",
+    subheading: "Pay the 50% checkpoint to keep this booking moving. The remaining balance is settled on delivery.",
+    dueLabel: "Due Now (50%)",
+    targetStatus: BOOKING_STATUS.MIDWAY_PAID,
+    paidField: "midwayPaid",
+    successHeading: "50% Payment Received",
+    // Unlike the advance (implicitly gated by reaching quote_sent at all),
+    // the booking sits in "confirmed" for a while before the 50% is
+    // actually due — this stage only applies once the admin has explicitly
+    // sent the request (see MidwayPaymentCard in the admin panel).
+    requiresFlag: "midwayRequested",
+  },
+  [BOOKING_STATUS.OUT_FOR_DELIVERY]: {
+    // Not a flat percentage — whatever's actually left of the final quote
+    // once the advance/midway checkpoints and any admin-added charges
+    // (pickup, dropoff, tolls) are accounted for. See remainingBalance in
+    // bookingStore.js's rowToBooking().
+    amountFn: (booking) => booking.remainingBalance ?? 0,
+    heading: "Final Payment",
+    subheading: "Pay your remaining balance to complete this booking.",
+    dueLabel: "Remaining Balance Due",
+    // Paying this doesn't move the booking to Delivered by itself — that's
+    // a real-world event the admin confirms separately once the vehicle's
+    // actually handed over, same as Advance Paid still needs a dedicated
+    // "Mark Booking Confirmed" click. Status just stays out_for_delivery.
+    targetStatus: null,
+    paidField: "finalPaid",
+    successHeading: "Final Payment Received",
+    requiresFlag: "finalRequested",
+  },
+};
 
 export default function PaymentClient() {
   const searchParams = useSearchParams();
@@ -67,18 +114,45 @@ export default function PaymentClient() {
     );
   }
 
-  const advanceAmount = Math.round(booking.finalQuote * ADVANCE_RATE);
+  let stage = PAYMENT_STAGES[booking.status];
+  if (stage?.requiresFlag && !booking[stage.requiresFlag]) stage = undefined;
+  const amountDue = stage ? stage.amountFn(booking) : 0;
 
-  if (paid || booking.status === BOOKING_STATUS.ADVANCE_PAID || booking.status === BOOKING_STATUS.CONFIRMED) {
+  if (paid) {
     return (
       <div className="rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-100">
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
           <CheckCircle2 className="h-7 w-7" strokeWidth={2} />
         </span>
-        <p className="mt-4 text-lg font-extrabold text-[#0b1e42]">Advance Payment Received</p>
+        <p className="mt-4 text-lg font-extrabold text-[#0b1e42]">{stage.successHeading}</p>
         <p className="mt-2 text-sm text-slate-500">
-          {formatINR(advanceAmount)} paid towards booking {booking.id}. We&apos;ll be in touch to confirm
-          pickup.
+          {formatINR(amountDue)} paid towards booking {booking.id}. We&apos;ll be in touch on the next step.
+        </p>
+        <Link
+          href={`/my-bookings?id=${booking.id}`}
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+        >
+          View Booking Status
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    );
+  }
+
+  // Booking's current status isn't one this page collects money for —
+  // either something's still due elsewhere in the pipeline before this
+  // page applies (e.g. advance paid, waiting on the admin to confirm), or
+  // every payment this page handles has already gone through.
+  if (!stage) {
+    return (
+      <div className="rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-100">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
+          <CheckCircle2 className="h-7 w-7" strokeWidth={2} />
+        </span>
+        <p className="mt-4 text-lg font-extrabold text-[#0b1e42]">Nothing to pay right now</p>
+        <p className="mt-2 text-sm text-slate-500">
+          There&apos;s no payment due for booking {booking.id} at the moment — check My Bookings for the latest
+          status.
         </p>
         <Link
           href={`/my-bookings?id=${booking.id}`}
@@ -96,7 +170,13 @@ export default function PaymentClient() {
     setPaying(true);
     // No real payment gateway wired up yet — this is UI only.
     setTimeout(async () => {
-      await updateBooking(booking.id, { status: BOOKING_STATUS.ADVANCE_PAID, advancePaid: advanceAmount });
+      // targetStatus is null for the final-payment stage — that transition
+      // is a separate, deliberate admin action, not automatic on payment
+      // (see PAYMENT_STAGES above), so status is left out of the patch
+      // entirely rather than sent as null.
+      const updates = { [stage.paidField]: amountDue };
+      if (stage.targetStatus) updates.status = stage.targetStatus;
+      await updateBooking(booking.id, updates);
       setPaying(false);
       setPaid(true);
     }, 1400);
@@ -104,10 +184,8 @@ export default function PaymentClient() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold text-[#0b1e42]">Advance Payment</h1>
-      <p className="mt-2 text-sm leading-relaxed text-slate-500">
-        Pay a 30% advance to confirm booking {booking.id}. The remaining balance is settled on delivery.
-      </p>
+      <h1 className="text-3xl font-extrabold text-[#0b1e42]">{stage.heading}</h1>
+      <p className="mt-2 text-sm leading-relaxed text-slate-500">{stage.subheading}</p>
 
       <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
         <div className="flex items-center justify-between text-sm">
@@ -115,12 +193,12 @@ export default function PaymentClient() {
           <span className="font-semibold">{formatINR(booking.finalQuote)}</span>
         </div>
         <div className="mt-2 flex items-center justify-between text-sm">
-          <span className="text-slate-300">Advance Due Now (30%)</span>
-          <span className="font-semibold">{formatINR(advanceAmount)}</span>
+          <span className="text-slate-300">{stage.dueLabel}</span>
+          <span className="font-semibold">{formatINR(amountDue)}</span>
         </div>
         <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
           <span className="text-lg font-extrabold">Pay Now</span>
-          <span className="text-2xl font-extrabold">{formatINR(advanceAmount)}</span>
+          <span className="text-2xl font-extrabold">{formatINR(amountDue)}</span>
         </div>
       </div>
 
@@ -170,7 +248,7 @@ export default function PaymentClient() {
             </>
           ) : (
             <>
-              Pay {formatINR(advanceAmount)} Now
+              Pay {formatINR(amountDue)} Now
               <ArrowRight className="h-4 w-4" />
             </>
           )}
