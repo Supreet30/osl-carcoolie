@@ -189,7 +189,13 @@ function rowToBooking(row, { addresses = [], documents = [], addons = [], charge
     midwayRequested: Boolean(row.midway_requested_at),
     finalPaid: row.final_paid,
     finalRequested: Boolean(row.final_requested_at),
-    charges: charges.map((c) => ({ id: c.id, label: c.label, amount: c.amount, receiptUrl: c.receipt_url ?? null })),
+    charges: charges.map((c) => ({
+      id: c.id,
+      label: c.label,
+      amount: c.amount,
+      receiptUrl: c.receipt_url ?? null,
+      note: c.note ?? null,
+    })),
     chargesTotal,
     // What's left to collect: whatever the final quote didn't already get
     // covered by the advance/midway/final checkpoints, plus any

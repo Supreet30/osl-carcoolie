@@ -318,8 +318,11 @@ function PriceBreakdownCard({ booking }) {
           <p className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Additional Charges</p>
           <div className="mt-2 flex flex-col divide-y divide-slate-100">
             {charges.map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-2 py-2">
-                <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{c.label}</span>
+              <div key={c.id} className="flex items-start justify-between gap-2 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-slate-500">{c.label}</span>
+                  {c.note && <span className="block truncate text-xs text-slate-400">{c.note}</span>}
+                </span>
                 <span className="flex shrink-0 items-center gap-2">
                   {c.receiptUrl && (
                     <button

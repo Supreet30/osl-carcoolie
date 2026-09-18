@@ -565,11 +565,15 @@ create table if not exists booking_charges (
   -- convention as booking_documents.file_url. Only offered for custom
   -- charges, not the reserved "Pickup Charges"/"Dropoff Charges" labels.
   receipt_url text,
+  -- Optional free-text note explaining the charge — same "custom charges
+  -- only" scope as receipt_url above.
+  note text,
   created_at timestamptz not null default now()
 );
 
 create index if not exists booking_charges_booking_id_idx on booking_charges (booking_id);
 alter table booking_charges add column if not exists receipt_url text;
+alter table booking_charges add column if not exists note text;
 
 -- 10% advance + 50% midway + remaining balance payments.
 create table if not exists payments (
