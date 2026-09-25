@@ -51,7 +51,7 @@ function OptionButton({ option, value, onChange, setOpen, OptionIcon }) {
 
 // `optionIcons` (optional) maps an option string to an icon component shown
 // in front of it in the list, and in the trigger once it is selected.
-export default function Dropdown({ icon, iconClassName, placeholder, value, onChange, options, disabled, optionIcons }) {
+export default function Dropdown({ icon, iconClassName, placeholder, value, onChange, options, disabled, optionIcons, raised }) {
   const Icon = icon ?? optionIcons?.[value];
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -124,7 +124,7 @@ export default function Dropdown({ icon, iconClassName, placeholder, value, onCh
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex w-full items-center gap-2 rounded-xl bg-slate-50 py-3 pr-10 pl-4 text-left text-sm outline-none transition-colors focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`flex w-full items-center gap-2 rounded-xl ${raised ? "bg-white shadow-sm ring-1 ring-slate-200" : "bg-slate-50"} py-3 pr-10 pl-4 text-left text-sm outline-none transition-colors focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-60 ${
           open ? "ring-2 ring-red-500" : ""
         } ${Icon ? "pl-11" : "pl-4"}`}
       >

@@ -243,6 +243,7 @@ function HubLocationCard({ showProximityCheck, withinHub, onWithinHubChange, nam
       <div className="mb-4">
         <p className="text-xs font-semibold text-[#0b1e42]">Select yard ({yards.length} available)</p>
         <Dropdown
+          raised
           placeholder="Select a yard"
           value={selected.name}
           onChange={(name) => onYardChange(yards.find((y) => y.name === name) ?? yards[0])}
