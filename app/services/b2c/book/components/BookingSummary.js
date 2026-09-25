@@ -1,7 +1,7 @@
 "use client";
 
 import { Car, Clock, MapPin, ShieldCheck, User } from "lucide-react";
-import { formatINR } from "../../lib/pricing";
+import { formatINR, inclusiveBreakdown } from "../../lib/pricing";
 
 const PICKUP_METHOD_LABELS = { self: "Self Drop-off", driver: "Driver Pickup" };
 const DROPOFF_METHOD_LABELS = { self: "Self Pickup", driver: "Driver Drop-off" };
@@ -21,6 +21,9 @@ function formatDate(iso) {
 }
 
 export default function BookingSummary({ estimate, details }) {
+  const inclusive = estimate
+    ? inclusiveBreakdown({ ...estimate, gst: estimate.gst ?? 0, addOnBreakdown: estimate.addOnBreakdown ?? [] })
+    : null;
   return (
     <aside className="flex flex-col gap-5 lg:sticky lg:top-28">
       <div className="rounded-3xl bg-[#0b1220] p-6 text-white">
@@ -90,18 +93,13 @@ export default function BookingSummary({ estimate, details }) {
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">Transportation</span>
                 <span className="font-semibold text-white">
-                  {formatINR(
-                    estimate.routePrice +
-                      (estimate.vehicleSurcharge || 0) +
-                      (estimate.pickupCharge || 0) +
-                      (estimate.dropoffCharge || 0)
-                  )}
+                  {formatINR(inclusive.transportation)}
                 </span>
               </div>
               {estimate.addOnsTotal > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-slate-300">Value Added Services (VAS)</span>
-                  <span className="font-semibold text-white">{formatINR(estimate.addOnsTotal)}</span>
+                  <span className="font-semibold text-white">{formatINR(inclusive.addOnsInclusive)}</span>
                 </div>
               )}
               {estimate.coupon && (

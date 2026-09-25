@@ -25,7 +25,7 @@ import { Check, ChevronDown, Search } from "lucide-react";
 // panel got silently clipped the moment it grew past whichever of those
 // ancestors' edges came first, instead of floating on top like it's
 // supposed to.
-function OptionButton({ option, value, onChange, setOpen }) {
+function OptionButton({ option, value, onChange, setOpen, OptionIcon }) {
   const selected = option === value;
   return (
     <button
@@ -40,13 +40,19 @@ function OptionButton({ option, value, onChange, setOpen }) {
         selected ? "bg-red-50 font-semibold text-red-600" : "text-[#0b1e42] hover:bg-slate-50"
       }`}
     >
-      {option}
+      <span className="flex items-center gap-2.5">
+        {OptionIcon && <OptionIcon className="h-4 w-4 shrink-0 text-red-500" strokeWidth={2} />}
+        {option}
+      </span>
       {selected && <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />}
     </button>
   );
 }
 
-export default function Dropdown({ icon: Icon, iconClassName, placeholder, value, onChange, options, disabled }) {
+// `optionIcons` (optional) maps an option string to an icon component shown
+// in front of it in the list, and in the trigger once it is selected.
+export default function Dropdown({ icon, iconClassName, placeholder, value, onChange, options, disabled, optionIcons }) {
+  const Icon = icon ?? optionIcons?.[value];
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [rect, setRect] = useState(null);
@@ -122,7 +128,7 @@ export default function Dropdown({ icon: Icon, iconClassName, placeholder, value
           open ? "ring-2 ring-red-500" : ""
         } ${Icon ? "pl-11" : "pl-4"}`}
       >
-        {Icon && <Icon className={`pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 ${iconClassName}`} />}
+        {Icon && <Icon className={`pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 ${iconClassName ?? (optionIcons ? "text-red-500" : "text-slate-500")}`} />}
         <span className={`flex-1 truncate ${value ? "font-normal text-[#0b1e42]" : "text-slate-400"}`}>{value || placeholder}</span>
       </button>
       <ChevronDown
@@ -163,14 +169,14 @@ export default function Dropdown({ icon: Icon, iconClassName, placeholder, value
                       <div key={group.label}>
                         <p className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">{group.label}</p>
                         {group.options.map((option) => (
-                          <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
+                          <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} OptionIcon={optionIcons?.[option]} />
                         ))}
                       </div>
                     ))}
                   </>
                 ) : (
                   options.map((option) => (
-                    <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} />
+                    <OptionButton key={option} option={option} value={value} onChange={onChange} setOpen={setOpen} OptionIcon={optionIcons?.[option]} />
                   ))
                 )}
               </div>

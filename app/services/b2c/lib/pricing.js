@@ -88,7 +88,8 @@ export const LUXURY_LOAD_FACTOR = 1.2;
 
 // Route prices in the `routes` table (and the local fallback) are stored
 // exclusive of GST, so it's computed and added here rather than baked into
-// those numbers.
+// those numbers. The live rate comes from the admin's tax_settings row via
+// getGstRate() below; this is only the offline fallback.
 export const GST_RATE = 0.18;
 
 // Flat fee added when the customer opts for a CarCoolie driver (instead of
@@ -244,6 +245,15 @@ export async function getLuxuryLoadFactor() {
   return LUXURY_LOAD_FACTOR;
 }
 
+// Fraction (0.18 = 18%), read from the admin-editable tax_settings row.
+export async function getGstRate() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase.from("tax_settings").select("gst_percent").eq("id", true).maybeSingle();
+    if (!error && data) return Number(data.gst_percent) / 100;
+  }
+  return GST_RATE;
+}
+
 export async function validateCoupon(code) {
   if (!code) return null;
   if (isSupabaseConfigured) {
@@ -300,9 +310,10 @@ export async function computeEstimate({
 
   // Route price, vehicle surcharge, add-ons, and driver pickup/drop-off
   // fees are all stored/priced exclusive of GST — this is the taxable
-  // value GST_RATE below applies to.
+  // value gstRate below applies to.
   const subtotal = route.price + vehicleSurcharge + addOnsTotal + pickupCharge + dropoffCharge;
-  const gst = Math.round(subtotal * GST_RATE);
+  const gstRate = await getGstRate();
+  const gst = Math.round(subtotal * gstRate);
 
   const coupon = await validateCoupon(couponCode);
   // "flat" coupons are a straight rupee amount off — clamp to the subtotal
@@ -332,11 +343,30 @@ export async function computeEstimate({
     isLuxury,
     luxuryLoadFactor,
     subtotal,
+    gstRate,
     gst,
     coupon,
     discount,
     total,
   };
+}
+
+// Customer-facing line items with GST folded into each one, so they add up
+// to the GST-inclusive total on their own (no separate tax line or hidden
+// gap between "subtotal" and "total"). Add-ons are grossed up individually;
+// transportation takes whatever's left of subtotal + gst, and the last
+// add-on absorbs any rounding drift, so the lines always reconcile exactly.
+export function inclusiveBreakdown({ subtotal, gst, gstRate, addOnsTotal = 0, addOnBreakdown = [] }) {
+  // Estimates saved before gstRate was stored fall back to the ratio they
+  // were actually priced at.
+  const rate = 1 + (gstRate ?? (subtotal > 0 ? gst / subtotal : GST_RATE));
+  const addOnItems = addOnBreakdown.map((a) => ({ ...a, price: Math.round(Number(a.price) * rate) }));
+  const addOnsInclusive = addOnsTotal > 0 ? Math.round(addOnsTotal * rate) : 0;
+  if (addOnItems.length > 0) {
+    const drift = addOnsInclusive - addOnItems.reduce((sum, a) => sum + a.price, 0);
+    addOnItems[addOnItems.length - 1].price += drift;
+  }
+  return { transportation: subtotal + gst - addOnsInclusive, addOnsInclusive, addOnItems };
 }
 
 export function formatINR(amount) {

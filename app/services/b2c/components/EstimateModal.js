@@ -25,6 +25,7 @@ import {
   VEHICLE_MODELS,
   computeEstimate,
   formatINR,
+  inclusiveBreakdown,
   getAddOnServices,
   getRoute,
   getVehicleModels,
@@ -102,7 +103,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
   const [showAddOns, setShowAddOns] = useState(false);
 
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const { route, minDays, vehicleSurcharge, pickupCharge, dropoffCharge, addOnsTotal, addOnBreakdown, selectedAddOns, subtotal, gst } =
+  const { route, minDays, vehicleSurcharge, pickupCharge, dropoffCharge, addOnsTotal, addOnBreakdown, selectedAddOns, subtotal, gst, gstRate } =
     estimate;
   // "flat" coupons are a straight rupee amount off; "percent" ones are a
   // percentage of the subtotal — mirrors computeEstimate()'s discount logic
@@ -116,6 +117,9 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       )
     : 0;
   const total = subtotal + gst - discount;
+  // What's actually shown: every line already includes GST, so the lines
+  // (less any discount) sum to the total payable.
+  const inclusive = inclusiveBreakdown({ subtotal, gst, gstRate, addOnsTotal, addOnBreakdown });
 
   async function handleApplyCoupon() {
     setApplyingCoupon(true);
@@ -151,6 +155,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       addOnBreakdown,
       selectedAddOns,
       subtotal,
+      gstRate,
       gst,
       coupon: appliedCoupon,
       discount,
@@ -161,8 +166,8 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-8 py-6">
-      <div className="flex items-center gap-4 rounded-2xl bg-red-50 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5 sm:px-8">
+      <div className="flex shrink-0 items-center gap-4 rounded-2xl bg-red-50 p-4">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-600 text-white">
           <Truck className="h-5 w-5" strokeWidth={2} />
         </span>
@@ -180,48 +185,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
         </div>
       </div>
 
-      <div>
-        <p className="text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">Price Breakup</p>
-        <div className="mt-3 flex flex-col divide-y divide-slate-100">
-          <div className="flex items-center justify-between py-2.5 text-sm">
-            <span className="text-slate-600">
-              Transportation ({route.fromCity} &rarr; {route.toCity})
-            </span>
-            <span className="font-semibold text-[#0b1e42]">
-              {formatINR(route.price + vehicleSurcharge + pickupCharge + dropoffCharge)}
-            </span>
-          </div>
-          {addOnsTotal > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowAddOns((v) => !v)}
-                className="flex w-full items-center justify-between py-2.5 text-left text-sm"
-              >
-                <span className="flex items-center gap-1.5 text-slate-600">
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`}
-                  />
-                  Value Added Services
-                </span>
-                <span className="font-semibold text-[#0b1e42]">{formatINR(addOnsTotal)}</span>
-              </button>
-              {showAddOns && (
-                <div className="flex flex-col gap-1.5 py-2.5 pl-5 text-xs text-slate-500">
-                  {addOnBreakdown.map((a) => (
-                    <p key={a.key} className="flex items-center justify-between">
-                      <span>{a.label}</span>
-                      <span>{formatINR(a.price)}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-red-50 p-4">
+      <div className="shrink-0 rounded-2xl bg-red-50 p-4">
         <p className="text-sm font-bold text-[#0b1e42]">Have a Coupon?</p>
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -252,28 +216,60 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
         {couponError && <p className="mt-2 text-xs font-semibold text-red-600">{couponError}</p>}
       </div>
 
-      <div className="flex flex-col divide-y divide-slate-100 text-sm">
-        <div className="flex items-center justify-between py-2">
-          <span className="text-slate-500">Subtotal</span>
-          <span className="text-slate-600">{formatINR(subtotal)}</span>
-        </div>
-        {appliedCoupon && (
-          <div className="flex items-center justify-between py-2 text-red-600">
-            <span>Discount</span>
-            <span>-{formatINR(discount)}</span>
+      <div className="shrink-0 overflow-hidden rounded-2xl border border-slate-200">
+        <p className="bg-slate-50 px-5 py-3 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+          Price Breakup
+        </p>
+        <div className="flex flex-col divide-y divide-slate-100 px-5">
+          <div className="flex items-center justify-between gap-4 py-3.5 text-sm">
+            <span className="text-slate-600">Transportation</span>
+            <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.transportation)}</span>
           </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between rounded-2xl bg-red-50 p-4">
-        <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
-        <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
+          {addOnsTotal > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddOns((v) => !v)}
+                className="flex w-full items-center justify-between gap-4 py-3.5 text-left text-sm"
+              >
+                <span className="flex items-center gap-1.5 text-slate-600">
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`} />
+                  Value Added Services
+                </span>
+                <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.addOnsInclusive)}</span>
+              </button>
+              {showAddOns && (
+                <div className="flex flex-col gap-2 pt-3 pb-3.5 pl-5 text-xs text-slate-500">
+                  {inclusive.addOnItems.map((a) => (
+                    <p key={a.key} className="flex items-center justify-between">
+                      <span>{a.label}</span>
+                      <span>{formatINR(a.price)}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          {appliedCoupon && (
+            <div className="flex items-center justify-between gap-4 py-3.5 text-sm text-green-600">
+              <span>Discount ({appliedCoupon.code})</span>
+              <span className="font-semibold">-{formatINR(discount)}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between bg-red-50 px-5 py-4">
+          <div>
+            <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
+            <p className="text-[11px] text-slate-400">Incl. of all taxes</p>
+          </div>
+          <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
+        </div>
       </div>
 
       <button
         type="button"
         onClick={handleBookNow}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b1220] py-4 text-sm font-bold text-white transition-colors hover:bg-[#0b1220]/90"
+        className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0b1220] py-4 text-sm font-bold text-white transition-colors hover:bg-[#0b1220]/90"
       >
         Book Now
         <ArrowRight className="h-4 w-4" />
@@ -499,7 +495,7 @@ export default function EstimateModal({
     }
     const route = await getRoute(fromCity, toCity);
     if (!route) {
-      setRouteError("We don't have a route between these two cities yet.");
+      setRouteError("Coming soon to this location — we're expanding our network and will be there shortly.");
       return;
     }
     setRouteError("");

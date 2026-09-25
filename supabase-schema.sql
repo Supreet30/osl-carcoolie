@@ -154,6 +154,84 @@ insert into cities (name, state, pincode_prefixes) values
   ('Bangalore', 'Karnataka', '{56}')
 on conflict (name) do update set state = excluded.state;
 
+-- Terms of Service / Privacy Policy — markdown written in the admin panel
+-- ("Legal Pages") and rendered on the customer site at /terms-of-service and
+-- /privacy-policy. One row per page; the seed below is dummy copy.
+create table if not exists legal_pages (
+  slug text primary key check (slug in ('terms', 'privacy')),
+  title text not null,
+  content_md text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+insert into legal_pages (slug, title, content_md) values
+  ('terms', 'Terms of Service', $md$# Terms of Service
+
+*Last updated: 21 September 2026*
+
+Welcome to CarCoolie. By booking a vehicle transport with us you agree to the terms below. This is placeholder text and will be replaced with our final terms.
+
+## 1. Our service
+
+CarCoolie arranges the transportation of your vehicle between the pickup and delivery locations you provide. Estimated transit times are indicative and may change because of weather, road conditions or regulatory checks.
+
+## 2. Your responsibilities
+
+- Provide accurate vehicle details and valid documents (RC, ID proof, NOC where applicable).
+- Remove all personal belongings and valuables from the vehicle before pickup.
+- Be available, or nominate someone, at the agreed pickup and delivery time.
+
+## 3. Pricing and payments
+
+- Quoted prices are inclusive of all applicable taxes.
+- Payments are collected in stages: an advance to confirm the booking, a further payment when the vehicle is dispatched, and the balance before delivery.
+- Additional charges (for example, pickup beyond the standard service radius) will be communicated and itemised before you pay them.
+
+## 4. Cancellations and refunds
+
+Cancellations before dispatch may be eligible for a refund of the amount paid, less any costs already incurred. Once the vehicle is in transit the booking cannot be cancelled.
+
+## 5. Liability
+
+We take every care in handling your vehicle. Our liability for loss or damage during transit is limited as described in your booking confirmation and any insurance you have opted for.
+
+## 6. Contact
+
+Questions about these terms? Write to us at [support@carcoolie.in](mailto:support@carcoolie.in).
+$md$),
+  ('privacy', 'Privacy Policy', $md$# Privacy Policy
+
+*Last updated: 21 September 2026*
+
+Your privacy matters to us. This is placeholder text and will be replaced with our final policy.
+
+## 1. Information we collect
+
+- **Contact details:** your name, phone number and email address.
+- **Vehicle and booking details:** make, model, registration documents, pickup and delivery addresses.
+- **Location:** your device location, only when you choose "Use Current Location" while adding an address.
+- **Payment information:** payment status and references. Card and bank details are handled by our payment provider and are not stored by us.
+
+## 2. How we use it
+
+- To arrange, track and deliver your vehicle transport.
+- To verify documents and keep your booking secure.
+- To send booking updates and respond to your queries.
+
+## 3. Sharing
+
+We share information only with the drivers, yards and service providers who need it to complete your booking, and where the law requires it. We do not sell your personal data.
+
+## 4. Retention and security
+
+We keep booking records for as long as needed for service, legal and accounting purposes, and protect them with reasonable technical and organisational safeguards.
+
+## 5. Your choices
+
+You can ask us to access, correct or delete your personal information by writing to [support@carcoolie.in](mailto:support@carcoolie.in).
+$md$)
+on conflict (slug) do nothing;
+
 -- ---------------------------------------------------------------------
 -- Routes — directional A→B and B→A pricing, independently editable by
 -- the admin ("edit A to B or B to A prices") from the Route Pricing page.
@@ -270,6 +348,19 @@ create table if not exists luxury_settings (
 );
 
 insert into luxury_settings (id, load_factor) values (true, 1.2)
+on conflict (id) do nothing;
+
+-- GST rate (in percent) applied on top of every estimate — single editable
+-- row like luxury_settings above, changed from the admin panel ("Tax
+-- Settings"). Bookings store the gst_amount they were priced with, so
+-- changing this only affects new estimates.
+create table if not exists tax_settings (
+  id boolean primary key default true,
+  gst_percent numeric(5, 2) not null default 18 check (gst_percent >= 0 and gst_percent <= 100),
+  constraint tax_settings_singleton check (id)
+);
+
+insert into tax_settings (id, gst_percent) values (true, 18)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
@@ -510,6 +601,13 @@ alter table booking_addresses add column if not exists gstin text;
 -- "answered no". See HubLocationCard in BookingForm.js.
 alter table booking_addresses add column if not exists within_hub_radius boolean;
 
+-- Which yard (hub) the customer selected for this leg on the booking form —
+-- a snapshot of its name/address at booking time, not a foreign key, so the
+-- booking still reads correctly if the yard catalog changes later. Only
+-- meaningful on the pickup/dropoff rows, not billing.
+alter table booking_addresses add column if not exists hub_name text;
+alter table booking_addresses add column if not exists hub_address text;
+
 -- Vehicle documents (section 3). One row per document type per booking;
 -- `status` is what the admin panel's "docs verification" screen edits.
 create table if not exists booking_documents (
@@ -575,6 +673,34 @@ create index if not exists booking_charges_booking_id_idx on booking_charges (bo
 alter table booking_charges add column if not exists receipt_url text;
 alter table booking_charges add column if not exists note text;
 
+-- Inspection reports the admin uploads at two points in the pipeline —
+-- 'confirmed' (Booking Confirmed) and 'out_for_delivery' — as PDFs or
+-- images. Visible to the customer on their booking's status timeline. Files
+-- live in the booking-documents bucket (file_url is the object path).
+create table if not exists booking_inspections (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references bookings (id) on delete cascade,
+  stage text not null check (stage in ('confirmed', 'out_for_delivery')),
+  file_name text not null,
+  file_url text not null,
+  file_type text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists booking_inspections_booking_id_idx on booking_inspections (booking_id);
+
+-- Customer's post-delivery review — offered once a booking reaches
+-- 'delivered' (see MyBookingsClient.js's ReviewCard). One review per
+-- booking; submitting again from the same form updates it rather than
+-- creating a second row (see submitBookingReview()'s upsert).
+create table if not exists booking_reviews (
+  booking_id uuid primary key references bookings (id) on delete cascade,
+  rating smallint not null check (rating between 1 and 5),
+  comment text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- 10% advance + 50% midway + remaining balance payments.
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
@@ -639,6 +765,8 @@ alter table routes enable row level security;
 alter table vehicle_types enable row level security;
 alter table luxury_makes enable row level security;
 alter table luxury_settings enable row level security;
+alter table legal_pages enable row level security;
+alter table tax_settings enable row level security;
 alter table vehicle_models enable row level security;
 alter table add_on_services enable row level security;
 alter table coupons enable row level security;
@@ -648,6 +776,8 @@ alter table booking_addresses enable row level security;
 alter table booking_documents enable row level security;
 alter table booking_document_versions enable row level security;
 alter table booking_charges enable row level security;
+alter table booking_inspections enable row level security;
+alter table booking_reviews enable row level security;
 alter table payments enable row level security;
 alter table booking_status_history enable row level security;
 
@@ -710,6 +840,14 @@ drop policy if exists "luxury_settings readable" on luxury_settings;
 create policy "luxury_settings readable" on luxury_settings for select using (true);
 drop policy if exists "luxury_settings admin write" on luxury_settings;
 create policy "luxury_settings admin write" on luxury_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "legal_pages readable" on legal_pages;
+create policy "legal_pages readable" on legal_pages for select using (true);
+drop policy if exists "legal_pages admin write" on legal_pages;
+create policy "legal_pages admin write" on legal_pages for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "tax_settings readable" on tax_settings;
+create policy "tax_settings readable" on tax_settings for select using (true);
+drop policy if exists "tax_settings admin write" on tax_settings;
+create policy "tax_settings admin write" on tax_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 
 drop policy if exists "vehicle_models readable" on vehicle_models;
 create policy "vehicle_models readable" on vehicle_models for select using (true);
@@ -790,6 +928,32 @@ drop policy if exists "booking_charges admin insert" on booking_charges;
 create policy "booking_charges admin insert" on booking_charges for insert with check (is_admin_or_anon());
 drop policy if exists "booking_charges admin delete" on booking_charges;
 create policy "booking_charges admin delete" on booking_charges for delete using (is_admin_or_anon());
+
+drop policy if exists "booking_inspections owner read" on booking_inspections;
+create policy "booking_inspections owner read" on booking_inspections for select using (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
+drop policy if exists "booking_inspections admin insert" on booking_inspections;
+create policy "booking_inspections admin insert" on booking_inspections for insert with check (is_admin_or_anon());
+drop policy if exists "booking_inspections admin delete" on booking_inspections;
+create policy "booking_inspections admin delete" on booking_inspections for delete using (is_admin_or_anon());
+
+-- booking_reviews: same ownership-read pattern as the other per-booking
+-- tables above; insert/update open to is_admin_or_anon() since it's the
+-- customer (not the admin) who writes these, and the customer site has no
+-- real auth yet either — same "anon key stands in for the signed-in
+-- customer" convention this whole schema already uses.
+drop policy if exists "booking_reviews owner read" on booking_reviews;
+create policy "booking_reviews owner read" on booking_reviews for select using (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
+drop policy if exists "booking_reviews owner insert" on booking_reviews;
+create policy "booking_reviews owner insert" on booking_reviews for insert with check (is_admin_or_anon());
+-- No update policy on purpose — a submitted review is final (see
+-- ReviewCard in MyBookingsClient.js, which switches to a frozen read-only
+-- view the moment booking.review exists). Without this, an update would
+-- just be silently rejected by RLS rather than actually changing anything.
+drop policy if exists "booking_reviews owner update" on booking_reviews;
 
 drop policy if exists "payments via booking" on payments;
 create policy "payments via booking" on payments for all using (

@@ -9,6 +9,7 @@ import {
   Car,
   CheckCircle2,
   Circle,
+  ExternalLink,
   Clock,
   CreditCard,
   FileCheck,
@@ -23,6 +24,7 @@ import {
   Receipt,
   Shield,
   ShieldCheck,
+  Star,
   Tag,
   Truck,
   Upload,
@@ -35,6 +37,7 @@ import {
   getBooking,
   getBookings,
   getChargeReceiptUrl,
+  submitBookingReview,
   updateBookingDocument,
 } from "../../services/b2c/lib/bookingStore";
 import { formatINR } from "../../services/b2c/lib/pricing";
@@ -78,12 +81,39 @@ function statusLabel(status) {
   return STATUS_STEPS.find((s) => s.key === status)?.label ?? status;
 }
 
-function StatusStepper({ status }) {
+function formatStepTime(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function StatusStepper({ status, statusTimes = {}, inspections = [] }) {
   const currentIndex = STATUS_STEPS.findIndex((s) => s.key === status);
   // 0-based currentIndex over a 1-based step count — the docs_sent lead-in
   // step is always already "done" by the time a booking exists (see the
   // comment on STATUS_STEPS in bookingStore.js), so it never lowers this.
   const progressPct = Math.round((currentIndex / (STATUS_STEPS.length - 1)) * 100);
+
+  // Signed URLs are short-lived, so one is minted per click; the blank tab
+  // is opened first so the popup isn't blocked by the async gap.
+  async function handleViewInspection(path) {
+    const win = window.open("", "_blank");
+    try {
+      const url = await getChargeReceiptUrl(path);
+      if (url && win) win.location.href = url;
+      else win?.close();
+    } catch {
+      win?.close();
+    }
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -99,28 +129,169 @@ function StatusStepper({ status }) {
       {STATUS_STEPS.map((step, i) => {
         const done = i < currentIndex;
         const current = i === currentIndex;
+        const reachedAt = done || current ? formatStepTime(statusTimes[step.key]) : null;
+        // Inspection reports the admin attached to this stage — the stage
+        // keys match the step keys ("confirmed", "out_for_delivery").
+        const stepInspections = done || current ? inspections.filter((f) => f.stage === step.key) : [];
         return (
           <div key={step.key} className="flex items-start gap-3">
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center self-stretch">
               {done || current ? (
                 <CheckCircle2 className={`h-5 w-5 ${current ? "text-red-600" : "text-green-600"}`} strokeWidth={2} />
               ) : (
                 <Circle className="h-5 w-5 text-slate-300" strokeWidth={2} />
               )}
               {i < STATUS_STEPS.length - 1 && (
-                <span className={`mt-1 h-8 w-px ${i < currentIndex ? "bg-green-300" : "bg-slate-200"}`} />
+                <span className={`mt-1 min-h-8 w-px flex-1 ${i < currentIndex ? "bg-green-300" : "bg-slate-200"}`} />
               )}
             </div>
-            <p
-              className={`pb-6 text-sm font-semibold ${
-                current ? "text-red-600" : done ? "text-[#0b1e42]" : "text-slate-400"
-              }`}
-            >
-              {step.label}
-            </p>
+            <div className="pb-6">
+              <p
+                className={`text-sm font-semibold ${
+                  current ? "text-red-600" : done ? "text-[#0b1e42]" : "text-slate-400"
+                }`}
+              >
+                {step.label}
+              </p>
+              {reachedAt && <p className="mt-0.5 text-xs text-slate-400">{reachedAt}</p>}
+              {stepInspections.length > 0 && (
+                <div className="mt-2 flex flex-col gap-1.5">
+                  <p className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">Inspection Documents</p>
+                  {stepInspections.map((file) => (
+                    <button
+                      key={file.id}
+                      type="button"
+                      onClick={() => handleViewInspection(file.path)}
+                      className="flex max-w-xs items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-[#0b1e42] ring-1 ring-slate-200 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span className="min-w-0 flex-1 truncate">{file.fileName}</span>
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Offered once a booking reaches Delivered — one review per booking, and
+// it's final: the moment a rating or comment is saved, this switches to a
+// frozen, read-only view instead of an editable form. There's no "Update
+// Review" — a submitted review can't be changed.
+function ReviewCard({ booking, onBookingChange }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  if (booking.review) {
+    return (
+      <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
+        <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+          <Star className="h-3.5 w-3.5 text-red-600" />
+          Your Review
+        </p>
+        <div className="mt-3 flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <Star
+              key={value}
+              className={`h-6 w-6 ${
+                value <= booking.review.rating ? "fill-red-500 text-red-500" : "fill-transparent text-slate-300"
+              }`}
+              strokeWidth={1.5}
+            />
+          ))}
+        </div>
+        {booking.review.comment && <p className="mt-3 text-sm leading-relaxed text-slate-600">{booking.review.comment}</p>}
+        <p className="mt-4 text-xs text-slate-400">Submitted — reviews can&apos;t be edited once sent.</p>
+      </div>
+    );
+  }
+
+  const displayRating = hoverRating || rating;
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!rating) {
+      setError("Pick a star rating before submitting.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      const saved = await submitBookingReview(booking.id, { rating, comment });
+      onBookingChange?.((prev) => ({ ...prev, review: saved }));
+    } catch (err) {
+      setError(err.message || "Couldn't submit your review — try again.");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
+      <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+        <Star className="h-3.5 w-3.5 text-red-600" />
+        Rate Your Experience
+      </p>
+      <p className="mt-1 text-sm text-slate-500">
+        Your car&apos;s been delivered — let us know how it went. You won&apos;t be able to change this once submitted.
+      </p>
+
+      <form onSubmit={handleSubmit} className="mt-5">
+        <div
+          className="flex items-center gap-1.5"
+          onMouseLeave={() => setHoverRating(0)}
+          role="radiogroup"
+          aria-label="Rating out of 5 stars"
+        >
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={rating === value}
+              aria-label={`${value} star${value === 1 ? "" : "s"}`}
+              onMouseEnter={() => setHoverRating(value)}
+              onClick={() => {
+                setRating(value);
+                setError("");
+              }}
+              className="p-0.5"
+            >
+              <Star
+                className={`h-8 w-8 transition-colors ${
+                  value <= displayRating ? "fill-red-500 text-red-500" : "fill-transparent text-slate-300"
+                }`}
+                strokeWidth={1.5}
+              />
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Tell us about your experience — pickup, communication, condition on delivery..."
+          rows={3}
+          className="mt-4 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+        />
+
+        {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="mt-4 rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-wait disabled:opacity-70"
+        >
+          {submitting ? "Submitting…" : "Submit Review"}
+        </button>
+      </form>
     </div>
   );
 }
@@ -183,8 +354,8 @@ function BookingCard({ booking }) {
 }
 
 const DETAIL_TABS = [
-  { key: "summary", label: "Summary" },
   { key: "status", label: "Status" },
+  { key: "summary", label: "Summary" },
 ];
 
 function PriceRow({ label, value, muted, negative }) {
@@ -503,6 +674,99 @@ function DocumentsCard({ documents, registrationNumber, onReupload, busyKey, err
   );
 }
 
+// Three payment slabs — 10% advance, 50% midway, and whatever's left
+// (~40% plus any additional charges) — shown as soon as a final quote
+// exists, well before any of them are actually due, so the whole payment
+// shape is visible up front rather than surfacing one stage at a time.
+function PaymentMilestones({ booking }) {
+  const { finalQuote, advancePaid, midwayPaid, finalPaid, remainingBalance, chargesTotal } = booking;
+
+  const advanceDone = typeof advancePaid === "number";
+  const midwayDone = typeof midwayPaid === "number";
+  const finalDone = typeof finalPaid === "number";
+  const charges = chargesTotal ?? 0;
+
+  const slabs = [
+    {
+      key: "advance",
+      label: "Advance",
+      percent: "10%",
+      amount: advanceDone ? advancePaid : finalQuote * 0.1,
+      status: advanceDone ? "paid" : "due",
+    },
+    {
+      key: "midway",
+      label: "Midway",
+      percent: "50%",
+      amount: midwayDone ? midwayPaid : finalQuote * 0.5,
+      status: midwayDone ? "paid" : advanceDone ? "due" : "upcoming",
+    },
+    {
+      key: "final",
+      label: "Balance",
+      percent: "~40%",
+      // Charges get their own card below, so this is the finalQuote portion
+      // only — finalPaid (once paid) bundles both together, same as
+      // bookingStore.js splits it back apart when logging the payment row.
+      amount: finalDone ? finalPaid - charges : (remainingBalance ?? finalQuote * 0.4) - charges,
+      status: finalDone ? "paid" : midwayDone ? "due" : "upcoming",
+    },
+  ];
+
+  // Only appears once something's actually been added — a normal charge
+  // (positive) is extra owed on top of the balance, a credit/discount
+  // (negative, see the admin's Charges & Adjustments panel) reduces it.
+  // Settles alongside the final balance, so it shares that slab's paid/due
+  // state rather than having its own independent one.
+  if (charges !== 0) {
+    slabs.push({
+      key: "charges",
+      label: charges < 0 ? "Credits" : "Additional Charges",
+      percent: null,
+      amount: charges,
+      status: finalDone ? "paid" : midwayDone ? "due" : "upcoming",
+    });
+  }
+
+  const STATUS_STYLES = {
+    paid: { card: "bg-green-50 ring-green-100", badge: "bg-green-600 text-white", text: "Paid" },
+    due: { card: "bg-red-50 ring-red-100", badge: "bg-red-600 text-white", text: "Due Now" },
+    upcoming: { card: "bg-slate-50 ring-slate-100", badge: "bg-slate-200 text-slate-500", text: "Upcoming" },
+  };
+
+  return (
+    <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
+      <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+        <CreditCard className="h-3.5 w-3.5 text-red-600" />
+        Payment Milestones
+      </p>
+      <div className={`mt-4 grid gap-3 sm:grid-cols-2 ${slabs.length > 3 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {slabs.map((slab) => {
+          const style = STATUS_STYLES[slab.status];
+          const negative = slab.amount < 0;
+          return (
+            <div key={slab.key} className={`rounded-2xl p-4 ring-1 ${style.card}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-500">
+                  {slab.label}
+                  {slab.percent ? ` (${slab.percent})` : ""}
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${style.badge}`}>
+                  {slab.status === "paid" && <CheckCircle2 className="mr-0.5 inline h-2.5 w-2.5" />}
+                  {style.text}
+                </span>
+              </div>
+              <p className={`mt-2 text-xl font-extrabold ${negative ? "text-green-600" : "text-[#0b1e42]"}`}>
+                {negative ? `-${formatINR(Math.abs(slab.amount))}` : formatINR(slab.amount)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function addressesMatch(a, b) {
   if (!a || !b) return false;
   return ["fullName", "phone", "house", "street", "landmark", "city", "pin"].every((k) => (a[k] || "") === (b[k] || ""));
@@ -519,7 +783,7 @@ function BookingDetailView({ booking, onBookingChange }) {
     : addressesMatch(billing, dropoff)
       ? "Same as Destination"
       : null;
-  const [tab, setTab] = useState("summary");
+  const [tab, setTab] = useState("status");
 
   // Re-uploading a rejected document — a fresh pick reaches
   // handleDocFileSelected via the same hidden-input trigger pattern
@@ -606,6 +870,66 @@ function BookingDetailView({ booking, onBookingChange }) {
         </p>
       )}
 
+      {booking.finalQuote && <PaymentMilestones booking={booking} />}
+
+      {/* Whichever payment is currently due — sits above the Status/Summary
+          tabs (not inside either one) so it's the first thing seen and
+          stays visible no matter which tab is selected, instead of being
+          buried under Summary only. */}
+      {booking.status === BOOKING_STATUS.QUOTE_SENT && booking.finalQuote && (
+        <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
+          <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Quote</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote)}</p>
+          <p className="mt-2 text-sm text-slate-300">
+            Reviewed and confirmed by our team. Pay a 10% advance to lock in your booking.
+          </p>
+          <Link
+            href={`/payment?bookingId=${booking.id}`}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+          >
+            Proceed to Payment (10% Advance)
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
+
+      {booking.status === BOOKING_STATUS.CONFIRMED && booking.finalQuote && booking.midwayRequested && (
+        <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
+          <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * 0.5)}</p>
+          <p className="mt-2 text-sm text-slate-300">
+            Your booking is confirmed. Pay the 50% checkpoint to keep your shipment moving to transit.
+          </p>
+          <Link
+            href={`/payment?bookingId=${booking.id}`}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+          >
+            Proceed to Payment (50%)
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
+
+      {booking.status === BOOKING_STATUS.OUT_FOR_DELIVERY &&
+        booking.finalQuote &&
+        booking.finalRequested &&
+        typeof booking.finalPaid !== "number" && (
+          <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
+            <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Payment</p>
+            <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.remainingBalance ?? 0)}</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Your vehicle is out for delivery. Pay your remaining balance to complete the booking.
+            </p>
+            <Link
+              href={`/payment?bookingId=${booking.id}`}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+            >
+              Proceed to Payment (Final Balance)
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        )}
+
       {/* Summary = every booking detail (addresses, final quote/payment,
           testing controls); Status = just the tracking chart, kept
           separate so checking progress doesn't mean scrolling past
@@ -627,70 +951,22 @@ function BookingDetailView({ booking, onBookingChange }) {
 
       <div className="mt-6 flex flex-col gap-6">
         {tab === "status" && (
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
-            <p className="text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">Tracking Status</p>
-            <div className="mt-6">
-              <StatusStepper status={booking.status} />
+          <>
+            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
+              <p className="text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">Tracking Status</p>
+              <div className="mt-6">
+                <StatusStepper status={booking.status} statusTimes={booking.statusTimes} inspections={booking.inspections} />
+              </div>
             </div>
-          </div>
+
+            {booking.status === BOOKING_STATUS.DELIVERED && (
+              <ReviewCard booking={booking} onBookingChange={onBookingChange} />
+            )}
+          </>
         )}
 
         {tab === "summary" && (
           <>
-            {booking.status === BOOKING_STATUS.QUOTE_SENT && booking.finalQuote && (
-              <div className="rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
-                <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Quote</p>
-                <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote)}</p>
-                <p className="mt-2 text-sm text-slate-300">
-                  Reviewed and confirmed by our team. Pay a 10% advance to lock in your booking.
-                </p>
-                <Link
-                  href={`/payment?bookingId=${booking.id}`}
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
-                >
-                  Proceed to Payment (10% Advance)
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            )}
-
-            {booking.status === BOOKING_STATUS.CONFIRMED && booking.finalQuote && booking.midwayRequested && (
-              <div className="rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
-                <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
-                <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * 0.5)}</p>
-                <p className="mt-2 text-sm text-slate-300">
-                  Your booking is confirmed. Pay the 50% checkpoint to keep your shipment moving to transit.
-                </p>
-                <Link
-                  href={`/payment?bookingId=${booking.id}`}
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
-                >
-                  Proceed to Payment (50%)
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            )}
-
-            {booking.status === BOOKING_STATUS.OUT_FOR_DELIVERY &&
-              booking.finalQuote &&
-              booking.finalRequested &&
-              typeof booking.finalPaid !== "number" && (
-                <div className="rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
-                  <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Payment</p>
-                  <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.remainingBalance ?? 0)}</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    Your vehicle is out for delivery. Pay your remaining balance to complete the booking.
-                  </p>
-                  <Link
-                    href={`/payment?bookingId=${booking.id}`}
-                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
-                  >
-                    Proceed to Payment (Final Balance)
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              )}
-
             <div className="grid gap-6 sm:grid-cols-2">
               <AddressDetailCard title="Pickup" icon={MapPin} address={pickup} />
               <AddressDetailCard title="Drop-off" icon={MapPin} address={dropoff} />

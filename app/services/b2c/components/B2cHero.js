@@ -182,7 +182,7 @@ export default function B2cHero() {
     const route = await getRoute(fromCity, toCity);
     setCheckingRoute(false);
     if (!route) {
-      setCityError("We don't have a route between these two cities yet.");
+      setCityError("Coming soon to this location — we're expanding our network and will be there shortly.");
       return;
     }
 

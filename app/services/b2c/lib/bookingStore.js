@@ -136,6 +136,8 @@ function addressToRow(bookingId, type, address) {
     // unanswered) — not the same as false ("No"), so this stays a
     // nullable boolean rather than defaulting to true/false.
     within_hub_radius: typeof address.withinHubRadius === "boolean" ? address.withinHubRadius : null,
+    hub_name: address.hubName || null,
+    hub_address: address.hubAddress || null,
     slot_date: address.date || null,
     time_slot: address.timeSlot || null,
   };
@@ -157,6 +159,8 @@ function addressRowToJs(row) {
       ? { address: row.captured_address, lat: row.captured_lat, lng: row.captured_lng }
       : null,
     withinHubRadius: row.within_hub_radius,
+    hubName: row.hub_name,
+    hubAddress: row.hub_address,
     date: row.slot_date,
     timeSlot: row.time_slot,
   };
@@ -177,12 +181,37 @@ function documentRowsToJs(rows) {
   return documents;
 }
 
-function rowToBooking(row, { addresses = [], documents = [], addons = [], charges = [] } = {}) {
+// When each pipeline step was reached — the latest booking_status_history
+// row per status (a status re-entered after a rollback shows its most recent
+// time). "docs_sent" is display-only and has no history row, so it takes the
+// booking's creation time.
+function statusTimesFromHistory(history, createdAt) {
+  const times = { docs_sent: createdAt };
+  for (const h of [...history].sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))) {
+    times[h.status] = h.changed_at;
+  }
+  return times;
+}
+
+function rowToBooking(
+  row,
+  { addresses = [], documents = [], addons = [], charges = [], history = [], inspections = [], review = null } = {}
+) {
   const chargesTotal = charges.reduce((sum, c) => sum + Number(c.amount), 0);
   return {
+    review: review ? { rating: review.rating, comment: review.comment, updatedAt: review.updated_at } : null,
     id: row.booking_code,
     status: row.status,
     createdAt: row.created_at,
+    statusTimes: statusTimesFromHistory(history, row.created_at),
+    inspections: inspections.map((i) => ({
+      id: i.id,
+      stage: i.stage,
+      fileName: i.file_name,
+      fileType: i.file_type,
+      path: i.file_url,
+      createdAt: i.created_at,
+    })),
     finalQuote: row.final_quote,
     advancePaid: row.advance_paid,
     midwayPaid: row.midway_paid,
@@ -252,13 +281,32 @@ const BOOKING_SELECT =
   "*, from_city:from_city_id(name), to_city:to_city_id(name), vehicle_type:vehicle_type_id(name)";
 
 async function fetchBookingChildren(bookingId) {
-  const [{ data: addresses }, { data: documents }, { data: addons }, { data: charges }] = await Promise.all([
+  const [
+    { data: addresses },
+    { data: documents },
+    { data: addons },
+    { data: charges },
+    { data: history },
+    { data: inspections },
+    { data: review },
+  ] = await Promise.all([
     supabase.from("booking_addresses").select("*").eq("booking_id", bookingId),
     supabase.from("booking_documents").select("*").eq("booking_id", bookingId),
     supabase.from("booking_addons").select("price_at_booking, add_on_service:add_on_service_id(key, label)").eq("booking_id", bookingId),
     supabase.from("booking_charges").select("*").eq("booking_id", bookingId).order("created_at"),
+    supabase.from("booking_status_history").select("status, changed_at").eq("booking_id", bookingId),
+    supabase.from("booking_inspections").select("*").eq("booking_id", bookingId).order("created_at"),
+    supabase.from("booking_reviews").select("*").eq("booking_id", bookingId).maybeSingle(),
   ]);
-  return { addresses: addresses ?? [], documents: documents ?? [], addons: addons ?? [], charges: charges ?? [] };
+  return {
+    addresses: addresses ?? [],
+    documents: documents ?? [],
+    addons: addons ?? [],
+    charges: charges ?? [],
+    history: history ?? [],
+    inspections: inspections ?? [],
+    review: review ?? null,
+  };
 }
 
 async function createBookingSupabase(bookingData) {
@@ -605,4 +653,31 @@ export async function getChargeReceiptUrl(path) {
   const { data, error } = await supabase.storage.from("booking-documents").createSignedUrl(path, 120);
   if (error) throw error;
   return data.signedUrl;
+}
+
+// One review per booking (booking_reviews.booking_id is its primary key).
+// Uses upsert defensively (so a double-submit can't create a second row),
+// but this is only ever called once per booking in practice — the UI
+// (ReviewCard in MyBookingsClient.js) hides the form once booking.review
+// exists, and the table has no update RLS policy, so a review is final.
+export async function submitBookingReview(bookingCode, { rating, comment }) {
+  if (!isSupabaseConfigured) throw new Error("Reviews aren't available yet — try again shortly.");
+
+  const { data: booking, error: bookingError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("booking_code", bookingCode)
+    .single();
+  if (bookingError) throw bookingError;
+
+  const { data, error } = await supabase
+    .from("booking_reviews")
+    .upsert(
+      { booking_id: booking.id, rating, comment: comment?.trim() || null, updated_at: new Date().toISOString() },
+      { onConflict: "booking_id" }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return { rating: data.rating, comment: data.comment, updatedAt: data.updated_at };
 }

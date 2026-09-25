@@ -30,8 +30,8 @@ const LINK_GROUPS = [
     links: [
       { label: "Live Tracking", href: "#" },
       { label: "FAQs", href: "#" },
-      { label: "Privacy Policy", href: "#" },
-      { label: "Terms of Service", href: "#" },
+      { label: "Privacy Policy", href: "/privacy-policy" },
+      { label: "Terms of Service", href: "/terms-of-service" },
     ],
   },
 ];

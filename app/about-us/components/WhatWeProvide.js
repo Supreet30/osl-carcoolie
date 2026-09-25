@@ -1,5 +1,13 @@
+"use client";
+
+import { useRef } from "react";
 import Image from "next/image";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Flag, Sparkles, TrendingUp, Truck } from "lucide-react";
+
+gsap.registerPlugin(ScrollTrigger);
 
 // The real company timeline — each milestone gets its own icon (founding,
 // fleet growth, cumulative volume, new business line).
@@ -30,12 +38,68 @@ const MILESTONES = [
   },
 ];
 
-// No client state needed — the only interactivity (card lift on hover) is
-// plain CSS (`group-hover`), so this stays a server component instead of
-// shipping a client JS bundle for it.
 export default function WhatWeProvide() {
+  const sectionRef = useRef(null);
+  // Fixed-length module constant, so index-based assignment below is stable
+  // across re-renders without needing to reset these arrays.
+  const cardRefs = useRef([]);
+  const circleRefs = useRef([]);
+
+  // Pins the section in place the moment it reaches the top of the
+  // viewport — scrolling doesn't move the page again until the pinned
+  // scroll distance below is used up. That scroll input instead scrubs a
+  // timeline that reveals the 4 cards one at a time: card 1 slides in and
+  // its "01" circle pops, then (more scrolling) card 2 does the same, and
+  // so on — never two at once, and never by the clock, only by how far the
+  // user has scrolled. Falls back to a static "everything already visible"
+  // view for prefers-reduced-motion, same as OurServices.js.
+  useGSAP(
+    () => {
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const cards = cardRefs.current;
+      const circles = circleRefs.current;
+
+      if (cards.length === 0) return;
+
+      if (prefersReducedMotion) {
+        gsap.set(cards, { x: 0, opacity: 1 });
+        gsap.set(circles, { scale: 1, opacity: 1 });
+        return;
+      }
+
+      gsap.set(cards, { x: 80, opacity: 0 });
+      gsap.set(circles, { scale: 0, opacity: 0 });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: `+=${cards.length * 100}%`,
+          pin: true,
+          scrub: true,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+        },
+      });
+
+      cards.forEach((card, i) => {
+        tl.to(card, { x: 0, opacity: 1, ease: "none" }).to(circles[i], { scale: 1, opacity: 1, ease: "none" }, "<+=0.2");
+      });
+
+      // Without this, unpinning kicks in the instant circle 4's tween value
+      // hits its end — since it's the last thing in the timeline, that
+      // meant it barely had time to fully form before the page yanked it
+      // away as scrolling resumed. This pads the end of the pinned scroll
+      // range with dead time so the finished state holds for a moment
+      // first, same as every earlier card gets "for free" from having more
+      // timeline still ahead of it.
+      tl.to({}, { duration: 1.5 });
+    },
+    { scope: sectionRef }
+  );
+
   return (
-    <section className="relative overflow-hidden bg-white px-6 py-20 sm:py-24 lg:px-16">
+    <section ref={sectionRef} className="relative overflow-hidden bg-white px-6 py-20 sm:py-24 lg:px-16">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"
@@ -105,6 +169,9 @@ export default function WhatWeProvide() {
               {MILESTONES.map(({ number, year, description, icon: Icon }, i) => (
                 <div key={number} className="group relative flex items-center gap-10 lg:gap-14">
                   <span
+                    ref={(el) => {
+                      if (el) circleRefs.current[i] = el;
+                    }}
                     className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-extrabold text-white shadow-lg transition-transform duration-300 group-hover:scale-105 ${
                       i % 2 === 0 ? "bg-[#0b1e42]" : "bg-red-600"
                     }`}
@@ -112,7 +179,12 @@ export default function WhatWeProvide() {
                     {number}
                   </span>
 
-                  <div className="flex flex-1 items-start gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_12px_40px_rgba(15,35,70,0.07)] transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_18px_45px_rgba(15,35,70,0.12)]">
+                  <div
+                    ref={(el) => {
+                      if (el) cardRefs.current[i] = el;
+                    }}
+                    className="flex flex-1 items-start gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_12px_40px_rgba(15,35,70,0.07)] transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_18px_45px_rgba(15,35,70,0.12)]"
+                  >
                     <Icon className="mt-1 h-6 w-6 shrink-0 text-[#0b1e42]" strokeWidth={2} />
                     <div>
                       <p className="text-xl font-extrabold text-red-600 sm:text-2xl">{year}</p>

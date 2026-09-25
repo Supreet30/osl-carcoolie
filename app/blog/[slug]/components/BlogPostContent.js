@@ -17,11 +17,44 @@ const SHARE_LINKS = [
 // post, not tied to any one article's content.
 const RELATED_LINKS = [
   { label: "Car Transport Process", href: "/services" },
-  { label: "Packing Tips for Car", href: "/blog/how-to-prepare-your-car-for-long-distance-transport" },
+  { label: "Vehicle Transport Pricing", href: "/blog/how-to-calculate-vehicle-transportation-costs-in-india" },
   { label: "Door to Door Delivery", href: "/services" },
-  { label: "Car Transport Insurance", href: "/blog/understanding-vehicle-insurance-during-transit" },
+  { label: "Car Transport Insurance", href: "/blog/understanding-transit-insurance-for-vehicle-shipping" },
   { label: "State to State Transport", href: "/company-numbers" },
 ];
+
+// A section/subsection's `parts` is an ordered list of paragraph and list
+// blocks — see the comment atop posts.js for the shape. Rendered as its own
+// component (not inlined) since both a top-level section and a nested
+// subsection use the exact same part types.
+function PartsBlock({ parts }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {parts.map((part, i) => {
+        if (part.type === "p") {
+          return (
+            <p key={i} className="text-base leading-relaxed text-slate-600">
+              {part.text}
+            </p>
+          );
+        }
+        const ListTag = part.type === "ol" ? "ol" : "ul";
+        return (
+          <ListTag
+            key={i}
+            className={`flex flex-col gap-2 pl-5 text-base leading-relaxed text-slate-600 ${
+              part.type === "ol" ? "list-decimal" : "list-disc"
+            }`}
+          >
+            {part.items.map((item, j) => (
+              <li key={j}>{item}</li>
+            ))}
+          </ListTag>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function BlogPostContent({ post, relatedPosts }) {
   const [leadSection, ...restSections] = post.sections;
@@ -39,10 +72,14 @@ export default function BlogPostContent({ post, relatedPosts }) {
 
             <div className="mt-6 flex flex-col gap-4">
               <p className="text-base leading-relaxed text-slate-600">{post.excerpt}</p>
-              {leadSection.paragraphs.map((paragraph, i) => (
-                <p key={i} className="text-base leading-relaxed text-slate-600">
-                  {paragraph}
-                </p>
+              <PartsBlock parts={leadSection.parts} />
+              {leadSection.subsections?.map((sub) => (
+                <div key={sub.title} className="mt-2">
+                  <h4 className="text-lg font-extrabold text-[#0b1e42]">{sub.title}</h4>
+                  <div className="mt-3">
+                    <PartsBlock parts={sub.parts} />
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -56,16 +93,20 @@ export default function BlogPostContent({ post, relatedPosts }) {
             )}
 
             <div className="mt-8 flex flex-col gap-10">
-              {restSections.map(({ heading, paragraphs }) => (
+              {restSections.map(({ heading, parts, subsections }) => (
                 <div key={heading}>
                   <h3 id={headingId(heading)} className="scroll-mt-32 text-2xl font-extrabold text-[#0b1e42]">
                     {heading}
                   </h3>
-                  <div className="mt-4 flex flex-col gap-4">
-                    {paragraphs.map((paragraph, i) => (
-                      <p key={i} className="text-base leading-relaxed text-slate-600">
-                        {paragraph}
-                      </p>
+                  <div className="mt-4 flex flex-col gap-6">
+                    <PartsBlock parts={parts} />
+                    {subsections?.map((sub) => (
+                      <div key={sub.title}>
+                        <h4 className="text-lg font-extrabold text-[#0b1e42]">{sub.title}</h4>
+                        <div className="mt-3">
+                          <PartsBlock parts={sub.parts} />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

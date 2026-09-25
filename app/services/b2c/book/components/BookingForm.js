@@ -30,6 +30,7 @@ import {
 import { createBooking } from "../../lib/bookingStore";
 import { formatINR } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
+import Dropdown from "../../components/Dropdown";
 import MapPickerModal from "./MapPickerModal";
 
 // Driving License is dropped from this list — `license` stays defined in
@@ -97,14 +98,15 @@ const DROPOFF_METHODS = [
 
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
 
-// Placeholder until real per-city hub data exists — every leg shows the
-// same dummy hub name/address (with the leg's own city appended) rather
-// than nothing at all, so the "within 50km" question below has a concrete
-// reference point to ask about.
-const CARCOOLIE_HUB = {
-  name: "CarCoolie Hub",
-  address: "Plot 14, Sector 6, Industrial Growth Centre",
-};
+// Dummy yards until real yard data exists — four Kolkata locations shown
+// for every city, so the yard selector has something to choose between and
+// the "within 50km" question below always has a concrete reference point.
+const DUMMY_YARDS = [
+  { name: "CarCoolie Yard – Dankuni", address: "Plot 14, Industrial Growth Centre, Dankuni, Kolkata" },
+  { name: "CarCoolie Yard – Howrah", address: "Unit 22, Transport Nagar, Liluah, Howrah, Kolkata" },
+  { name: "CarCoolie Yard – Barasat", address: "Godown 7, Logistics Park, Jessore Road, Barasat, Kolkata" },
+  { name: "CarCoolie Yard – New Town", address: "Yard 4, Auto Hub Road, Action Area II, New Town, Kolkata" },
+];
 
 // The labels drop AM/PM (they're always a daytime business-hours slot), so
 // this is the only unambiguous place "01:00" means 1pm, not 1am — used to
@@ -202,38 +204,20 @@ function TextField({ label, ...props }) {
 // "prefer Google's geocoding when available" behavior for free, instead of
 // a second, less accurate implementation living here too.
 function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
-  // Whichever method actually produced the captured location gets the red
-  // "selected" border — same treatment as the Pickup/Drop-off Method cards
-  // above this section, since these two buttons are really just another
-  // mutually-exclusive choice (which way was the location set).
-  const currentSelected = captured?.source === "current";
-  const mapSelected = captured?.source === "map";
+  const CURRENT = "Use Current Location";
+  const MAP = "Select on Map";
+  const value = captured?.source === "current" ? CURRENT : captured?.source === "map" ? MAP : undefined;
 
   return (
     <div className="mt-6">
       <p className="text-sm font-semibold text-[#0b1e42]">Add Location</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={onUseCurrentLocation}
-          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-            currentSelected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-          }`}
-        >
-          <LocateFixed className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-          <span className="text-sm font-bold text-[#0b1e42]">Current Location</span>
-        </button>
-        <button
-          type="button"
-          onClick={onOpenMap}
-          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-            mapSelected ? "border-red-300 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
-          }`}
-        >
-          <Map className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={2} />
-          <span className="text-sm font-bold text-[#0b1e42]">Select on Map</span>
-        </button>
-      </div>
+      <Dropdown
+        placeholder="Choose how to add your location"
+        value={value}
+        onChange={(option) => (option === CURRENT ? onUseCurrentLocation() : onOpenMap())}
+        options={[CURRENT, MAP]}
+        optionIcons={{ [CURRENT]: LocateFixed, [MAP]: Map }}
+      />
       {captured && (
         <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-green-600">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -249,20 +233,30 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
 // shows it too as the reference point for the 50km question below it.
 // `withinHub` is null until the customer picks an answer, so the warning
 // only ever appears after an explicit "No" — never on load.
-function HubLocationCard({ city, showProximityCheck, withinHub, onWithinHubChange, name }) {
-  const fullAddress = `${CARCOOLIE_HUB.address}${city ? `, ${city}` : ""}`;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${CARCOOLIE_HUB.name} ${fullAddress}`)}`;
+function HubLocationCard({ showProximityCheck, withinHub, onWithinHubChange, name, yard, onYardChange }) {
+  const yards = DUMMY_YARDS;
+  const selected = yards.find((y) => y.name === yard?.name) ?? yards[0];
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.name} ${selected.address}`)}`;
 
   return (
     <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+      <div className="mb-4">
+        <p className="text-xs font-semibold text-[#0b1e42]">Select yard ({yards.length} available)</p>
+        <Dropdown
+          placeholder="Select a yard"
+          value={selected.name}
+          onChange={(name) => onYardChange(yards.find((y) => y.name === name) ?? yards[0])}
+          options={yards.map((y) => y.name)}
+          optionIcons={Object.fromEntries(yards.map((y) => [y.name, Building2]))}
+        />
+      </div>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-1.5 text-sm font-bold text-[#0b1e42]">
             <Building2 className="h-4 w-4 shrink-0 text-red-500" strokeWidth={2} />
-            {CARCOOLIE_HUB.name}
-            {city ? ` – ${city}` : ""}
+            {selected.name}
           </p>
-          <p className="mt-1 pl-6 text-xs text-slate-500">{fullAddress}</p>
+          <p className="mt-1 pl-6 text-xs text-slate-500">{selected.address}</p>
         </div>
         <a
           href={mapsUrl}
@@ -402,10 +396,12 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // actually answers, true/false after. Not yet wired into pricing; just
   // surfaces the "extra charges may apply" note when they say "No".
   const [pickupWithinHub, setPickupWithinHub] = useState(null);
+  const [pickupYard, setPickupYard] = useState(DUMMY_YARDS[0]);
 
   const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(null);
   const [dropoffWithinHub, setDropoffWithinHub] = useState(null);
+  const [dropoffYard, setDropoffYard] = useState(DUMMY_YARDS[0]);
 
   // `estimate` loads from localStorage after mount (see BookingPageClient.js
   // — it's null on first render), so the useState defaults above miss it.
@@ -620,6 +616,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         method: pickupMethod,
         capturedLocation: pickupLocation,
         withinHubRadius: pickupWithinHub,
+        hubName: pickupYard?.name ?? null,
+        hubAddress: pickupYard?.address ?? null,
         date: formData.get("pickup_date"),
         timeSlot,
       },
@@ -634,6 +632,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         method: dropoffMethod,
         capturedLocation: dropoffLocation,
         withinHubRadius: dropoffWithinHub,
+        hubName: dropoffYard?.name ?? null,
+        hubAddress: dropoffYard?.address ?? null,
         // No longer customer-picked — expected delivery date is computed
         // from the pickup date + the route's minimum transit days instead
         // (see expectedDeliveryISO above); there's no drop-off time slot
@@ -698,6 +698,30 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const showDocsError = docsSubmitAttempted && missingDocs.length > 0;
   const canSubmit = confirmedDocs && agreedTerms && !submitting;
 
+  // Rendered in two places depending on the method: for self drop-off/pickup
+  // it IS the address section (which yard to go to); for a driver it stays
+  // down in the details as the reference point for the 50km question.
+  const pickupHubCard = (
+  <HubLocationCard
+    showProximityCheck={pickupMethod === "driver"}
+    withinHub={pickupWithinHub}
+    onWithinHubChange={setPickupWithinHub}
+    name="pickup_within_hub_radius"
+    yard={pickupYard}
+    onYardChange={setPickupYard}
+  />
+  );
+  const dropoffHubCard = (
+  <HubLocationCard
+    showProximityCheck={dropoffMethod === "driver"}
+    withinHub={dropoffWithinHub}
+    onWithinHubChange={setDropoffWithinHub}
+    name="dropoff_within_hub_radius"
+    yard={dropoffYard}
+    onYardChange={setDropoffYard}
+  />
+  );
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
@@ -757,9 +781,12 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             </div>
           </>
         ) : (
-          // Self Drop-off — the customer brings the car to our hub, so
-          // there's no address for a driver to go find.
-          <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll drop the car off at our hub.</p>
+          // Self Drop-off — no address for a driver to find; the customer
+          // just picks which yard they'll bring the car to.
+          <>
+            <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll drop the car off at one of our yards.</p>
+            {pickupHubCard}
+          </>
         )}
 
         {/* Was its own "4. Pickup Details" section — folded in here since
@@ -782,13 +809,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             />
           )}
 
-          <HubLocationCard
-            city={estimate?.fromCity}
-            showProximityCheck={pickupMethod === "driver"}
-            withinHub={pickupWithinHub}
-            onWithinHubChange={setPickupWithinHub}
-            name="pickup_within_hub_radius"
-          />
+          {pickupMethod === "driver" && pickupHubCard}
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <label className="block text-sm font-semibold text-[#0b1e42]">
@@ -868,9 +889,12 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             </div>
           </>
         ) : (
-          // Self Pickup — the customer collects the car from our hub, so
-          // there's no address for a driver to deliver it to.
-          <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll collect the car from our hub.</p>
+          // Self Pickup — no address for a driver to deliver to; the customer
+          // just picks which yard they'll collect the car from.
+          <>
+            <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll collect the car from one of our yards.</p>
+            {dropoffHubCard}
+          </>
         )}
 
         {/* Was its own "5. Drop-off Details" section — folded in here for
@@ -892,13 +916,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             />
           )}
 
-          <HubLocationCard
-            city={estimate?.toCity}
-            showProximityCheck={dropoffMethod === "driver"}
-            withinHub={dropoffWithinHub}
-            onWithinHubChange={setDropoffWithinHub}
-            name="dropoff_within_hub_radius"
-          />
+          {dropoffMethod === "driver" && dropoffHubCard}
 
           {/* Read-only — replaces what used to be a customer-pickable
               drop-off date/time slot. Just pickup date + the route's
@@ -1180,11 +1198,21 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
           />
           I agree to CarCoolie&apos;s{" "}
-          <a href="#" className="font-semibold text-red-600 hover:text-red-700">
+          <a
+            href="/terms-of-service"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-red-600 hover:text-red-700"
+          >
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="#" className="font-semibold text-red-600 hover:text-red-700">
+          <a
+            href="/privacy-policy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-red-600 hover:text-red-700"
+          >
             Privacy Policy
           </a>
           .
