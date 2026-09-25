@@ -958,7 +958,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               return (
                 <div
                   key={key}
-                  className={`relative flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
+                  className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
                     state.uploaded
                       ? "border-green-200 bg-green-50"
                       : "border-slate-200 bg-white hover:border-red-200"
