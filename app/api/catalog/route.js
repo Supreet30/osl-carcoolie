@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAddOnServices, getCities, getGstRate, getVehicleModels, getVehicleTypes } from "../../services/b2c/lib/pricing";
+import { CORS_HEADERS } from "../_cors";
+
+export { OPTIONS } from "../_cors";
 
 // Read-only bootstrap data for a third-party integration (e.g. a partner
 // app) — everything needed to render the same "Get an Estimate" form this
@@ -19,5 +22,5 @@ export async function GET() {
     getGstRate(),
   ]);
 
-  return NextResponse.json({ cities, vehicleTypes, vehicleModels, addOns, gstRate });
+  return NextResponse.json({ cities, vehicleTypes, vehicleModels, addOns, gstRate }, { headers: CORS_HEADERS });
 }

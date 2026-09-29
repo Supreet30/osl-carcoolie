@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { computeEstimate, inclusiveBreakdown } from "../../services/b2c/lib/pricing";
+import { CORS_HEADERS } from "../_cors";
+
+export { OPTIONS } from "../_cors";
 
 // The one true source of a quote — wraps the exact same computeEstimate()
 // this site's own "Get an Estimate" modal calls, so a partner app never has
@@ -10,13 +13,16 @@ import { computeEstimate, inclusiveBreakdown } from "../../services/b2c/lib/pric
 export async function POST(request) {
   const body = await request.json().catch(() => null);
   if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400, headers: CORS_HEADERS });
   }
 
   const { fromCity, toCity, vehicleType, make, selectedAddOns, couponCode, pickupMethod, dropoffMethod } = body;
 
   if (!fromCity || !toCity || !vehicleType) {
-    return NextResponse.json({ error: "fromCity, toCity, and vehicleType are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "fromCity, toCity, and vehicleType are required." },
+      { status: 400, headers: CORS_HEADERS }
+    );
   }
 
   const estimate = await computeEstimate({
@@ -31,7 +37,10 @@ export async function POST(request) {
   });
 
   if (!estimate) {
-    return NextResponse.json({ available: false, message: "No route between these cities yet." });
+    return NextResponse.json(
+      { available: false, message: "No route between these cities yet." },
+      { headers: CORS_HEADERS }
+    );
   }
 
   // Both the tax-exclusive internals (subtotal/gst as separate figures —
@@ -41,5 +50,5 @@ export async function POST(request) {
   // to its own end users almost certainly wants the latter.
   const inclusive = inclusiveBreakdown(estimate);
 
-  return NextResponse.json({ available: true, estimate, inclusive });
+  return NextResponse.json({ available: true, estimate, inclusive }, { headers: CORS_HEADERS });
 }
