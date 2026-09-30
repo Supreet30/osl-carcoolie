@@ -123,6 +123,41 @@ const spec = {
         },
       },
     },
+    "/api/resolve-pincode": {
+      get: {
+        summary: "Detects the city for an Indian PIN code, matched against this site's own serviced cities list. PIN-to-post-office data is cached for 30 days server-side (it never meaningfully changes) — repeat lookups of the same PIN are fast and don't count against the upstream free postal API's quota.",
+        parameters: [
+          { name: "pincode", in: "query", required: true, schema: { type: "string", pattern: "^\\d{6}$" }, description: "A 6-digit Indian PIN code." },
+        ],
+        responses: {
+          200: {
+            description: "Always 200 for a well-formed PIN, even when nothing matches — check `matched` before reading `city`.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    matched: { type: "boolean" },
+                    city: { type: "string", nullable: true, description: "Only present (and non-null) when matched is true — a name from /api/catalog's cities[]." },
+                    district: { type: "string", description: "The PIN's postal district, present whenever the PIN itself was found, regardless of whether it matched a serviced city." },
+                    state: { type: "string" },
+                    message: { type: "string", description: "Present instead of district/state when the PIN doesn't exist at all." },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: "Malformed PIN (not 6 digits)",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+          502: {
+            description: "The upstream postal data service is unreachable",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+        },
+      },
+    },
     "/api/subscribe": {
       post: {
         summary: "Subscribe an email to the newsletter",
