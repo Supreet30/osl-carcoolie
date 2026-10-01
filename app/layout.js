@@ -1,6 +1,6 @@
 import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
-import WhatsAppButton from "@/app/components/Whatsapp"
+import FloatingActions from "@/app/components/FloatingActions"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +32,7 @@ export default function RootLayout({ children }) {
       className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}
-        <WhatsAppButton />
+        <FloatingActions />
       </body>
     </html>
   );

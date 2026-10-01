@@ -11,6 +11,7 @@
 // booking page, before a booking (and therefore a database row) exists yet.
 
 import { isSupabaseConfigured, supabase } from "../../../../lib/supabaseClient";
+import { PAYMENT_SPLIT } from "./pricing";
 
 const ESTIMATE_KEY = "carcoolie_b2c_estimate";
 const BOOKINGS_KEY = "carcoolie_b2c_bookings";
@@ -24,7 +25,34 @@ export const BOOKING_STATUS = {
   IN_TRANSIT: "in_transit",
   OUT_FOR_DELIVERY: "out_for_delivery",
   DELIVERED: "delivered",
+  // Exit state, not a pipeline step — deliberately left out of
+  // buildStatusSteps() below, same as "docs_sent" is included there despite
+  // never being a real status. See cancelBooking().
+  CANCELLED: "cancelled",
 };
+
+// Self-serve cancellation (see cancelBooking() below) is only offered while
+// the booking is still in one of these — once it's Confirmed, the customer
+// needs to contact support instead (see the Cancellation Policy page).
+export const CANCELLABLE_STATUSES = [BOOKING_STATUS.DOCS_REVIEW, BOOKING_STATUS.QUOTE_SENT, BOOKING_STATUS.ADVANCE_PAID];
+
+// What cancelBooking() deducts from the advance already paid (none, if
+// cancelled before the advance was paid at all) — see the Cancellation
+// Policy page's "What's deducted" section. Independent of PAYMENT_SPLIT:
+// this is a percentage of the advance itself, not of the final quote.
+export const CANCELLATION_FEE_PERCENT = 10;
+
+// Options for the "Reason for cancellation" dropdown in My Bookings' cancel
+// confirmation dialog — free text isn't collected, just which of these the
+// customer picked (see cancellationReason on the returned booking).
+export const CANCELLATION_REASONS = [
+  "Booked by mistake",
+  "Found a better price elsewhere",
+  "Change of travel/moving plans",
+  "Pickup or delivery timeline doesn't work for me",
+  "Decided not to transport the vehicle",
+  "Other",
+];
 
 // "docs_sent" is display-only — it's never an actual bookings.status value,
 // since submitting the booking form (with its document uploads) is what
@@ -32,17 +60,24 @@ export const BOOKING_STATUS = {
 // all it's already true. It exists purely so the stepper below shows it as
 // the first, already-completed step rather than starting the customer's
 // view mid-pipeline at "Documents Under Review".
-export const STATUS_STEPS = [
-  { key: "docs_sent", label: "Documents Sent for Review" },
-  { key: BOOKING_STATUS.DOCS_REVIEW, label: "Documents Under Review" },
-  { key: BOOKING_STATUS.QUOTE_SENT, label: "Final Quote Generated" },
-  { key: BOOKING_STATUS.ADVANCE_PAID, label: "Advance Paid (10%)" },
-  { key: BOOKING_STATUS.CONFIRMED, label: "Booking Confirmed" },
-  { key: BOOKING_STATUS.MIDWAY_PAID, label: "50% Payment Received" },
-  { key: BOOKING_STATUS.IN_TRANSIT, label: "In Transit" },
-  { key: BOOKING_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
-  { key: BOOKING_STATUS.DELIVERED, label: "Delivered" },
-];
+// A function of the live payment split (from the admin's Payment Settings
+// page) rather than a static array, since the Advance/Midway step labels
+// quote the actual percentage — callers that don't have the live split
+// handy fall back to PAYMENT_SPLIT (the same 10/50 default the DB row
+// starts with).
+export function buildStatusSteps(split = PAYMENT_SPLIT) {
+  return [
+    { key: "docs_sent", label: "Documents Sent for Review" },
+    { key: BOOKING_STATUS.DOCS_REVIEW, label: "Documents Under Review" },
+    { key: BOOKING_STATUS.QUOTE_SENT, label: "Final Quote Generated" },
+    { key: BOOKING_STATUS.ADVANCE_PAID, label: `Advance Paid (${split.advancePercent}%)` },
+    { key: BOOKING_STATUS.CONFIRMED, label: "Booking Confirmed" },
+    { key: BOOKING_STATUS.MIDWAY_PAID, label: `${split.midwayPercent}% Payment Received` },
+    { key: BOOKING_STATUS.IN_TRANSIT, label: "In Transit" },
+    { key: BOOKING_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
+    { key: BOOKING_STATUS.DELIVERED, label: "Delivered" },
+  ];
+}
 
 function safeParse(raw, fallback) {
   if (!raw) return fallback;
@@ -96,6 +131,24 @@ function updateBookingLocal(id, updates) {
   const bookings = getBookingsLocal().map((b) => (b.id === id ? { ...b, ...updates } : b));
   saveBookingsLocal(bookings);
   return bookings.find((b) => b.id === id) ?? null;
+}
+
+function cancelBookingLocal(id, reason) {
+  const booking = getBookingsLocal().find((b) => b.id === id);
+  if (!booking) return null;
+  if (!CANCELLABLE_STATUSES.includes(booking.status)) {
+    throw new Error("This booking can no longer be cancelled.");
+  }
+  const advancePaid = Number(booking.advancePaid ?? 0);
+  const cancellationFee = Math.round(advancePaid * (CANCELLATION_FEE_PERCENT / 100));
+  const refundAmount = Math.round(advancePaid - cancellationFee);
+  return updateBookingLocal(id, {
+    status: BOOKING_STATUS.CANCELLED,
+    cancelledAt: new Date().toISOString(),
+    cancellationFee,
+    refundAmount,
+    cancellationReason: reason ?? null,
+  });
 }
 
 // ---- Supabase-backed implementation ----
@@ -218,6 +271,12 @@ function rowToBooking(
     midwayRequested: Boolean(row.midway_requested_at),
     finalPaid: row.final_paid,
     finalRequested: Boolean(row.final_requested_at),
+    cancelledAt: row.cancelled_at ?? null,
+    cancellationFee: row.cancellation_fee,
+    refundAmount: row.refund_amount,
+    cancellationReason: row.cancellation_reason ?? null,
+    pickupPoc: row.pickup_poc_name ? { name: row.pickup_poc_name, phone: row.pickup_poc_phone } : null,
+    dropoffPoc: row.dropoff_poc_name ? { name: row.dropoff_poc_name, phone: row.dropoff_poc_phone } : null,
     charges: charges.map((c) => ({
       id: c.id,
       label: c.label,
@@ -507,6 +566,65 @@ async function updateBookingSupabase(id, updates) {
   }
 
   return rowToBooking(row, children);
+}
+
+// Self-serve cancellation from My Bookings. Deliberately not folded into
+// updateBookingSupabase above — that function's "fall back to local storage
+// on any error" wrapper (see updateBooking() below) would be wrong here: a
+// rejected cancellation (already past CANCELLABLE_STATUSES) is a real
+// business-rule error that should reach the UI, not get silently retried
+// against a local store that doesn't even have this booking.
+async function cancelBookingSupabase(id, reason) {
+  const { data: row, error: findError } = await supabase
+    .from("bookings")
+    .select("id, status, advance_paid")
+    .eq("booking_code", id)
+    .single();
+  if (findError) throw findError;
+  if (!CANCELLABLE_STATUSES.includes(row.status)) {
+    throw new Error("This booking can no longer be cancelled.");
+  }
+
+  const advancePaid = Number(row.advance_paid ?? 0);
+  const cancellationFee = Math.round(advancePaid * (CANCELLATION_FEE_PERCENT / 100));
+  const refundAmount = Math.round(advancePaid - cancellationFee);
+
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({
+      status: BOOKING_STATUS.CANCELLED,
+      cancelled_at: new Date().toISOString(),
+      cancellation_fee: cancellationFee,
+      refund_amount: refundAmount,
+      cancellation_reason: reason ?? null,
+    })
+    .eq("id", row.id)
+    .select(BOOKING_SELECT)
+    .single();
+  if (error) throw error;
+
+  // Audit-trail row for the admin panel, same reasoning as the
+  // advance/midway/balance logging above — only when there's actually
+  // something to hand back (cancelling before any advance was paid leaves
+  // nothing to refund).
+  if (refundAmount > 0) {
+    const { error: paymentError } = await supabase.from("payments").insert({
+      booking_id: row.id,
+      type: "refund",
+      amount: refundAmount,
+      status: "success",
+      paid_at: new Date().toISOString(),
+    });
+    if (paymentError) throw paymentError;
+  }
+
+  const children = await fetchBookingChildren(row.id);
+  return rowToBooking(updated, children);
+}
+
+export async function cancelBooking(id, reason) {
+  if (isSupabaseConfigured) return cancelBookingSupabase(id, reason);
+  return cancelBookingLocal(id, reason);
 }
 
 // Re-uploading a rejected document — looked up by booking_code since that's

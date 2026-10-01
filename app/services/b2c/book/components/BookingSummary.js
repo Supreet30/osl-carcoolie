@@ -89,26 +89,31 @@ export default function BookingSummary({ estimate, details }) {
               </div>
             )}
 
-            <div className="mt-5 flex flex-col gap-2 border-t border-white/10 pt-5 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">Transportation</span>
-                <span className="font-semibold text-white">
-                  {formatINR(inclusive.transportation)}
-                </span>
-              </div>
-              {estimate.addOnsTotal > 0 && (
+            {(estimate.addOnsTotal > 0 || estimate.coupon) && (
+              // Only worth itemizing once there's something to itemize —
+              // with no VAS and no promo, "Transportation" would just
+              // restate the total below it.
+              <div className="mt-5 flex flex-col gap-2 border-t border-white/10 pt-5 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Value Added Services (VAS)</span>
-                  <span className="font-semibold text-white">{formatINR(inclusive.addOnsInclusive)}</span>
+                  <span className="text-slate-300">Transportation</span>
+                  <span className="font-semibold text-white">
+                    {formatINR(inclusive.transportation)}
+                  </span>
                 </div>
-              )}
-              {estimate.coupon && (
-                <div className="flex items-center justify-between text-green-400">
-                  <span>Promo: {estimate.coupon.code}</span>
-                  <span className="font-semibold">-{formatINR(estimate.discount)}</span>
-                </div>
-              )}
-            </div>
+                {estimate.addOnsTotal > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Value Added Services (VAS)</span>
+                    <span className="font-semibold text-white">{formatINR(inclusive.addOnsInclusive)}</span>
+                  </div>
+                )}
+                {estimate.coupon && (
+                  <div className="flex items-center justify-between text-green-400">
+                    <span>Promo: {estimate.coupon.code}</span>
+                    <span className="font-semibold">-{formatINR(estimate.discount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5">
               <p className="text-base font-extrabold text-white">Estimated Total</p>

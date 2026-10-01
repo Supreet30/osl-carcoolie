@@ -26,63 +26,82 @@ import {
   ShieldCheck,
   User,
   Wind,
+  XCircle,
 } from "lucide-react";
 import { createBooking } from "../../lib/bookingStore";
-import { formatINR } from "../../lib/pricing";
+import { formatINR, getDocumentFormats } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import Dropdown from "../../components/Dropdown";
 import MapPickerModal from "./MapPickerModal";
+import { locateCurrentPosition } from "../lib/geocode";
 
 // Driving License is dropped from this list — `license` stays defined in
 // the DB's document_type enum (Postgres can't drop an enum value once
-// added), it's just never offered here anymore. `downloadUrl` (NOC and
-// Customer Authority Letter) points at a blank, fillable copy of that
-// document to print/sign/scan and re-upload — see public/documents/.
+// added), it's just never offered here anymore. A "Download Format" link
+// (blank, fillable copy of that document to print/sign/scan and re-upload)
+// isn't listed statically here anymore — it's whichever doc_types the
+// admin has actually uploaded a format for (see documentFormats state
+// below, fetched from getDocumentFormats()), so the download link can
+// appear on any document type, not just NOC/Customer Authority Letter.
 // `description` drives the info icon's hover tooltip on each card.
+// Grouped for display — each card still keys/uploads/validates exactly the
+// same as before, this only adds which of the three category sections a
+// document renders under.
+const DOCUMENT_CATEGORIES = [
+  { key: "vehicle", label: "Vehicle Documents" },
+  { key: "kyc", label: "KYC" },
+  { key: "legal", label: "Legal Documents" },
+];
+
 const DOCUMENT_TYPES = [
-  {
-    key: "puc",
-    label: "PUC",
-    icon: Wind,
-    description: "Pollution Under Control certificate — proves your vehicle meets emission standards.",
-  },
-  {
-    key: "noc",
-    label: "NOC",
-    icon: FileCheck,
-    downloadUrl: "/documents/noc-format.pdf",
-    description: "No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport.",
-  },
   {
     key: "rc",
     label: "RC Card",
+    category: "vehicle",
     icon: FileText,
     description: "Registration Certificate — proves vehicle ownership and registration details.",
   },
   {
-    key: "aadhaar",
-    label: "Aadhaar",
-    icon: Fingerprint,
-    description: "Government-issued identity proof of the vehicle owner.",
+    key: "puc",
+    label: "PUC",
+    category: "vehicle",
+    icon: Wind,
+    description: "Pollution Under Control certificate — proves your vehicle meets emission standards.",
   },
   {
     key: "insurance",
     label: "Insurance",
+    category: "vehicle",
     icon: Shield,
     description: "Valid vehicle insurance policy covering the transit period.",
   },
   {
-    key: "authority_letter",
-    label: "Customer Authority Letter",
-    icon: FileSignature,
-    downloadUrl: "/documents/customer-authority-letter-format.pdf",
-    description: "A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle.",
+    key: "aadhaar",
+    label: "Aadhaar",
+    category: "kyc",
+    icon: Fingerprint,
+    description: "Government-issued identity proof of the vehicle owner.",
   },
   {
     key: "pan",
     label: "PAN Card",
+    category: "kyc",
     icon: IdCard,
     description: "Permanent Account Number card — identity/tax proof of the vehicle owner.",
+  },
+  {
+    key: "noc",
+    label: "NOC",
+    category: "legal",
+    icon: FileCheck,
+    description: "No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport.",
+  },
+  {
+    key: "authority_letter",
+    label: "Customer Authority Letter",
+    category: "legal",
+    icon: FileSignature,
+    description: "A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle.",
   },
 ];
 
@@ -181,6 +200,80 @@ function SectionCard({ icon: Icon, title, badge, children }) {
   );
 }
 
+// One upload card inside the "3. Vehicle Documents" section — same tooltip/
+// download/upload behavior for every document, just rendered per category
+// group instead of one flat grid.
+function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl }) {
+  const { key, label, icon: Icon, description } = doc;
+  return (
+    <div
+      className={`relative flex w-full items-center gap-4 rounded-2xl border p-4 transition-colors ${
+        state.uploaded ? "border-green-200 bg-green-50" : "border-slate-200 bg-white hover:border-red-200"
+      }`}
+    >
+      <button type="button" onClick={() => onUpload(key)} className="flex min-w-0 flex-1 items-center gap-4 text-left">
+        <Icon className={`h-5 w-5 shrink-0 ${state.uploaded ? "text-green-600" : "text-slate-400"}`} strokeWidth={2} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-[#0b1e42]">
+            {label} <span className="text-red-600">*</span>
+          </span>
+          {state.uploaded ? (
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              <span className="max-w-full truncate text-xs text-slate-500">
+                {state.fileName} &bull; {state.fileSize}
+              </span>
+              <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase">
+                <CheckCircle2 className="h-3 w-3" />
+                Success
+              </span>
+            </span>
+          ) : (
+            <span className="mt-0.5 block text-[10px] font-bold text-red-600 uppercase">+ Upload</span>
+          )}
+        </span>
+      </button>
+
+      <div className="flex shrink-0 items-center gap-3">
+        {state.uploaded && (
+          <button
+            type="button"
+            onClick={() => onRemove(key)}
+            aria-label={`Remove ${label}`}
+            title={`Remove ${label}`}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <XCircle className="h-4 w-4" strokeWidth={2} />
+          </button>
+        )}
+        {downloadUrl && (
+          <a
+            href={downloadUrl}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+            Download Format
+          </a>
+        )}
+        {description && (
+          <span
+            tabIndex={0}
+            aria-label={description}
+            className="group relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#0b1e42] focus:bg-slate-100 focus:text-[#0b1e42] focus:outline-none"
+          >
+            <Info className="h-3.5 w-3.5" strokeWidth={2} />
+            <span className="pointer-events-none absolute top-full right-0 z-10 mt-2 w-44 rounded-md bg-[#0b1e42] px-2.5 py-1.5 text-left text-[10px] leading-snug font-semibold whitespace-normal text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
+              {description}
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TextField({ label, ...props }) {
   return (
     <label className="block text-sm font-semibold text-[#0b1e42]">
@@ -194,16 +287,12 @@ function TextField({ label, ...props }) {
 }
 
 // Shared "Add Location" block used under both Pickup and Drop-off Details.
-// Both buttons now just open the same MapPickerModal — "Current Location"
-// opens it and immediately fires its own "Use current location" (see
-// MapPickerModal's `autoLocate`), "Select on Map" opens it plain — rather
-// than this component doing its own separate geolocation lookup. That
-// lookup used to always go through the free OSM/Nominatim reverse geocode
-// regardless of whether a Google Maps key was configured; routing it
-// through the same modal means it gets MapPickerModal's already-correct
-// "prefer Google's geocoding when available" behavior for free, instead of
-// a second, less accurate implementation living here too.
-function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
+// The two options are deliberately NOT the same path anymore: "Use Current
+// Location" calls locateCurrentPosition() directly and uses whatever comes
+// back as-is — no map ever shown, nothing to then drag/click to a
+// different spot. "Select on Map" is the only way to manually pick/adjust
+// a location, via MapPickerModal.
+function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, locating, error }) {
   const CURRENT = "Use Current Location";
   const MAP = "Select on Map";
   const value = captured?.source === "current" ? CURRENT : captured?.source === "map" ? MAP : undefined;
@@ -212,13 +301,20 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap }) {
     <div className="mt-6">
       <p className="text-sm font-semibold text-[#0b1e42]">Add Location</p>
       <Dropdown
-        placeholder="Choose how to add your location"
+        placeholder={locating ? "Fetching your location…" : "Choose how to add your location"}
         value={value}
         onChange={(option) => (option === CURRENT ? onUseCurrentLocation() : onOpenMap())}
         options={[CURRENT, MAP]}
         optionIcons={{ [CURRENT]: LocateFixed, [MAP]: Map }}
+        disabled={locating}
       />
-      {captured && (
+      {locating && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching your current location&hellip;
+        </p>
+      )}
+      {!locating && error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
+      {!locating && !error && captured && (
         <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-green-600">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {captured.address}
@@ -384,6 +480,22 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     pan: { uploaded: false },
   });
 
+  // Admin-uploaded "Download Format" links, keyed by doc_type — see
+  // getDocumentFormats() in pricing.js. Empty until the fetch resolves, so
+  // a card with no admin-uploaded format (or before this table exists)
+  // just never shows a download link, same as always.
+  const [documentFormats, setDocumentFormats] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getDocumentFormats().then((formats) => {
+      if (!cancelled) setDocumentFormats(formats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Chosen in the "Get an Estimate" modal now, not here — see
   // handleBookNow in EstimateModal.js. Defaults to "self" so a booking
   // reached without a saved estimate (the amber notice above) still works.
@@ -455,12 +567,11 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const expectedDeliveryISO = pickupDate ? addDaysISO(pickupDate, minTransitDays) : null;
 
   const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
-  // Which button opened the modal — "current" auto-fires MapPickerModal's
-  // own locate-me on open (see autoLocate below) and, once confirmed, tags
-  // the result the same way a plain map pick would've been tagged before
-  // this changed, so AddLocationPicker's own "which button was used"
-  // highlighting above still works.
-  const [mapPickerSource, setMapPickerSource] = useState("map");
+  // "Use Current Location" never opens this modal (see handleUseCurrentLocation
+  // below) — it's only ever reached via "Select on Map", so every confirm
+  // out of it is tagged source: "map".
+  const [locating, setLocating] = useState({ pickup: false, dropoff: false });
+  const [locateError, setLocateError] = useState({ pickup: "", dropoff: "" });
   // "pickup" | "destination" | "custom" — the two "Same as ___" checkboxes
   // are mutually exclusive (checking one clears the other), and the custom
   // fields below only appear once neither is checked. Defaults to the
@@ -545,6 +656,13 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     fileInputRef.current?.click();
   }
 
+  // Clears an uploaded document back to its empty state so the customer can
+  // pick a different file — the card's own "+ Upload" trigger already lets
+  // them replace a file directly, this is just for removing one outright.
+  function handleRemoveUpload(key) {
+    setUploads((prev) => ({ ...prev, [key]: { uploaded: false } }));
+  }
+
   function handleFileSelected(event) {
     const file = event.target.files?.[0];
     const key = pendingUploadKey.current;
@@ -561,21 +679,38 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     event.target.value = "";
   }
 
-  // Opens the map modal and has it fire its own locate-me immediately
-  // (autoLocate below) instead of doing a separate geolocation lookup
-  // here — see the comment on AddLocationPicker above for why.
-  function handleUseCurrentLocation(target) {
-    setMapPickerTarget(target);
-    setMapPickerSource("current");
+  // Fetches GPS + reverse-geocodes it directly — no map shown, nothing to
+  // then drag/click to a different spot. That's deliberate: "Use Current
+  // Location" should just be the device's actual location, full stop;
+  // "Select on Map" below is the only path that lets the customer pick a
+  // different one.
+  async function handleUseCurrentLocation(target) {
+    setLocateError((e) => ({ ...e, [target]: "" }));
+    setLocating((l) => ({ ...l, [target]: true }));
+    try {
+      const location = await locateCurrentPosition();
+      const tagged = { ...location, source: "current" };
+      if (target === "pickup") setPickupLocation(tagged);
+      else setDropoffLocation(tagged);
+    } catch (err) {
+      setLocateError((e) => ({
+        ...e,
+        [target]:
+          err?.code === 1
+            ? "Location permission denied — allow access, or use Select on Map instead."
+            : "Couldn't get your current location — use Select on Map instead.",
+      }));
+    } finally {
+      setLocating((l) => ({ ...l, [target]: false }));
+    }
   }
 
   function handleOpenMap(target) {
     setMapPickerTarget(target);
-    setMapPickerSource("map");
   }
 
   function handleMapConfirm(location) {
-    const tagged = { ...location, source: mapPickerSource };
+    const tagged = { ...location, source: "map" };
     if (mapPickerTarget === "pickup") setPickupLocation(tagged);
     if (mapPickerTarget === "dropoff") setDropoffLocation(tagged);
     setMapPickerTarget(null);
@@ -807,6 +942,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               captured={pickupLocation}
               onUseCurrentLocation={() => handleUseCurrentLocation("pickup")}
               onOpenMap={() => handleOpenMap("pickup")}
+              locating={locating.pickup}
+              error={locateError.pickup}
             />
           )}
 
@@ -914,6 +1051,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
               captured={dropoffLocation}
               onUseCurrentLocation={() => handleUseCurrentLocation("dropoff")}
               onOpenMap={() => handleOpenMap("dropoff")}
+              locating={locating.dropoff}
+              error={locateError.dropoff}
             />
           )}
 
@@ -952,63 +1091,31 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             style={{ textTransform: "uppercase" }}
           />
 
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {DOCUMENT_TYPES.map(({ key, label, icon: Icon, downloadUrl, description }) => {
-              const state = uploads[key];
+          <div className="mt-5 flex flex-col gap-6">
+            {DOCUMENT_CATEGORIES.map(({ key: categoryKey, label: categoryLabel }) => {
+              const docs = DOCUMENT_TYPES.filter((d) => d.category === categoryKey);
+              if (docs.length === 0) return null;
               return (
-                <div
-                  key={key}
-                  className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
-                    state.uploaded
-                      ? "border-green-200 bg-green-50"
-                      : "border-slate-200 bg-white hover:border-red-200"
-                  }`}
-                >
-                  {description && (
-                    <span
-                      tabIndex={0}
-                      aria-label={description}
-                      className="group absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#0b1e42] focus:bg-slate-100 focus:text-[#0b1e42] focus:outline-none"
-                    >
-                      <Info className="h-3.5 w-3.5" strokeWidth={2} />
-                      <span className="pointer-events-none absolute top-full left-0 z-10 mt-2 w-44 rounded-md bg-[#0b1e42] px-2.5 py-1.5 text-left text-[10px] leading-snug font-semibold whitespace-normal text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
-                        {description}
-                      </span>
-                    </span>
-                  )}
-                  {downloadUrl && (
-                    <a
-                      href={downloadUrl}
-                      download
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label="Download format"
-                      className="group absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Download className="h-3.5 w-3.5" strokeWidth={2} />
-                      <span className="pointer-events-none absolute right-0 -top-8 whitespace-nowrap rounded-md bg-[#0b1e42] px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Download Format
-                      </span>
-                    </a>
-                  )}
-                  <button type="button" onClick={() => triggerUpload(key)} className="flex w-full flex-col items-center gap-2">
-                    <Icon className={`h-5 w-5 ${state.uploaded ? "text-green-600" : "text-slate-400"}`} strokeWidth={2} />
-                    <span className="text-xs font-bold text-[#0b1e42]">
-                      {label} <span className="text-red-600">*</span>
-                    </span>
-                    {state.uploaded ? (
-                      <>
-                        <span className="max-w-full truncate text-[10px] text-slate-500">
-                          {state.fileName} &bull; {state.fileSize}
-                        </span>
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Success
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[10px] font-bold text-red-600 uppercase">+ Upload</span>
-                    )}
-                  </button>
+                <div key={categoryKey}>
+                  <p className="text-[11px] font-bold tracking-wide text-slate-400 uppercase">{categoryLabel}</p>
+                  <div
+                    className={
+                      categoryKey === "legal"
+                        ? "mt-3 flex flex-col gap-3"
+                        : "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+                    }
+                  >
+                    {docs.map((doc) => (
+                      <DocumentCard
+                        key={doc.key}
+                        doc={doc}
+                        state={uploads[doc.key]}
+                        onUpload={triggerUpload}
+                        onRemove={handleRemoveUpload}
+                        downloadUrl={documentFormats[doc.key]}
+                      />
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -1206,8 +1313,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             className="font-semibold text-red-600 hover:text-red-700"
           >
             Terms of Service
-          </a>{" "}
-          and{" "}
+          </a>
+          ,{" "}
           <a
             href="/privacy-policy"
             target="_blank"
@@ -1215,6 +1322,15 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             className="font-semibold text-red-600 hover:text-red-700"
           >
             Privacy Policy
+          </a>{" "}
+          and{" "}
+          <a
+            href="/cancellation-policy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-red-600 hover:text-red-700"
+          >
+            Cancellation Policy
           </a>
           .
         </label>
@@ -1240,7 +1356,6 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
 
       <MapPickerModal
         open={mapPickerTarget !== null}
-        autoLocate={mapPickerSource === "current"}
         onClose={() => setMapPickerTarget(null)}
         onConfirm={handleMapConfirm}
       />

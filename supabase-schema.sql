@@ -44,6 +44,9 @@ exception when duplicate_object then null; end $$;
 -- once.
 alter type booking_status add value if not exists 'midway_paid' after 'confirmed';
 alter type booking_status add value if not exists 'out_for_delivery' after 'in_transit';
+-- Exit state, not a pipeline step — see the cancellation columns on
+-- `bookings` below and CANCELLATION_FEE_PERCENT in bookingStore.js.
+alter type booking_status add value if not exists 'cancelled' after 'delivered';
 
 do $$ begin
   create type leg_method as enum ('self', 'driver'); -- self drop-off/pickup vs CarCoolie driver
@@ -90,6 +93,9 @@ exception when duplicate_object then null; end $$;
 -- in the payments audit trail instead of one blended figure.
 alter type payment_type add value if not exists 'midway' after 'advance';
 alter type payment_type add value if not exists 'charges' after 'balance';
+-- Audit row for the (100% - CANCELLATION_FEE_PERCENT) handed back when a
+-- booking is cancelled — see cancelBooking() in bookingStore.js.
+alter type payment_type add value if not exists 'refund' after 'charges';
 
 do $$ begin
   create type payment_status as enum ('pending', 'success', 'failed');
@@ -154,15 +160,24 @@ insert into cities (name, state, pincode_prefixes) values
   ('Bangalore', 'Karnataka', '{56}')
 on conflict (name) do update set state = excluded.state;
 
--- Terms of Service / Privacy Policy — markdown written in the admin panel
--- ("Legal Pages") and rendered on the customer site at /terms-of-service and
--- /privacy-policy. One row per page; the seed below is dummy copy.
+-- Terms of Service / Privacy Policy / Cancellation Policy — markdown written
+-- in the admin panel ("Legal Pages") and rendered on the customer site at
+-- /terms-of-service, /privacy-policy and /cancellation-policy. One row per
+-- page; the seed below is dummy copy.
 create table if not exists legal_pages (
-  slug text primary key check (slug in ('terms', 'privacy')),
+  slug text primary key check (slug in ('terms', 'privacy', 'cancellation')),
   title text not null,
   content_md text not null default '',
   updated_at timestamptz not null default now()
 );
+
+-- Idempotent widen for a project whose legal_pages predates the
+-- 'cancellation' slug — `create table if not exists` above is a no-op once
+-- the table already exists, so the narrower original check (just
+-- 'terms'/'privacy') needs replacing explicitly too. Postgres names an
+-- unnamed column check "<table>_<column>_check" by default.
+alter table legal_pages drop constraint if exists legal_pages_slug_check;
+alter table legal_pages add constraint legal_pages_slug_check check (slug in ('terms', 'privacy', 'cancellation'));
 
 insert into legal_pages (slug, title, content_md) values
   ('terms', 'Terms of Service', $md$# Terms of Service
@@ -189,7 +204,7 @@ CarCoolie arranges the transportation of your vehicle between the pickup and del
 
 ## 4. Cancellations and refunds
 
-Cancellations before dispatch may be eligible for a refund of the amount paid, less any costs already incurred. Once the vehicle is in transit the booking cannot be cancelled.
+See our [Cancellation Policy](/cancellation-policy) for when a booking can be cancelled and what, if anything, is deducted.
 
 ## 5. Liability
 
@@ -229,6 +244,29 @@ We keep booking records for as long as needed for service, legal and accounting 
 ## 5. Your choices
 
 You can ask us to access, correct or delete your personal information by writing to [support@carcoolie.in](mailto:support@carcoolie.in).
+$md$),
+  ('cancellation', 'Cancellation Policy', $md$# Cancellation Policy
+
+*Last updated: 1 October 2026*
+
+This policy explains when you can cancel a CarCoolie booking yourself, and what happens to any amount already paid.
+
+## 1. When you can cancel
+
+You can cancel a booking yourself from My Bookings at any point before it reaches the **Booking Confirmed** stage — that is, while it's still Documents Under Review, Final Quote Generated, or Advance Paid. Once a booking is Confirmed, self-serve cancellation is no longer available; contact us directly if something's changed.
+
+## 2. What's deducted
+
+- If you cancel before paying the advance, nothing is owed and nothing is refunded — the booking is simply cancelled.
+- If you cancel after paying the advance, a cancellation fee of **10% of the advance you paid** is deducted, and the remaining 90% is refunded to you.
+
+## 3. How refunds are paid
+
+Refunds are issued to the original payment method. Processing times depend on your bank or card issuer.
+
+## 4. Contact
+
+Questions about a cancellation? Write to us at [support@carcoolie.in](mailto:support@carcoolie.in).
 $md$)
 on conflict (slug) do nothing;
 
@@ -361,6 +399,26 @@ create table if not exists tax_settings (
 );
 
 insert into tax_settings (id, gst_percent) values (true, 18)
+on conflict (id) do nothing;
+
+-- Staged-payment split (in percent) — single editable row like tax_settings
+-- above, changed from the admin panel ("Payment Settings"). A booking is
+-- paid in three stages: `advance_percent` to confirm the booking,
+-- `midway_percent` when the vehicle is dispatched, and whatever's left
+-- (100 - advance - midway, not stored — computed wherever it's shown) as
+-- the balance before delivery. Used by the Pay Now flow (/payment) and the
+-- My Bookings payment-stage cards — not retroactive, a booking already in
+-- progress keeps whatever split was in effect when its advance was paid
+-- (captured as rupee amounts on the booking row, not as a live percentage).
+create table if not exists payment_settings (
+  id boolean primary key default true,
+  advance_percent numeric(5, 2) not null default 10 check (advance_percent >= 0 and advance_percent <= 100),
+  midway_percent numeric(5, 2) not null default 50 check (midway_percent >= 0 and midway_percent <= 100),
+  constraint payment_settings_singleton check (id),
+  constraint payment_settings_sum check (advance_percent + midway_percent <= 100)
+);
+
+insert into payment_settings (id, advance_percent, midway_percent) values (true, 10, 50)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
@@ -516,6 +574,30 @@ create table if not exists bookings (
   final_paid numeric(10, 2),
   final_requested_at timestamptz,
 
+  -- Set by cancelBooking() in bookingStore.js, self-serve from My Bookings
+  -- while status is still docs_review/quote_sent/advance_paid — see the
+  -- CHECK below and CANCELLATION_FEE_PERCENT for why these are null unless
+  -- status = 'cancelled'. cancellation_fee is 0 (and refund_amount 0) when
+  -- cancelled before any advance was paid.
+  cancelled_at timestamptz,
+  cancellation_fee numeric(10, 2),
+  refund_amount numeric(10, 2),
+  -- Which option the customer picked in the cancel-confirmation dialog's
+  -- "Reason for cancellation" dropdown (see CANCELLATION_REASONS in
+  -- bookingStore.js) — free text isn't collected, just the picked label.
+  cancellation_reason text,
+
+  -- Admin-entered (carcoolie-admin's "Pickup/Drop-off Point of Contact"
+  -- cards — PocDetailsCard), never by the customer. Pickup is filled in
+  -- once the advance is paid, drop-off once the vehicle is in transit; both
+  -- then surface on My Bookings (Status tab, nested under the step they're
+  -- tied to, and as their own Summary cards) — see rowToBooking() below and
+  -- PickupPocCard/DropoffPocCard in app/my-bookings/components/MyBookingsClient.js.
+  pickup_poc_name text,
+  pickup_poc_phone text,
+  dropoff_poc_name text,
+  dropoff_poc_phone text,
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -540,6 +622,14 @@ alter table bookings add column if not exists final_paid numeric(10, 2);
 alter table bookings add column if not exists final_requested_at timestamptz;
 alter table bookings add column if not exists pickup_charge numeric(10, 2) not null default 0;
 alter table bookings add column if not exists dropoff_charge numeric(10, 2) not null default 0;
+alter table bookings add column if not exists cancelled_at timestamptz;
+alter table bookings add column if not exists cancellation_fee numeric(10, 2);
+alter table bookings add column if not exists refund_amount numeric(10, 2);
+alter table bookings add column if not exists cancellation_reason text;
+alter table bookings add column if not exists pickup_poc_name text;
+alter table bookings add column if not exists pickup_poc_phone text;
+alter table bookings add column if not exists dropoff_poc_name text;
+alter table bookings add column if not exists dropoff_poc_phone text;
 
 -- vehicle_type_id originally had no ON DELETE behavior, so Postgres
 -- defaulted to NO ACTION and blocked deleting a vehicle_types row that any
@@ -766,7 +856,9 @@ alter table vehicle_types enable row level security;
 alter table luxury_makes enable row level security;
 alter table luxury_settings enable row level security;
 alter table legal_pages enable row level security;
+alter table document_formats enable row level security;
 alter table tax_settings enable row level security;
+alter table payment_settings enable row level security;
 alter table vehicle_models enable row level security;
 alter table add_on_services enable row level security;
 alter table coupons enable row level security;
@@ -844,10 +936,19 @@ drop policy if exists "legal_pages readable" on legal_pages;
 create policy "legal_pages readable" on legal_pages for select using (true);
 drop policy if exists "legal_pages admin write" on legal_pages;
 create policy "legal_pages admin write" on legal_pages for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "document_formats readable" on document_formats;
+create policy "document_formats readable" on document_formats for select using (true);
+drop policy if exists "document_formats admin write" on document_formats;
+create policy "document_formats admin write" on document_formats for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 drop policy if exists "tax_settings readable" on tax_settings;
 create policy "tax_settings readable" on tax_settings for select using (true);
 drop policy if exists "tax_settings admin write" on tax_settings;
 create policy "tax_settings admin write" on tax_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+drop policy if exists "payment_settings readable" on payment_settings;
+create policy "payment_settings readable" on payment_settings for select using (true);
+drop policy if exists "payment_settings admin write" on payment_settings;
+create policy "payment_settings admin write" on payment_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 
 drop policy if exists "vehicle_models readable" on vehicle_models;
 create policy "vehicle_models readable" on vehicle_models for select using (true);
@@ -973,6 +1074,22 @@ drop policy if exists "booking_status_history admin insert" on booking_status_hi
 create policy "booking_status_history admin insert" on booking_status_history for insert with check (is_admin());
 
 -- ---------------------------------------------------------------------
+-- Blank format/template files ("Download Format" on the booking form's
+-- NOC / Customer Authority Letter cards, and any other document type an
+-- admin later attaches one to) — admin-uploaded from the "Document
+-- Formats" panel, so replacing a format is an upload, not a code deploy.
+-- One row per document_type; re-uploading overwrites the row (and the old
+-- storage object is removed by the app, not by a DB trigger).
+-- ---------------------------------------------------------------------
+
+create table if not exists document_formats (
+  doc_type document_type primary key,
+  file_name text not null,
+  file_path text not null, -- object path in the public document-formats bucket
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
 -- Storage — actual uploaded document files (booking_documents.file_url
 -- stores the object path within this bucket). Kept private (not a public
 -- bucket); the admin app reads files via short-lived signed URLs
@@ -1002,6 +1119,22 @@ create policy "booking-documents anon upload" on storage.objects for insert
 drop policy if exists "booking-documents anon read" on storage.objects;
 create policy "booking-documents anon read" on storage.objects for select
   using (bucket_id = 'booking-documents');
+
+-- Public (unlike booking-documents above) — these are blank templates, not
+-- customer data, so the "Download Format" link on the booking form can
+-- point straight at the public URL rather than minting a signed one.
+insert into storage.buckets (id, name, public)
+values ('document-formats', 'document-formats', true)
+on conflict (id) do nothing;
+
+drop policy if exists "document-formats anon read" on storage.objects;
+create policy "document-formats anon read" on storage.objects for select
+  using (bucket_id = 'document-formats');
+
+drop policy if exists "document-formats admin write" on storage.objects;
+create policy "document-formats admin write" on storage.objects for all
+  using (bucket_id = 'document-formats')
+  with check (bucket_id = 'document-formats');
 
 -- =====================================================================
 -- End of schema.

@@ -39,7 +39,7 @@ const PickerMap = GOOGLE_MAPS_KEY
 
 const INDIA_CENTER = [22.9734, 78.6569];
 
-export default function MapPickerModal({ open, onClose, onConfirm, autoLocate = false }) {
+export default function MapPickerModal({ open, onClose, onConfirm }) {
   const [marker, setMarker] = useState(null);
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,20 +73,6 @@ export default function MapPickerModal({ open, onClose, onConfirm, autoLocate = 
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [suggestionsOpen]);
-
-  // BookingForm.js's "Current Location" button (outside the map) now just
-  // opens this modal with autoLocate set, instead of doing its own
-  // separate geolocation lookup — fires handleUseCurrentLocation below the
-  // moment the modal actually opens for that reason. Re-fires on a repeat
-  // open (rather than only once ever) since `open` itself flips back to
-  // true each time, but not on every render while it's already open and
-  // the lookup's own state updates are still landing.
-  useEffect(() => {
-    if (open && autoLocate) {
-      handleUseCurrentLocation();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, autoLocate]);
 
   if (!open) return null;
 

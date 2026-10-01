@@ -17,6 +17,7 @@ import {
   FileText,
   Fingerprint,
   IdCard,
+  LayoutList,
   Loader2,
   MapPin,
   MessageCircle,
@@ -30,17 +31,23 @@ import {
   Upload,
   User,
   Wind,
+  X,
+  XCircle,
 } from "lucide-react";
 import {
   BOOKING_STATUS,
-  STATUS_STEPS,
+  buildStatusSteps,
+  cancelBooking,
+  CANCELLABLE_STATUSES,
+  CANCELLATION_FEE_PERCENT,
+  CANCELLATION_REASONS,
   getBooking,
   getBookings,
   getChargeReceiptUrl,
   submitBookingReview,
   updateBookingDocument,
 } from "../../services/b2c/lib/bookingStore";
-import { formatINR } from "../../services/b2c/lib/pricing";
+import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/lib/pricing";
 
 // Same number the site-wide WhatsApp CTA (app/components/Whatsapp.jsx) uses
 // — kept as its own constant here since an enquiry from a booking's detail
@@ -75,10 +82,12 @@ const STATUS_BADGE_STYLES = {
   [BOOKING_STATUS.IN_TRANSIT]: "bg-orange-50 text-orange-700",
   [BOOKING_STATUS.OUT_FOR_DELIVERY]: "bg-pink-50 text-pink-700",
   [BOOKING_STATUS.DELIVERED]: "bg-green-50 text-green-700",
+  [BOOKING_STATUS.CANCELLED]: "bg-slate-100 text-slate-500",
 };
 
-function statusLabel(status) {
-  return STATUS_STEPS.find((s) => s.key === status)?.label ?? status;
+function statusLabel(status, split = PAYMENT_SPLIT) {
+  if (status === BOOKING_STATUS.CANCELLED) return "Cancelled";
+  return buildStatusSteps(split).find((s) => s.key === status)?.label ?? status;
 }
 
 function formatStepTime(iso) {
@@ -95,12 +104,57 @@ function formatStepTime(iso) {
   });
 }
 
-function StatusStepper({ status, statusTimes = {}, inspections = [] }) {
-  const currentIndex = STATUS_STEPS.findIndex((s) => s.key === status);
+// Compact nested block for the admin-entered POC under a status step —
+// see PocCard below for the fuller Summary-tab version of the same data.
+function PocDetailsRow({ label, poc }) {
+  return (
+    <div className="mt-2 max-w-xs rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+      <p className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{poc.name}</p>
+      <a href={`tel:${poc.phone}`} className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 hover:text-red-600">
+        <Phone className="h-3 w-3 shrink-0" /> {poc.phone}
+      </a>
+    </div>
+  );
+}
+
+function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAYMENT_SPLIT, booking }) {
+  // Exit state, not a position on the pipeline above — a negative
+  // currentIndex (status isn't in `steps`) would otherwise render every
+  // step as not-yet-reached, which reads as "still in progress" rather
+  // than "cancelled".
+  if (status === BOOKING_STATUS.CANCELLED) {
+    const cancellationFee = booking?.cancellationFee ?? 0;
+    const refundAmount = booking?.refundAmount ?? 0;
+    return (
+      <div className="flex items-start gap-3 rounded-2xl bg-slate-50 p-4">
+        <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" strokeWidth={2} />
+        <div>
+          <p className="text-sm font-bold text-[#0b1e42]">Booking Cancelled</p>
+          {booking?.cancelledAt && (
+            <p className="mt-0.5 text-xs text-slate-400">{formatStepTime(booking.cancelledAt)}</p>
+          )}
+          {refundAmount > 0 || cancellationFee > 0 ? (
+            <p className="mt-2 text-sm text-slate-500">
+              Cancellation fee ({CANCELLATION_FEE_PERCENT}% of the advance paid):{" "}
+              <span className="font-semibold text-[#0b1e42]">{formatINR(cancellationFee)}</span>
+              {" · "}
+              Refunded: <span className="font-semibold text-green-600">{formatINR(refundAmount)}</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">Cancelled before any payment was made — nothing was charged.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const steps = buildStatusSteps(split);
+  const currentIndex = steps.findIndex((s) => s.key === status);
   // 0-based currentIndex over a 1-based step count — the docs_sent lead-in
   // step is always already "done" by the time a booking exists (see the
-  // comment on STATUS_STEPS in bookingStore.js), so it never lowers this.
-  const progressPct = Math.round((currentIndex / (STATUS_STEPS.length - 1)) * 100);
+  // comment on buildStatusSteps in bookingStore.js), so it never lowers this.
+  const progressPct = Math.round((currentIndex / (steps.length - 1)) * 100);
 
   // Signed URLs are short-lived, so one is minted per click; the blank tab
   // is opened first so the popup isn't blocked by the async gap.
@@ -126,7 +180,7 @@ function StatusStepper({ status, statusTimes = {}, inspections = [] }) {
         </div>
         <span className="shrink-0 text-xs font-bold text-slate-500">{progressPct}%</span>
       </div>
-      {STATUS_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < currentIndex;
         const current = i === currentIndex;
         const reachedAt = done || current ? formatStepTime(statusTimes[step.key]) : null;
@@ -141,7 +195,7 @@ function StatusStepper({ status, statusTimes = {}, inspections = [] }) {
               ) : (
                 <Circle className="h-5 w-5 text-slate-300" strokeWidth={2} />
               )}
-              {i < STATUS_STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <span className={`mt-1 min-h-8 w-px flex-1 ${i < currentIndex ? "bg-green-300" : "bg-slate-200"}`} />
               )}
             </div>
@@ -170,6 +224,15 @@ function StatusStepper({ status, statusTimes = {}, inspections = [] }) {
                     </button>
                   ))}
                 </div>
+              )}
+              {/* Admin-entered contact — see PocDetailsCard in the admin
+                  panel. Nested under whichever step it's tied to, same as
+                  inspection documents above, once that step's reached. */}
+              {step.key === BOOKING_STATUS.CONFIRMED && booking?.pickupPoc && (done || current) && (
+                <PocDetailsRow label="Pickup Point of Contact" poc={booking.pickupPoc} />
+              )}
+              {step.key === BOOKING_STATUS.OUT_FOR_DELIVERY && booking?.dropoffPoc && (done || current) && (
+                <PocDetailsRow label="Drop-off Point of Contact" poc={booking.dropoffPoc} />
               )}
             </div>
           </div>
@@ -314,7 +377,7 @@ function EmptyState() {
 
 // One card per booking — clicking it navigates to /my-bookings?id=<code>
 // for the full detail view.
-function BookingCard({ booking }) {
+function BookingCard({ booking, split = PAYMENT_SPLIT }) {
   const { estimate } = booking;
   const badgeStyle = STATUS_BADGE_STYLES[booking.status] ?? "bg-slate-100 text-slate-500";
 
@@ -329,7 +392,7 @@ function BookingCard({ booking }) {
           <p className="text-base font-extrabold text-[#0b1e42]">{booking.id}</p>
         </div>
         <span className={`rounded-full ${badgeStyle} px-3 py-1 text-xs font-bold whitespace-nowrap`}>
-          {statusLabel(booking.status)}
+          {statusLabel(booking.status, split)}
         </span>
       </div>
 
@@ -371,7 +434,7 @@ function PriceRow({ label, value, muted, negative }) {
 // EstimateModal.js at quote time, plus what actually happened after (final
 // quote / advance paid), so this reads as the definitive record for the
 // booking rather than just what was estimated up front.
-function PriceBreakdownCard({ booking }) {
+function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
   const { estimate, finalQuote, advancePaid, midwayPaid, finalPaid, charges, chargesTotal, remainingBalance } = booking;
   if (!estimate) return null;
 
@@ -429,8 +492,8 @@ function PriceBreakdownCard({ booking }) {
 
       {finalQuote && (
         <PriceRow
-          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Advance Due (10%)</span>}
-          value={formatINR(finalQuote * 0.1)}
+          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Advance Due ({split.advancePercent}%)</span>}
+          value={formatINR(finalQuote * (split.advancePercent / 100))}
         />
       )}
       {typeof advancePaid === "number" && (
@@ -443,15 +506,16 @@ function PriceBreakdownCard({ booking }) {
         <PriceRow
           label={
             <span className="flex items-center gap-1">
-              <CreditCard className="h-3 w-3" /> {booking.midwayRequested ? "50% Payment Due" : "50% Payment (Upcoming)"}
+              <CreditCard className="h-3 w-3" />{" "}
+              {booking.midwayRequested ? `${split.midwayPercent}% Payment Due` : `${split.midwayPercent}% Payment (Upcoming)`}
             </span>
           }
-          value={formatINR(finalQuote * 0.5)}
+          value={formatINR(finalQuote * (split.midwayPercent / 100))}
         />
       )}
       {typeof midwayPaid === "number" && (
         <PriceRow
-          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> 50% Payment Paid</span>}
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> {split.midwayPercent}% Payment Paid</span>}
           value={formatINR(midwayPaid)}
         />
       )}
@@ -616,6 +680,23 @@ function AddressDetailCard({ title, icon: Icon, address, simple = false, sameAsN
   );
 }
 
+// Pickup/Drop-off Point of Contact — admin-entered (see PocDetailsCard in
+// the admin panel), read-only here. Only ever rendered once that data
+// exists (see its call sites), so there's no "Not provided" empty state.
+function PocCard({ title, poc }) {
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
+      <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+        <Phone className="h-3.5 w-3.5 text-red-600" /> {title}
+      </p>
+      <div className="mt-4 flex flex-col gap-2">
+        <DetailRow icon={User} label="Contact" value={poc.name} />
+        <DetailRow icon={Phone} label="Phone" value={poc.phone} />
+      </div>
+    </div>
+  );
+}
+
 // Every document type BookingForm.js can collect, with whatever status
 // the admin's Document Verification screen has set — matching what the
 // admin panel's own BookingDetailClient.js shows, just read-only here.
@@ -674,11 +755,12 @@ function DocumentsCard({ documents, registrationNumber, onReupload, busyKey, err
   );
 }
 
-// Three payment slabs — 10% advance, 50% midway, and whatever's left
-// (~40% plus any additional charges) — shown as soon as a final quote
-// exists, well before any of them are actually due, so the whole payment
-// shape is visible up front rather than surfacing one stage at a time.
-function PaymentMilestones({ booking }) {
+// Three payment slabs — advance, midway, and whatever's left (the balance
+// plus any additional charges), per the live split from the admin's
+// Payment Settings page — shown as soon as a final quote exists, well
+// before any of them are actually due, so the whole payment shape is
+// visible up front rather than surfacing one stage at a time.
+function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
   const { finalQuote, advancePaid, midwayPaid, finalPaid, remainingBalance, chargesTotal } = booking;
 
   const advanceDone = typeof advancePaid === "number";
@@ -690,25 +772,25 @@ function PaymentMilestones({ booking }) {
     {
       key: "advance",
       label: "Advance",
-      percent: "10%",
-      amount: advanceDone ? advancePaid : finalQuote * 0.1,
+      percent: `${split.advancePercent}%`,
+      amount: advanceDone ? advancePaid : finalQuote * (split.advancePercent / 100),
       status: advanceDone ? "paid" : "due",
     },
     {
       key: "midway",
       label: "Midway",
-      percent: "50%",
-      amount: midwayDone ? midwayPaid : finalQuote * 0.5,
+      percent: `${split.midwayPercent}%`,
+      amount: midwayDone ? midwayPaid : finalQuote * (split.midwayPercent / 100),
       status: midwayDone ? "paid" : advanceDone ? "due" : "upcoming",
     },
     {
       key: "final",
       label: "Balance",
-      percent: "~40%",
+      percent: `~${split.balancePercent}%`,
       // Charges get their own card below, so this is the finalQuote portion
       // only — finalPaid (once paid) bundles both together, same as
       // bookingStore.js splits it back apart when logging the payment row.
-      amount: finalDone ? finalPaid - charges : (remainingBalance ?? finalQuote * 0.4) - charges,
+      amount: finalDone ? finalPaid - charges : (remainingBalance ?? finalQuote * (split.balancePercent / 100)) - charges,
       status: finalDone ? "paid" : midwayDone ? "due" : "upcoming",
     },
   ];
@@ -772,7 +854,153 @@ function addressesMatch(a, b) {
   return ["fullName", "phone", "house", "street", "landmark", "city", "pin"].every((k) => (a[k] || "") === (b[k] || ""));
 }
 
-function BookingDetailView({ booking, onBookingChange }) {
+// Replaces a bare confirm() with a real dialog — booking details, the
+// cancellation policy (overview + link to the full page), a required
+// reason, and exactly what's deducted/refunded — all before the customer
+// commits, rather than a one-line browser prompt.
+function CancelBookingModal({ booking, onClose, onCancelled }) {
+  const [reason, setReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState("");
+
+  const advancePaid = Number(booking.advancePaid ?? 0);
+  const cancellationFee = Math.round((advancePaid * CANCELLATION_FEE_PERCENT) / 100);
+  const refundAmount = Math.round(advancePaid - cancellationFee);
+
+  async function handleConfirm() {
+    if (!reason) return;
+    setCancelling(true);
+    setError("");
+    try {
+      const updated = await cancelBooking(booking.id, reason);
+      onCancelled(updated);
+    } catch (err) {
+      setError(err.message);
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 px-4 py-8" onClick={onClose}>
+      <div
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <p className="text-lg font-extrabold text-[#0b1e42]">Cancel Booking</p>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={cancelling}
+            aria-label="Close"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-extrabold tracking-wide text-slate-400 uppercase">Booking</p>
+            <p className="mt-1 text-sm font-extrabold text-[#0b1e42]">{booking.id}</p>
+            {booking.estimate?.fromCity && booking.estimate?.toCity && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-600">
+                <Truck className="h-3.5 w-3.5 shrink-0 text-red-600" strokeWidth={2} />
+                {booking.estimate.fromCity} <ArrowRight className="h-3 w-3 shrink-0 text-slate-400" /> {booking.estimate.toCity}
+              </p>
+            )}
+            {(booking.finalQuote ?? booking.estimate?.total) != null && (
+              <p className="mt-1.5 text-sm text-slate-600">
+                {booking.finalQuote ? "Final Quote" : "Estimated Total"}:{" "}
+                <span className="font-semibold text-[#0b1e42]">{formatINR(booking.finalQuote ?? booking.estimate.total)}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-5">
+            <p className="text-xs font-extrabold tracking-wide text-slate-400 uppercase">Cancellation Policy</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              This booking hasn&apos;t been confirmed yet, so it&apos;s still eligible for self-serve cancellation.{" "}
+              {advancePaid > 0
+                ? `A cancellation fee of ${CANCELLATION_FEE_PERCENT}% of your advance applies — the rest is refunded.`
+                : "You haven't paid anything yet, so nothing will be charged."}
+            </p>
+            <a
+              href="/cancellation-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:underline"
+            >
+              Read the full Cancellation Policy <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+
+          <label className="mt-5 block">
+            <span className="text-xs font-extrabold tracking-wide text-slate-400 uppercase">Reason for cancellation</span>
+            <select
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <option value="">Select a reason&hellip;</option>
+              {CANCELLATION_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="mt-5 rounded-2xl bg-red-50 p-4">
+            <p className="text-xs font-extrabold tracking-wide text-red-700 uppercase">Amount Details</p>
+            {advancePaid > 0 ? (
+              <div className="mt-2 flex flex-col gap-1.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Advance Paid</span>
+                  <span className="font-semibold text-[#0b1e42]">{formatINR(advancePaid)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Cancellation Fee ({CANCELLATION_FEE_PERCENT}%)</span>
+                  <span className="font-semibold text-red-600">-{formatINR(cancellationFee)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-red-100 pt-1.5">
+                  <span className="font-bold text-[#0b1e42]">Refund Amount</span>
+                  <span className="font-extrabold text-green-600">{formatINR(refundAmount)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">No payment has been made yet — nothing will be charged or refunded.</p>
+            )}
+          </div>
+
+          {error && <p className="mt-4 text-sm font-semibold text-red-600">{error}</p>}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-100 px-6 py-5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={cancelling}
+            className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
+          >
+            Keep Booking
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!reason || cancelling}
+            className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+            {cancelling ? "Cancelling…" : "Confirm Cancel"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) {
   const { estimate, pickup, dropoff, billing } = booking;
   // Compares the actual field values rather than trusting a stored flag
   // (none is persisted — billing is just another booking_addresses row) so
@@ -829,9 +1057,21 @@ function BookingDetailView({ booking, onBookingChange }) {
     `Hi! I have an enquiry about my booking ${booking.id}.`
   )}`;
 
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const canCancel = CANCELLABLE_STATUSES.includes(booking.status);
+
+  function handleCancelled(updated) {
+    onBookingChange?.(updated);
+    setCancelModalOpen(false);
+  }
+
   return (
     <div>
       <input ref={docFileInputRef} type="file" className="hidden" onChange={handleDocFileSelected} />
+
+      {cancelModalOpen && (
+        <CancelBookingModal booking={booking} onClose={() => setCancelModalOpen(false)} onCancelled={handleCancelled} />
+      )}
 
       <Link href="/my-bookings" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#0b1e42]">
         &larr; All Bookings
@@ -843,7 +1083,7 @@ function BookingDetailView({ booking, onBookingChange }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-extrabold text-[#0b1e42]">{booking.id}</p>
             <span className={`rounded-full ${STATUS_BADGE_STYLES[booking.status] ?? "bg-slate-100 text-slate-500"} px-2.5 py-1 text-xs font-bold`}>
-              {statusLabel(booking.status)}
+              {statusLabel(booking.status, split)}
             </span>
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
@@ -854,12 +1094,26 @@ function BookingDetailView({ booking, onBookingChange }) {
               : "—"}
           </p>
         </div>
-        {estimate && (
-          <div className="flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-bold text-red-600">
-            <Truck className="h-4 w-4" strokeWidth={2} />
-            {estimate.fromCity} <ArrowRight className="h-3 w-3" /> {estimate.toCity}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {estimate && (
+            <div className="flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-bold text-red-600">
+              <Truck className="h-4 w-4" strokeWidth={2} />
+              {estimate.fromCity} <ArrowRight className="h-3 w-3" /> {estimate.toCity}
+            </div>
+          )}
+          {booking.status !== BOOKING_STATUS.CANCELLED && booking.status !== BOOKING_STATUS.DELIVERED && (
+            <button
+              type="button"
+              disabled={!canCancel}
+              onClick={() => setCancelModalOpen(true)}
+              title={canCancel ? undefined : "Cancellation is only available before the booking is confirmed — contact us instead."}
+              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-bold text-slate-500 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white disabled:hover:text-slate-300"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Cancel Booking
+            </button>
+          )}
+        </div>
       </div>
 
       {(estimate?.make || estimate?.model || estimate?.vehicleType || booking.registrationNumber) && (
@@ -870,7 +1124,7 @@ function BookingDetailView({ booking, onBookingChange }) {
         </p>
       )}
 
-      {booking.finalQuote && <PaymentMilestones booking={booking} />}
+      {booking.finalQuote && booking.status !== BOOKING_STATUS.CANCELLED && <PaymentMilestones booking={booking} split={split} />}
 
       {/* Whichever payment is currently due — sits above the Status/Summary
           tabs (not inside either one) so it's the first thing seen and
@@ -881,13 +1135,13 @@ function BookingDetailView({ booking, onBookingChange }) {
           <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Quote</p>
           <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote)}</p>
           <p className="mt-2 text-sm text-slate-300">
-            Reviewed and confirmed by our team. Pay a 10% advance to lock in your booking.
+            Reviewed and confirmed by our team. Pay a {split.advancePercent}% advance to lock in your booking.
           </p>
           <Link
             href={`/payment?bookingId=${booking.id}`}
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
           >
-            Proceed to Payment (10% Advance)
+            Proceed to Payment ({split.advancePercent}% Advance)
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -896,15 +1150,15 @@ function BookingDetailView({ booking, onBookingChange }) {
       {booking.status === BOOKING_STATUS.CONFIRMED && booking.finalQuote && booking.midwayRequested && (
         <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
           <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
-          <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * 0.5)}</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * (split.midwayPercent / 100))}</p>
           <p className="mt-2 text-sm text-slate-300">
-            Your booking is confirmed. Pay the 50% checkpoint to keep your shipment moving to transit.
+            Your booking is confirmed. Pay the {split.midwayPercent}% checkpoint to keep your shipment moving to transit.
           </p>
           <Link
             href={`/payment?bookingId=${booking.id}`}
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
           >
-            Proceed to Payment (50%)
+            Proceed to Payment ({split.midwayPercent}%)
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -955,7 +1209,13 @@ function BookingDetailView({ booking, onBookingChange }) {
             <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
               <p className="text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">Tracking Status</p>
               <div className="mt-6">
-                <StatusStepper status={booking.status} statusTimes={booking.statusTimes} inspections={booking.inspections} />
+                <StatusStepper
+                  status={booking.status}
+                  statusTimes={booking.statusTimes}
+                  inspections={booking.inspections}
+                  split={split}
+                  booking={booking}
+                />
               </div>
             </div>
 
@@ -972,6 +1232,13 @@ function BookingDetailView({ booking, onBookingChange }) {
               <AddressDetailCard title="Drop-off" icon={MapPin} address={dropoff} />
             </div>
 
+            {(booking.pickupPoc || booking.dropoffPoc) && (
+              <div className="grid gap-6 sm:grid-cols-2">
+                {booking.pickupPoc && <PocCard title="Pickup Point of Contact" poc={booking.pickupPoc} />}
+                {booking.dropoffPoc && <PocCard title="Drop-off Point of Contact" poc={booking.dropoffPoc} />}
+              </div>
+            )}
+
             <AddressDetailCard title="Billing" icon={CreditCard} address={billing} simple sameAsNote={billingSameAsPickupNote} />
 
             <DocumentsCard
@@ -982,7 +1249,7 @@ function BookingDetailView({ booking, onBookingChange }) {
               error={reuploadError}
             />
 
-            <PriceBreakdownCard booking={booking} />
+            <PriceBreakdownCard booking={booking} split={split} />
 
             <div className="flex flex-wrap gap-3">
               <a
@@ -994,6 +1261,25 @@ function BookingDetailView({ booking, onBookingChange }) {
                 <MessageCircle className="h-4 w-4 text-red-600" strokeWidth={2} />
                 Enquiry
               </a>
+              <Link
+                href="/my-bookings"
+                className="flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#0b1e42] shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-slate-50"
+              >
+                <LayoutList className="h-4 w-4 text-red-600" strokeWidth={2} />
+                My Bookings
+              </Link>
+              {booking.status !== BOOKING_STATUS.CANCELLED && booking.status !== BOOKING_STATUS.DELIVERED && (
+                <button
+                  type="button"
+                  disabled={!canCancel}
+                  onClick={() => setCancelModalOpen(true)}
+                  title={canCancel ? undefined : "Cancellation is only available before the booking is confirmed — contact us instead."}
+                  className="flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-500 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white disabled:hover:text-slate-300"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Cancel Booking
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1006,19 +1292,37 @@ export default function MyBookingsClient() {
   const searchParams = useSearchParams();
   const requestedId = searchParams.get("id");
   // undefined = loading, null = none found, array = list view, object = detail view
-  const [result, setResult] = useState(undefined);
+  // Keyed by the id it was loaded for, so a stale detail object is never
+  // treated as the list (and vice versa) while navigating between views.
+  const [loaded, setLoaded] = useState({ key: undefined, data: undefined });
+  const [split, setSplit] = useState(PAYMENT_SPLIT);
+  const key = requestedId ?? "";
+  const result = loaded.key === key ? loaded.data : undefined;
+  const setResult = (data) => setLoaded({ key, data });
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const data = requestedId ? await getBooking(requestedId) : await getBookings();
-      if (!cancelled) setResult(data ?? null);
+      if (!cancelled) setLoaded({ key: requestedId ?? "", data: data ?? null });
     }
     load();
     return () => {
       cancelled = true;
     };
   }, [requestedId]);
+
+  // Fetched once here (not per-card/per-detail-view) since every status
+  // label and payment amount on this page shares the same live split.
+  useEffect(() => {
+    let cancelled = false;
+    getPaymentSplit().then((s) => {
+      if (!cancelled) setSplit(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (result === undefined) return null;
 
@@ -1039,16 +1343,16 @@ export default function MyBookingsClient() {
         </div>
       );
     }
-    return <BookingDetailView booking={result} onBookingChange={setResult} />;
+    return <BookingDetailView booking={result} onBookingChange={setResult} split={split} />;
   }
 
   // List view: every booking as a card.
-  if (!result || result.length === 0) return <EmptyState />;
+  if (!Array.isArray(result) || result.length === 0) return <EmptyState />;
 
   return (
     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {result.map((booking) => (
-        <BookingCard key={booking.id} booking={booking} />
+        <BookingCard key={booking.id} booking={booking} split={split} />
       ))}
     </div>
   );

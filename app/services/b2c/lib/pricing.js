@@ -92,6 +92,12 @@ export const LUXURY_LOAD_FACTOR = 1.2;
 // getGstRate() below; this is only the offline fallback.
 export const GST_RATE = 0.18;
 
+// Staged-payment split — advance to confirm, a further slice when the
+// vehicle is dispatched, and the balance (100 - the two below) before
+// delivery. The live split comes from the admin's payment_settings row via
+// getPaymentSplit() below; this is only the offline fallback.
+export const PAYMENT_SPLIT = { advancePercent: 10, midwayPercent: 50 };
+
 // Flat fee added when the customer opts for a CarCoolie driver (instead of
 // self drop-off/pickup) on either leg — covers the driver making a special
 // trip to the customer's location rather than the hub. Each leg is
@@ -164,6 +170,23 @@ export async function getCities() {
     if (!error) return data.map((c) => ({ name: c.name, state: c.state || null }));
   }
   return CITIES;
+}
+
+// Admin-uploaded blank format files for the booking form's document cards
+// (e.g. "Download Format" on NOC / Customer Authority Letter) — keyed by
+// doc_type, each value the public URL to download. A doc_type with no row
+// here (or before this table exists) just doesn't get a download link,
+// same as before this was admin-editable.
+export async function getDocumentFormats() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase.from("document_formats").select("doc_type, file_path");
+    if (!error && data) {
+      return Object.fromEntries(
+        data.map((row) => [row.doc_type, supabase.storage.from("document-formats").getPublicUrl(row.file_path).data.publicUrl])
+      );
+    }
+  }
+  return {};
 }
 
 export async function getAddOnServices() {
@@ -252,6 +275,24 @@ export async function getGstRate() {
     if (!error && data) return Number(data.gst_percent) / 100;
   }
   return GST_RATE;
+}
+
+// { advancePercent, midwayPercent, balancePercent } (balancePercent is
+// derived, not stored), read from the admin-editable payment_settings row.
+export async function getPaymentSplit() {
+  let { advancePercent, midwayPercent } = PAYMENT_SPLIT;
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from("payment_settings")
+      .select("advance_percent, midway_percent")
+      .eq("id", true)
+      .maybeSingle();
+    if (!error && data) {
+      advancePercent = Number(data.advance_percent);
+      midwayPercent = Number(data.midway_percent);
+    }
+  }
+  return { advancePercent, midwayPercent, balancePercent: 100 - advancePercent - midwayPercent };
 }
 
 export async function validateCoupon(code) {

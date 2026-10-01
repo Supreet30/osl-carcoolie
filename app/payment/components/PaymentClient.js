@@ -5,56 +5,60 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, CheckCircle2, CreditCard, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { BOOKING_STATUS, getBooking, updateBooking } from "../../services/b2c/lib/bookingStore";
-import { formatINR } from "../../services/b2c/lib/pricing";
+import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/lib/pricing";
 
 // Which booking status this page collects money for, and what paying moves
 // the booking to next. Keyed by the CURRENT status so this page can tell,
 // from booking.status alone, whether there's actually anything payable
 // right now — a booking sitting in some other status (still docs_review,
-// or already past midway_paid) has nothing due here.
-const PAYMENT_STAGES = {
-  [BOOKING_STATUS.QUOTE_SENT]: {
-    amountFn: (booking) => Math.round(booking.finalQuote * 0.1),
-    heading: "Advance Payment",
-    subheading: "Pay a 10% advance to move this booking forward. The remaining balance is settled on delivery.",
-    dueLabel: "Advance Due Now (10%)",
-    targetStatus: BOOKING_STATUS.ADVANCE_PAID,
-    paidField: "advancePaid",
-    successHeading: "Advance Payment Received",
-  },
-  [BOOKING_STATUS.CONFIRMED]: {
-    amountFn: (booking) => Math.round(booking.finalQuote * 0.5),
-    heading: "50% Payment",
-    subheading: "Pay the 50% checkpoint to keep this booking moving. The remaining balance is settled on delivery.",
-    dueLabel: "Due Now (50%)",
-    targetStatus: BOOKING_STATUS.MIDWAY_PAID,
-    paidField: "midwayPaid",
-    successHeading: "50% Payment Received",
-    // Unlike the advance (implicitly gated by reaching quote_sent at all),
-    // the booking sits in "confirmed" for a while before the 50% is
-    // actually due — this stage only applies once the admin has explicitly
-    // sent the request (see MidwayPaymentCard in the admin panel).
-    requiresFlag: "midwayRequested",
-  },
-  [BOOKING_STATUS.OUT_FOR_DELIVERY]: {
-    // Not a flat percentage — whatever's actually left of the final quote
-    // once the advance/midway checkpoints and any admin-added charges
-    // (pickup, dropoff, tolls) are accounted for. See remainingBalance in
-    // bookingStore.js's rowToBooking().
-    amountFn: (booking) => booking.remainingBalance ?? 0,
-    heading: "Final Payment",
-    subheading: "Pay your remaining balance to complete this booking.",
-    dueLabel: "Remaining Balance Due",
-    // Paying this doesn't move the booking to Delivered by itself — that's
-    // a real-world event the admin confirms separately once the vehicle's
-    // actually handed over, same as Advance Paid still needs a dedicated
-    // "Mark Booking Confirmed" click. Status just stays out_for_delivery.
-    targetStatus: null,
-    paidField: "finalPaid",
-    successHeading: "Final Payment Received",
-    requiresFlag: "finalRequested",
-  },
-};
+// or already past midway_paid) has nothing due here. The advance/midway
+// percentages come from the admin's payment_settings row (getPaymentSplit),
+// so this is a function of the live split rather than a static object.
+function buildPaymentStages(split) {
+  return {
+    [BOOKING_STATUS.QUOTE_SENT]: {
+      amountFn: (booking) => Math.round(booking.finalQuote * (split.advancePercent / 100)),
+      heading: "Advance Payment",
+      subheading: `Pay a ${split.advancePercent}% advance to move this booking forward. The remaining balance is settled on delivery.`,
+      dueLabel: `Advance Due Now (${split.advancePercent}%)`,
+      targetStatus: BOOKING_STATUS.ADVANCE_PAID,
+      paidField: "advancePaid",
+      successHeading: "Advance Payment Received",
+    },
+    [BOOKING_STATUS.CONFIRMED]: {
+      amountFn: (booking) => Math.round(booking.finalQuote * (split.midwayPercent / 100)),
+      heading: `${split.midwayPercent}% Payment`,
+      subheading: `Pay the ${split.midwayPercent}% checkpoint to keep this booking moving. The remaining balance is settled on delivery.`,
+      dueLabel: `Due Now (${split.midwayPercent}%)`,
+      targetStatus: BOOKING_STATUS.MIDWAY_PAID,
+      paidField: "midwayPaid",
+      successHeading: `${split.midwayPercent}% Payment Received`,
+      // Unlike the advance (implicitly gated by reaching quote_sent at all),
+      // the booking sits in "confirmed" for a while before this checkpoint
+      // is actually due — this stage only applies once the admin has
+      // explicitly sent the request (see MidwayPaymentCard in the admin panel).
+      requiresFlag: "midwayRequested",
+    },
+    [BOOKING_STATUS.OUT_FOR_DELIVERY]: {
+      // Not a flat percentage — whatever's actually left of the final quote
+      // once the advance/midway checkpoints and any admin-added charges
+      // (pickup, dropoff, tolls) are accounted for. See remainingBalance in
+      // bookingStore.js's rowToBooking().
+      amountFn: (booking) => booking.remainingBalance ?? 0,
+      heading: "Final Payment",
+      subheading: "Pay your remaining balance to complete this booking.",
+      dueLabel: "Remaining Balance Due",
+      // Paying this doesn't move the booking to Delivered by itself — that's
+      // a real-world event the admin confirms separately once the vehicle's
+      // actually handed over, same as Advance Paid still needs a dedicated
+      // "Mark Booking Confirmed" click. Status just stays out_for_delivery.
+      targetStatus: null,
+      paidField: "finalPaid",
+      successHeading: "Final Payment Received",
+      requiresFlag: "finalRequested",
+    },
+  };
+}
 
 export default function PaymentClient() {
   const searchParams = useSearchParams();
@@ -62,6 +66,7 @@ export default function PaymentClient() {
   const [booking, setBooking] = useState(undefined);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [split, setSplit] = useState(PAYMENT_SPLIT);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +79,16 @@ export default function PaymentClient() {
       cancelled = true;
     };
   }, [bookingId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPaymentSplit().then((s) => {
+      if (!cancelled) setSplit(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (booking === undefined) return null;
 
@@ -114,7 +129,7 @@ export default function PaymentClient() {
     );
   }
 
-  let stage = PAYMENT_STAGES[booking.status];
+  let stage = buildPaymentStages(split)[booking.status];
   if (stage?.requiresFlag && !booking[stage.requiresFlag]) stage = undefined;
   const amountDue = stage ? stage.amountFn(booking) : 0;
 

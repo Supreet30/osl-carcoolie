@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-
-// setOptions() only takes effect before the first importLibrary() call —
-// call it once at module scope, not inside the component (which can
-// mount/unmount repeatedly as the picker modal opens and closes).
-setOptions({ key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, v: "weekly" });
+import { googleMapsLib } from "../lib/geocode";
 
 // Same props shape as LeafletMap ([lat, lng] tuples) so MapPickerModal can
 // use either one interchangeably.
@@ -37,30 +32,32 @@ export default function GoogleMap({ center, marker, onPick }) {
     // too so the *first* pin click or search doesn't pay for loading that
     // script chunk on top of the actual geocoding request — importLibrary()
     // caches per name, so every later call just resolves instantly.
-    Promise.all([importLibrary("maps"), importLibrary("marker"), importLibrary("geocoding")]).then(([{ Map }, { Marker }]) => {
-      if (cancelled || !containerRef.current) return;
-      markerCtorRef.current = Marker;
-      mapRef.current = new Map(containerRef.current, {
-        center: { lat: center[0], lng: center[1] },
-        zoom: 12,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        // The "arrows" pan/rotate widget Google draws bottom-right by
-        // default — removed so MapPickerModal's own "Use current
-        // location" button can sit in that exact spot instead of next to
-        // it. Zoom itself still works fine via scroll/pinch, this only
-        // drops the on-screen +/- (or camera-control) widget.
-        zoomControl: false,
-        rotateControl: false,
-        cameraControl: false,
-        clickableIcons: false,
+    googleMapsLib()
+      .then(({ importLibrary }) => Promise.all([importLibrary("maps"), importLibrary("marker"), importLibrary("geocoding")]))
+      .then(([{ Map }, { Marker }]) => {
+        if (cancelled || !containerRef.current) return;
+        markerCtorRef.current = Marker;
+        mapRef.current = new Map(containerRef.current, {
+          center: { lat: center[0], lng: center[1] },
+          zoom: 12,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          // The "arrows" pan/rotate widget Google draws bottom-right by
+          // default — removed so MapPickerModal's own "Use current
+          // location" button can sit in that exact spot instead of next to
+          // it. Zoom itself still works fine via scroll/pinch, this only
+          // drops the on-screen +/- (or camera-control) widget.
+          zoomControl: false,
+          rotateControl: false,
+          cameraControl: false,
+          clickableIcons: false,
+        });
+        mapRef.current.addListener("click", (event) => {
+          onPickRef.current(event.latLng.lat(), event.latLng.lng());
+        });
+        setMapReady(true);
       });
-      mapRef.current.addListener("click", (event) => {
-        onPickRef.current(event.latLng.lat(), event.latLng.lng());
-      });
-      setMapReady(true);
-    });
     return () => {
       cancelled = true;
     };

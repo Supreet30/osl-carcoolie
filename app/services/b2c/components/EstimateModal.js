@@ -216,55 +216,65 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
         {couponError && <p className="mt-2 text-xs font-semibold text-red-600">{couponError}</p>}
       </div>
 
-      <div className="shrink-0 overflow-hidden rounded-2xl border border-slate-200">
-        <p className="bg-slate-50 px-5 py-3 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
-          Price Breakup
-        </p>
-        <div className="flex flex-col divide-y divide-slate-100 px-5">
-          <div className="flex items-center justify-between gap-4 py-3.5 text-sm">
-            <span className="text-slate-600">Transportation</span>
-            <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.transportation)}</span>
-          </div>
-          {addOnsTotal > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowAddOns((v) => !v)}
-                className="flex w-full items-center justify-between gap-4 py-3.5 text-left text-sm"
-              >
-                <span className="flex items-center gap-1.5 text-slate-600">
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`} />
-                  Value Added Services
-                </span>
-                <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.addOnsInclusive)}</span>
-              </button>
-              {showAddOns && (
-                <div className="flex flex-col gap-2 pt-3 pb-3.5 pl-5 text-xs text-slate-500">
-                  {inclusive.addOnItems.map((a) => (
-                    <p key={a.key} className="flex items-center justify-between">
-                      <span>{a.label}</span>
-                      <span>{formatINR(a.price)}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-          {appliedCoupon && (
-            <div className="flex items-center justify-between gap-4 py-3.5 text-sm text-green-600">
-              <span>Discount ({appliedCoupon.code})</span>
-              <span className="font-semibold">-{formatINR(discount)}</span>
+      {addOnsTotal > 0 ? (
+        <div className="shrink-0 overflow-hidden rounded-2xl border border-slate-200">
+          <p className="bg-slate-50 px-5 py-3 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+            Price Breakup
+          </p>
+          <div className="flex flex-col divide-y divide-slate-100 px-5">
+            <div className="flex items-center justify-between gap-4 py-3.5 text-sm">
+              <span className="text-slate-600">Transportation</span>
+              <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.transportation)}</span>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setShowAddOns((v) => !v)}
+              className="flex w-full items-center justify-between gap-4 py-3.5 text-left text-sm"
+            >
+              <span className="flex items-center gap-1.5 text-slate-600">
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddOns ? "" : "-rotate-90"}`} />
+                Value Added Services
+              </span>
+              <span className="font-semibold text-[#0b1e42]">{formatINR(inclusive.addOnsInclusive)}</span>
+            </button>
+            {showAddOns && (
+              <div className="flex flex-col gap-2 pt-3 pb-3.5 pl-5 text-xs text-slate-500">
+                {inclusive.addOnItems.map((a) => (
+                  <p key={a.key} className="flex items-center justify-between">
+                    <span>{a.label}</span>
+                    <span>{formatINR(a.price)}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+            {appliedCoupon && (
+              <div className="flex items-center justify-between gap-4 py-3.5 text-sm text-green-600">
+                <span>Discount ({appliedCoupon.code})</span>
+                <span className="font-semibold">-{formatINR(discount)}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between bg-red-50 px-5 py-4">
+            <div>
+              <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
+              <p className="text-[11px] text-slate-400">Incl. of all taxes</p>
+            </div>
+            <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
+          </div>
         </div>
-        <div className="flex items-center justify-between bg-red-50 px-5 py-4">
+      ) : (
+        // No value-added services selected — a full "Price Breakup" box
+        // itemizing just Transportation (which, with no add-ons, is the
+        // whole order) reads as noise next to the total it already
+        // restates; just show the total payable.
+        <div className="shrink-0 flex items-center justify-between rounded-2xl bg-red-50 px-5 py-4">
           <div>
             <p className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">Total Payable</p>
             <p className="text-[11px] text-slate-400">Incl. of all taxes</p>
           </div>
           <p className="text-2xl font-extrabold text-red-600">{formatINR(total)}</p>
         </div>
-      </div>
+      )}
 
       <button
         type="button"

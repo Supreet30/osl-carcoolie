@@ -3,6 +3,28 @@
 // demo; production traffic should route through a paid provider or a proxy
 // that respects Nominatim's usage policy (max ~1 request/second).
 
+const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+// @googlemaps/js-api-loader's setOptions() only takes effect before the
+// first importLibrary() call, and configures the loader as a side effect
+// on the whole module (not per-caller) — so it has to happen exactly once,
+// whichever of the Google-backed functions below (or GoogleMap.js
+// rendering the actual map) happens to run first. Used to live at
+// GoogleMap.js's own module scope, which assumed the map modal had always
+// been opened at least once before any geocoding call — not true anymore
+// now that "Use Current Location" in BookingForm.js calls
+// locateCurrentPosition() directly, without ever opening that modal.
+let googleMapsLibPromise = null;
+export function googleMapsLib() {
+  if (!googleMapsLibPromise) {
+    googleMapsLibPromise = import("@googlemaps/js-api-loader").then((lib) => {
+      lib.setOptions({ key: GOOGLE_MAPS_KEY, v: "weekly" });
+      return lib;
+    });
+  }
+  return googleMapsLibPromise;
+}
+
 export function getCurrentPosition() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -34,11 +56,23 @@ export async function reverseGeocode(lat, lng) {
 // exactly the restriction type recommended (and used here) for a
 // browser-facing Maps JavaScript API key.
 export async function reverseGeocodeGoogle(lat, lng) {
-  const { importLibrary } = await import("@googlemaps/js-api-loader");
+  const { importLibrary } = await googleMapsLib();
   const { Geocoder } = await importLibrary("geocoding");
   const { results } = await new Geocoder().geocode({ location: { lat, lng } });
   if (!results?.length) throw new Error("No address found for this location");
   return results[0].formatted_address;
+}
+
+// GPS position + reverse-geocoded address in one call — the "Use Current
+// Location" dropdown option in BookingForm.js uses this directly (no map,
+// no way to then drag/click to a different spot; that's what "Select on
+// Map" is for instead). Shares the same Google-vs-Nominatim branching
+// MapPickerModal's own locate-me button uses, rather than a second,
+// less-accurate implementation.
+export async function locateCurrentPosition() {
+  const { lat, lng } = await getCurrentPosition();
+  const address = GOOGLE_MAPS_KEY ? await reverseGeocodeGoogle(lat, lng) : await reverseGeocode(lat, lng);
+  return { lat, lng, address };
 }
 
 // Live suggestions for the "Select on Map" search box, as the customer
@@ -64,7 +98,7 @@ export async function searchSuggestions(query) {
 // (correct for a browser-facing Maps JavaScript API key) is rejected by
 // Google's server-side REST Geocoding endpoint.
 export async function searchSuggestionsGoogle(query) {
-  const { importLibrary } = await import("@googlemaps/js-api-loader");
+  const { importLibrary } = await googleMapsLib();
   const { Geocoder } = await importLibrary("geocoding");
   let results;
   try {

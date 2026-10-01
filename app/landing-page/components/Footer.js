@@ -32,6 +32,7 @@ const LINK_GROUPS = [
       { label: "FAQs", href: "#" },
       { label: "Privacy Policy", href: "/privacy-policy" },
       { label: "Terms of Service", href: "/terms-of-service" },
+      { label: "Cancellation Policy", href: "/cancellation-policy" },
     ],
   },
 ];

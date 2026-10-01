@@ -1,12 +1,13 @@
-import { ArrowRight, ChevronRight, Clock, FileText, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, FileText, Mail, ShieldCheck, XCircle } from "lucide-react";
 import Navbar from "../landing-page/components/Navbar";
 import Footer from "../landing-page/components/Footer";
 import { getLegalPage } from "../../lib/legal";
 import Markdown, { outlineMarkdown } from "./Markdown";
 
 const LEGAL_PAGES = [
-  { slug: "terms", label: "Terms of Service", href: "/terms-of-service", icon: FileText },
-  { slug: "privacy", label: "Privacy Policy", href: "/privacy-policy", icon: ShieldCheck },
+  { slug: "terms", label: "Terms of Service", shortLabel: "Terms", href: "/terms-of-service", icon: FileText },
+  { slug: "privacy", label: "Privacy Policy", shortLabel: "Privacy", href: "/privacy-policy", icon: ShieldCheck },
+  { slug: "cancellation", label: "Cancellation Policy", shortLabel: "Cancellation", href: "/cancellation-policy", icon: XCircle },
 ];
 
 function Title({ text }) {
@@ -66,7 +67,7 @@ export default async function LegalDocument({ slug }) {
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <div className="flex flex-col gap-4">
             <div className="flex gap-2 rounded-2xl bg-white p-1.5 shadow-sm ring-1 ring-slate-100">
-              {LEGAL_PAGES.map(({ slug: s, label, href, icon: LinkIcon }) => (
+              {LEGAL_PAGES.map(({ slug: s, shortLabel, href, icon: LinkIcon }) => (
                 <a
                   key={s}
                   href={href}
@@ -76,7 +77,7 @@ export default async function LegalDocument({ slug }) {
                   }`}
                 >
                   <LinkIcon className="h-3.5 w-3.5 shrink-0" />
-                  {s === "terms" ? "Terms" : "Privacy"}
+                  {shortLabel}
                 </a>
               ))}
             </div>
