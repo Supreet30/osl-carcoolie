@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import Link from "next/link";
 import { Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 
@@ -54,6 +53,14 @@ function AuthCard() {
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState({ state: "idle", message: "" });
   const isSignup = mode === "signup";
+  const isForgot = mode === "forgot";
+
+  // Clears any leftover status message from the mode just left — e.g.
+  // switching signin -> forgot shouldn't carry over a stale password error.
+  function switchMode(next) {
+    setMode(next);
+    setStatus({ state: "idle", message: "" });
+  }
 
   // Sign-up creates a real email+password account; Supabase emails a
   // confirmation link (its "Confirm signup" template, separate from the
@@ -87,6 +94,24 @@ function AuthCard() {
     // On success onAuthStateChange (see Navbar.js) closes this modal — no
     // "sent" state to show here, unlike sign-up.
     if (error) setStatus({ state: "error", message: error.message });
+  }
+
+  // Sends a reset link to /reset-password (not the current page — that page
+  // is built specifically to handle the recovery session Supabase hands
+  // back and let them set a new password).
+  async function handleForgotPassword(event) {
+    event.preventDefault();
+    if (!isSupabaseConfigured) {
+      setStatus({ state: "error", message: "Sign in isn't configured yet." });
+      return;
+    }
+    const email = event.target.elements.email.value;
+    setStatus({ state: "sending", message: "" });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) setStatus({ state: "error", message: error.message });
+    else setStatus({ state: "sent", message: `Check ${email} for a password reset link.` });
   }
 
   // Opens Google's consent screen in a popup instead of navigating this tab
@@ -127,20 +152,22 @@ function AuthCard() {
       </span>
       <div>
         <h1 className="text-3xl font-extrabold text-white sm:text-4xl">
-          {isSignup ? "Welcome to CarCoolie!" : "Welcome Back !"}
+          {isSignup ? "Welcome to CarCoolie!" : isForgot ? "Forgot Password?" : "Welcome Back !"}
         </h1>
         <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-red-50">
           {isSignup
             ? "Create your account and get started with seamless car transportation."
-            : "Sign in to manage your car transportation bookings with ease. Experience logistics precision engineered for you."}
+            : isForgot
+              ? "No worries — enter your email and we'll send you a link to reset it."
+              : "Sign in to manage your car transportation bookings with ease. Experience logistics precision engineered for you."}
         </p>
       </div>
       <button
         type="button"
-        onClick={() => setMode(isSignup ? "signin" : "signup")}
+        onClick={() => switchMode(isForgot ? "signin" : isSignup ? "signin" : "signup")}
         className="rounded-full border-2 border-white px-10 py-3 text-sm font-extrabold tracking-wide text-white uppercase transition-colors hover:bg-white hover:text-red-600"
       >
-        {isSignup ? "Sign In" : "Sign Up"}
+        {isForgot ? "Back to Sign In" : isSignup ? "Sign In" : "Sign Up"}
       </button>
     </div>
   );
@@ -152,74 +179,108 @@ function AuthCard() {
       style={{ animation: "fadeIn 0.4s ease-out" }}
     >
       <h2 className="text-3xl font-extrabold text-[#0b1e42] sm:text-4xl">
-        {isSignup ? "Create Account" : "Sign In Your Account"}
+        {isSignup ? "Create Account" : isForgot ? "Reset Password" : "Sign In Your Account"}
       </h2>
 
-      <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-4">
-        {isSignup && <FieldInput icon={User} type="text" name="name" placeholder="Full Name" required />}
+      {isForgot ? (
+        <form onSubmit={handleForgotPassword} className="mt-2 flex flex-col gap-4">
+          <FieldInput icon={Mail} type="email" name="email" placeholder="Email Address" required />
 
-        <FieldInput icon={Mail} type="email" name="email" placeholder="Email Address" required />
+          <button
+            type="submit"
+            disabled={status.state === "sending"}
+            className="mt-2 rounded-xl bg-red-600 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase shadow-lg transition-colors hover:bg-red-700 disabled:opacity-60"
+          >
+            {status.state === "sending" ? "Sending..." : "Send Reset Link"}
+          </button>
 
-        <FieldInput
-          icon={Lock}
-          type={showPassword ? "text" : "password"}
-          name="password"
-          placeholder="Password"
-          required
-          minLength={6}
-          trailing={
+          {status.message && (
+            <p className={`text-center text-xs ${status.state === "error" ? "text-red-600" : "text-emerald-600"}`}>
+              {status.message}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => switchMode("signin")}
+            className="text-center text-xs font-semibold text-slate-500 transition-colors hover:text-red-600"
+          >
+            &larr; Back to Sign In
+          </button>
+        </form>
+      ) : (
+        <>
+          <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-4">
+            {isSignup && <FieldInput icon={User} type="text" name="name" placeholder="Full Name" required />}
+
+            <FieldInput icon={Mail} type="email" name="email" placeholder="Email Address" required />
+
+            <FieldInput
+              icon={Lock}
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              required
+              minLength={6}
+              trailing={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute top-1/2 right-4 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
+            />
+
+            {!isSignup && (
+              <div className="flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2 text-slate-500">
+                  <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                  Remember me
+                </label>
+                <button
+                  type="button"
+                  onClick={() => switchMode("forgot")}
+                  className="font-semibold text-red-600 transition-colors hover:text-red-700"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            )}
+
             <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute top-1/2 right-4 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+              type="submit"
+              disabled={status.state === "sending"}
+              className="mt-2 rounded-xl bg-red-600 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase shadow-lg transition-colors hover:bg-red-700 disabled:opacity-60"
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {status.state === "sending" ? "Sending..." : isSignup ? "Sign Up" : "Sign In"}
             </button>
-          }
-        />
 
-        {!isSignup && (
-          <div className="flex items-center justify-between text-xs">
-            <label className="flex items-center gap-2 text-slate-500">
-              <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500" />
-              Remember me
-            </label>
-            <Link href="#" className="font-semibold text-red-600 transition-colors hover:text-red-700">
-              Forgot Password?
-            </Link>
+            {status.message && (
+              <p className={`text-center text-xs ${status.state === "error" ? "text-red-600" : "text-emerald-600"}`}>
+                {status.message}
+              </p>
+            )}
+          </form>
+
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            or use your email for registration
+            <span className="h-px flex-1 bg-slate-200" />
           </div>
-        )}
 
-        <button
-          type="submit"
-          disabled={status.state === "sending"}
-          className="mt-2 rounded-xl bg-red-600 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase shadow-lg transition-colors hover:bg-red-700 disabled:opacity-60"
-        >
-          {status.state === "sending" ? "Sending..." : isSignup ? "Sign Up" : "Sign In"}
-        </button>
-
-        {status.message && (
-          <p className={`text-center text-xs ${status.state === "error" ? "text-red-600" : "text-emerald-600"}`}>
-            {status.message}
-          </p>
-        )}
-      </form>
-
-      <div className="flex items-center gap-3 text-xs text-slate-400">
-        <span className="h-px flex-1 bg-slate-200" />
-        or use your email for registration
-        <span className="h-px flex-1 bg-slate-200" />
-      </div>
-
-      <button
-        type="button"
-        onClick={handleGoogleSignIn}
-        className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3.5 text-sm font-semibold text-slate-500 transition-colors hover:bg-slate-200"
-      >
-        <GoogleIcon className="h-4 w-4" />
-        Continue With Google
-      </button>
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3.5 text-sm font-semibold text-slate-500 transition-colors hover:bg-slate-200"
+          >
+            <GoogleIcon className="h-4 w-4" />
+            Continue With Google
+          </button>
+        </>
+      )}
     </div>
   );
 
