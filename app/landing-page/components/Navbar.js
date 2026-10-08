@@ -255,11 +255,25 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
+    // This same Navbar mounts inside the Google-sign-in popup too (it's the
+    // same app) — once that popup's own ?code= exchange finishes and it has
+    // a session, it should just close itself rather than sit there showing
+    // the site. window.opener is only set for a window opened via
+    // window.open(), so the real tab never matches this.
+    const isOAuthPopup = window.opener && window.opener !== window;
     supabase.auth.getSession().then(({ data }) => {
+      if (isOAuthPopup && data.session) {
+        window.close();
+        return;
+      }
       setSession(data.session);
       setAvatarFailed(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (isOAuthPopup && nextSession) {
+        window.close();
+        return;
+      }
       setSession(nextSession);
       setAvatarFailed(false);
       setAuthModalOpen(false);

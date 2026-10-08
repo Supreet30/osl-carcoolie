@@ -77,15 +77,29 @@ function AuthCard() {
     }
   }
 
+  // Opens Google's consent screen in a popup instead of navigating this tab
+  // — the popup does the ?code=... exchange on its own URL (see the
+  // window.opener self-close in Navbar.js) and this page never moves, so
+  // there's no homepage bounce and no ?code= ever visible here. The blank
+  // popup is opened synchronously (before the first await) because browsers
+  // block window.open() calls that happen after an await.
   async function handleGoogleSignIn() {
     if (!isSupabaseConfigured) {
       setStatus({ state: "error", message: "Sign in isn't configured yet." });
       return;
     }
-    await supabase.auth.signInWithOAuth({
+    const popup = window.open("", "google-oauth", "width=480,height=640");
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.href, skipBrowserRedirect: true },
     });
+    if (error || !data?.url) {
+      popup?.close();
+      setStatus({ state: "error", message: error?.message ?? "Couldn't start Google sign-in." });
+      return;
+    }
+    if (popup) popup.location.href = data.url;
+    else window.location.href = data.url; // popup blocked — fall back to a normal full-page redirect
   }
 
   const promoPanel = (
