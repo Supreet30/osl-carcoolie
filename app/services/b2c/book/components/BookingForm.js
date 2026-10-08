@@ -905,15 +905,6 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
 
-      {estimateLoaded && !estimate && (
-        <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
-          No estimate found for this session — the price shown will be a placeholder. Start from{" "}
-          <a href="/services/b2c" className="underline">
-            Get an Estimate
-          </a>{" "}
-          first for a real quote.
-        </div>
-      )}
       {estimate && (
         <div className="flex items-center justify-between rounded-2xl bg-red-50 p-4 text-sm">
           <span className="font-semibold text-[#0b1e42]">

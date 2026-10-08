@@ -31,7 +31,7 @@ import {
   getVehicleModels,
   validateCoupon,
 } from "../lib/pricing";
-import { saveEstimate } from "../lib/bookingStore";
+import { markBookingIntent, saveEstimate } from "../lib/bookingStore";
 import Dropdown from "./Dropdown";
 
 const YEARS = Array.from({ length: 15 }, (_, i) => `${new Date().getFullYear() - i}`);
@@ -161,6 +161,7 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
       discount,
       total,
     });
+    markBookingIntent();
     onClose();
     router.push("/services/b2c/book");
   }

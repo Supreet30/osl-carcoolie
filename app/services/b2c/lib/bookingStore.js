@@ -113,6 +113,28 @@ export function getEstimate() {
   return safeParse(window.localStorage.getItem(ESTIMATE_KEY), null);
 }
 
+// A one-time-use marker, separate from the saved estimate itself — the
+// estimate in localStorage can linger indefinitely, but /book should only
+// ever be usable right after actually clicking "Book Now" from the
+// estimate, not from a direct visit/refresh/bookmark that happens to find
+// old data still sitting there. sessionStorage (not localStorage) so a new
+// tab never inherits it, and it's consumed (removed) on first read so even
+// a second direct visit in the same tab, later in the same session, is
+// blocked same as a cold one — see BookingPageClient.js.
+const BOOK_INTENT_KEY = "carcoolie_b2c_book_intent";
+
+export function markBookingIntent() {
+  if (!isBrowser()) return;
+  window.sessionStorage.setItem(BOOK_INTENT_KEY, "1");
+}
+
+export function consumeBookingIntent() {
+  if (!isBrowser()) return false;
+  const present = window.sessionStorage.getItem(BOOK_INTENT_KEY) === "1";
+  window.sessionStorage.removeItem(BOOK_INTENT_KEY);
+  return present;
+}
+
 // ---- localStorage fallback (original implementation) ----
 
 function getBookingsLocal() {

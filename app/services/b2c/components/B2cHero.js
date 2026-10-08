@@ -5,6 +5,8 @@ import Image from "next/image";
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
+import AuthModal from "../../../components/AuthModal";
+import { isSupabaseConfigured, supabase } from "../../../../lib/supabaseClient";
 import { getRoute } from "../lib/pricing";
 
 const PIN_REGEX = /^\d{6}$/;
@@ -75,6 +77,29 @@ export default function B2cHero() {
   const [destinationPinStatus, setDestinationPinStatus] = useState({ status: "idle" });
   const [showEstimate, setShowEstimate] = useState(false);
   const [cityError, setCityError] = useState("");
+
+  // Generating a quote requires an account — see the session tracking and
+  // handleSubmit's gate below. pendingEstimateRef survives the sign-in
+  // redirect/popup round trip so the quote the customer was asking for
+  // actually opens the moment they're signed in, instead of making them
+  // resubmit the PIN form a second time.
+  const [session, setSession] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const pendingEstimateRef = useRef(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      if (nextSession && pendingEstimateRef.current) {
+        pendingEstimateRef.current = false;
+        setAuthModalOpen(false);
+        setShowEstimate(true);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
   // While the route-exists check (getRoute) is in flight, after the PIN
   // checks above already passed — brief, but worth a disabled/labeled
   // button so a slow connection doesn't look like a dead click.
@@ -183,6 +208,12 @@ export default function B2cHero() {
     setCheckingRoute(false);
     if (!route) {
       setCityError("Coming soon to this location — we're expanding our network and will be there shortly.");
+      return;
+    }
+
+    if (isSupabaseConfigured && !session) {
+      pendingEstimateRef.current = true;
+      setAuthModalOpen(true);
       return;
     }
 
@@ -335,6 +366,15 @@ export default function B2cHero() {
         initialDestinationPin={destinationPin}
         initialPickupPinStatus={pickupPinStatus}
         initialDestinationPinStatus={destinationPinStatus}
+      />
+
+      <AuthModal
+        open={authModalOpen}
+        onClose={() => {
+          pendingEstimateRef.current = false;
+          setAuthModalOpen(false);
+        }}
+        reason="Sign in or create an account to generate your quote."
       />
     </>
   );

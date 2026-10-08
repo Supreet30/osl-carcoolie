@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
 import { isSupabaseConfigured, setRememberMe, supabase } from "../../lib/supabaseClient";
 
 // lucide-react dropped brand/social glyphs over trademark concerns, so the
@@ -308,23 +308,80 @@ function AuthCard() {
 // would end up positioned (and clipped) relative to the header's own small
 // box instead of the viewport. Portaling sidesteps that regardless of where
 // AuthModal gets mounted from.
-export default function AuthModal({ open, onClose }) {
-  if (!open) return null;
+// Top-right toast for "reason" (why the popup opened) — portaled on its own
+// so it's never part of the modal's own scroll container (that's sized by
+// AuthCard's fixed min-height, which can't change — see the comment on
+// AuthCard above — so keeping the toast out of it also keeps the modal
+// itself shorter instead of adding to what might already need to scroll).
+// Auto-dismisses; also re-triggers its own timer if the same popup opens
+// again with a new reason.
+function AuthReasonToast({ reason, onDismiss }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 6000);
+    return () => clearTimeout(timer);
+  }, [reason, onDismiss]);
 
   return createPortal(
-    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50 px-4 py-8" onClick={onClose}>
-      <div className="relative max-h-[90vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-500 shadow-sm transition-colors hover:bg-white hover:text-slate-700"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <AuthCard />
-      </div>
+    <div
+      style={{ animation: "slideInRight 0.4s ease-out" }}
+      className="fixed top-4 right-4 z-300 flex max-w-sm items-start gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-2xl ring-1 ring-slate-900/5"
+    >
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <AlertCircle className="h-4 w-4" />
+      </span>
+      <p className="flex-1 pt-1 text-sm font-bold text-[#0b1e42]">{reason}</p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="mt-0.5 shrink-0 text-slate-400 transition-colors hover:text-slate-600"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>,
     document.body
+  );
+}
+
+export default function AuthModal({ open, onClose, reason }) {
+  const [toastDismissed, setToastDismissed] = useState(false);
+  // This component never actually unmounts between opens (callers keep it
+  // rendered and just toggle `open`), so a dismissed toast would otherwise
+  // stay dismissed forever — reset it on every false->true transition.
+  // Adjusting state during render (not an effect) — same pattern as
+  // BookingForm.js's lastEstimateLoaded.
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) setToastDismissed(false);
+  }
+
+  if (!open) return null;
+
+  return (
+    <>
+      {createPortal(
+        <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50 px-4 py-8" onClick={onClose}>
+          <div
+            className="auth-modal-scroll relative max-h-[90vh] overflow-y-auto"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="absolute top-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-500 shadow-sm transition-colors hover:bg-white hover:text-slate-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <AuthCard />
+          </div>
+        </div>,
+        document.body
+      )}
+      {reason && !toastDismissed && (
+        <AuthReasonToast reason={reason} onDismiss={() => setToastDismissed(true)} />
+      )}
+    </>
   );
 }
