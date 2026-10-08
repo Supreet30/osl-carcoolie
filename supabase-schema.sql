@@ -159,6 +159,29 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_customer();
 
+-- One row per quote actually generated (B2cHero.js, after the sign-in gate
+-- passes) — purely an append-only rate-limit log, not read anywhere else.
+-- Enforces "3 quotes per rolling 24h per account": the customer site counts
+-- rows from the last 24h before allowing another, backed by RLS (not
+-- localStorage) so clearing browser storage can't reset it.
+create table if not exists quote_requests (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references customers (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists quote_requests_customer_id_created_at_idx on quote_requests (customer_id, created_at);
+
+-- One row per account, always the most recently generated estimate
+-- (upserted, not appended — unlike quote_requests above) — lets B2cHero.js
+-- offer "continue where you left off" on a later visit. updated_at older
+-- than a week is treated as expired by the app, not deleted here.
+create table if not exists saved_estimates (
+  customer_id uuid primary key references customers (id) on delete cascade,
+  details jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 -- Backfill for accounts created before this trigger existed (e.g. the
 -- Google/magic-link accounts already used to test sign-in) — the trigger
 -- above only fires on new auth.users inserts going forward.
@@ -933,6 +956,8 @@ alter table booking_inspections enable row level security;
 alter table booking_reviews enable row level security;
 alter table payments enable row level security;
 alter table booking_status_history enable row level security;
+alter table quote_requests enable row level security;
+alter table saved_estimates enable row level security;
 
 create or replace function is_admin()
 returns boolean as $$
@@ -963,6 +988,21 @@ drop policy if exists "customers update own" on customers;
 create policy "customers update own" on customers for update using (id = auth.uid());
 drop policy if exists "customers insert own" on customers;
 create policy "customers insert own" on customers for insert with check (id = auth.uid());
+
+-- quote_requests: append-only rate-limit log, own rows only — no update/
+-- delete policy at all, so a customer can't erase their own count either.
+drop policy if exists "quote_requests owner read" on quote_requests;
+create policy "quote_requests owner read" on quote_requests for select using (customer_id = auth.uid() or is_admin());
+drop policy if exists "quote_requests owner insert" on quote_requests;
+create policy "quote_requests owner insert" on quote_requests for insert with check (customer_id = auth.uid());
+
+-- saved_estimates: own row only, upsert needs both insert and update
+drop policy if exists "saved_estimates owner read" on saved_estimates;
+create policy "saved_estimates owner read" on saved_estimates for select using (customer_id = auth.uid() or is_admin());
+drop policy if exists "saved_estimates owner insert" on saved_estimates;
+create policy "saved_estimates owner insert" on saved_estimates for insert with check (customer_id = auth.uid());
+drop policy if exists "saved_estimates owner update" on saved_estimates;
+create policy "saved_estimates owner update" on saved_estimates for update using (customer_id = auth.uid());
 
 -- admin_users: only admins can read the admin roster
 drop policy if exists "admin_users admin only" on admin_users;
@@ -1105,17 +1145,17 @@ create policy "booking_inspections admin insert" on booking_inspections for inse
 drop policy if exists "booking_inspections admin delete" on booking_inspections;
 create policy "booking_inspections admin delete" on booking_inspections for delete using (is_admin_or_anon());
 
--- booking_reviews: same ownership-read pattern as the other per-booking
--- tables above; insert/update open to is_admin_or_anon() since it's the
--- customer (not the admin) who writes these, and the customer site has no
--- real auth yet either — same "anon key stands in for the signed-in
--- customer" convention this whole schema already uses.
+-- booking_reviews: same ownership pattern for both read and insert — the
+-- booking's own customer (real account now that customer auth exists, or
+-- anon for an older/guest booking) can write their own review.
 drop policy if exists "booking_reviews owner read" on booking_reviews;
 create policy "booking_reviews owner read" on booking_reviews for select using (
   exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
 );
 drop policy if exists "booking_reviews owner insert" on booking_reviews;
-create policy "booking_reviews owner insert" on booking_reviews for insert with check (is_admin_or_anon());
+create policy "booking_reviews owner insert" on booking_reviews for insert with check (
+  exists (select 1 from bookings b where b.id = booking_id and (b.customer_id = auth.uid() or b.customer_id is null or is_admin()))
+);
 -- No update policy on purpose — a submitted review is final (see
 -- ReviewCard in MyBookingsClient.js, which switches to a frozen read-only
 -- view the moment booking.review exists). Without this, an update would

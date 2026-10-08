@@ -28,7 +28,7 @@ import {
   Wind,
   XCircle,
 } from "lucide-react";
-import { createBooking } from "../../lib/bookingStore";
+import { createBooking, saveFormDraft } from "../../lib/bookingStore";
 import { formatINR, getDocumentFormats, getYardsForCity } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import Dropdown from "../../components/Dropdown";
@@ -469,7 +469,7 @@ function MethodPicker({ label, method, options, locked, onChange }) {
   );
 }
 
-export default function BookingForm({ estimate, estimateLoaded, onSummaryChange }) {
+export default function BookingForm({ estimate, estimateLoaded, initialFormValues, onSummaryChange }) {
   const router = useRouter();
 
   // Nothing is uploaded until the customer actually picks a file — the
@@ -501,24 +501,28 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
     getYardsForCity(pickupCity).then((list) => {
       if (cancelled) return;
       setPickupYards(list);
-      setPickupYard(list[0] ?? null);
+      // Restores the previously-picked yard by name once its list loads
+      // (the yard object itself can't be stashed directly — see
+      // initialFormValues below), falling back to the first yard same as
+      // before this existed.
+      setPickupYard(list.find((y) => y.name === initialFormValues?.pickupYardName) ?? list[0] ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [pickupCity]);
+  }, [pickupCity, initialFormValues]);
 
   useEffect(() => {
     let cancelled = false;
     getYardsForCity(dropoffCity).then((list) => {
       if (cancelled) return;
       setDropoffYards(list);
-      setDropoffYard(list[0] ?? null);
+      setDropoffYard(list.find((y) => y.name === initialFormValues?.dropoffYardName) ?? list[0] ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [dropoffCity]);
+  }, [dropoffCity, initialFormValues]);
 
   useEffect(() => {
     let cancelled = false;
@@ -533,22 +537,25 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // Chosen in the "Get an Estimate" modal now, not here — see
   // handleBookNow in EstimateModal.js. Defaults to "self" so a booking
   // reached without a saved estimate (the amber notice above) still works.
-  const [pickupMethod, setPickupMethod] = useState(estimate?.pickupMethod ?? "self");
-  const [pickupLocation, setPickupLocation] = useState(null);
-  const [pickupDate, setPickupDate] = useState(estimate?.date ?? "");
+  // initialFormValues (a resumed "form" stage draft's in-progress values —
+  // see saveFormDraft below and BookingPageClient.js) takes priority over
+  // the estimate's own default when present.
+  const [pickupMethod, setPickupMethod] = useState(initialFormValues?.pickupMethod ?? estimate?.pickupMethod ?? "self");
+  const [pickupLocation, setPickupLocation] = useState(initialFormValues?.pickupLocation ?? null);
+  const [pickupDate, setPickupDate] = useState(initialFormValues?.pickupDate ?? estimate?.date ?? "");
   // No default slot pre-selected — every slot starts disabled until a date
   // is actually picked, so nothing should already look chosen before then.
-  const [timeSlot, setTimeSlot] = useState(null);
+  const [timeSlot, setTimeSlot] = useState(initialFormValues?.timeSlot ?? null);
   // Self-declared for now (see HubLocationCard) — null until the customer
   // actually answers, true/false after. Not yet wired into pricing; just
   // surfaces the "extra charges may apply" note when they say "No".
-  const [pickupWithinHub, setPickupWithinHub] = useState(null);
+  const [pickupWithinHub, setPickupWithinHub] = useState(initialFormValues?.pickupWithinHub ?? null);
   const [pickupYards, setPickupYards] = useState([]);
   const [pickupYard, setPickupYard] = useState(null);
 
-  const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
-  const [dropoffLocation, setDropoffLocation] = useState(null);
-  const [dropoffWithinHub, setDropoffWithinHub] = useState(null);
+  const [dropoffMethod, setDropoffMethod] = useState(initialFormValues?.dropoffMethod ?? estimate?.dropoffMethod ?? "self");
+  const [dropoffLocation, setDropoffLocation] = useState(initialFormValues?.dropoffLocation ?? null);
+  const [dropoffWithinHub, setDropoffWithinHub] = useState(initialFormValues?.dropoffWithinHub ?? null);
   const [dropoffYards, setDropoffYards] = useState([]);
   const [dropoffYard, setDropoffYard] = useState(null);
 
@@ -612,7 +619,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // are mutually exclusive (checking one clears the other), and the custom
   // fields below only appear once neither is checked. Defaults to the
   // common case (billed at the pickup address).
-  const [billingMode, setBillingMode] = useState("pickup");
+  const [billingMode, setBillingMode] = useState(initialFormValues?.billingMode ?? "pickup");
   // A "Same as ___" checkbox only makes sense when that leg actually has an
   // address on file — Self methods don't collect one at all (see section
   // 1/2 above), so there's nothing to copy.
@@ -624,7 +631,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // here purely to drive the "Verifying… -> Company Name" lookup below —
   // the two don't conflict since FormData reads the input's live DOM value
   // regardless of whether it's also controlled.
-  const [gstin, setGstin] = useState("");
+  const [gstin, setGstin] = useState(initialFormValues?.billing_gstin ?? "");
   // "idle" | "checking" | "verified" | "not_found" | "error"
   const [gstStatus, setGstStatus] = useState("idle");
   const [gstCompanyName, setGstCompanyName] = useState(null);
@@ -680,6 +687,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const fileInputRef = useRef(null);
   const pendingUploadKey = useRef(null);
   const documentsSectionRef = useRef(null);
+  const formRef = useRef(null);
+  const formDraftTimerRef = useRef(null);
 
   // Bubbles the fields the booking summary sidebar displays up to the
   // shared parent, so it stays live as the customer fills in this form
@@ -687,6 +696,68 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   useEffect(() => {
     onSummaryChange?.({ pickupMethod, dropoffMethod, date: pickupDate, timeSlot });
   }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot]);
+
+  // Form-stage draft autosave — see saveFormDraft in bookingStore.js. Most
+  // of this form's fields are uncontrolled (plain name="..." inputs read
+  // via FormData on real submit, not per-keystroke state), so rather than
+  // convert ~30 fields to controlled state, this snapshots the live DOM via
+  // `new FormData(formRef.current)` instead. Debounced (700ms after the
+  // last change) and fire-and-forget, same reasoning as EstimateModal's
+  // quote-draft autosave. File inputs are skipped — File objects can't be
+  // JSON-serialized, so a resumed draft re-asks for documents, same as
+  // today if an estimate existed but nothing had been uploaded yet.
+  function scheduleFormDraftSave() {
+    if (!estimate) return;
+    clearTimeout(formDraftTimerRef.current);
+    formDraftTimerRef.current = setTimeout(() => {
+      if (!formRef.current) return;
+      const values = {};
+      for (const [key, value] of new FormData(formRef.current).entries()) {
+        if (value instanceof File) continue;
+        values[key] = value;
+      }
+      // Plus the handful of real-React-state fields that never show up in
+      // FormData at all — radios/checkboxes without a `name` (billingMode,
+      // hub-radius answers), custom button/dropdown pickers (methods, date,
+      // time slot, captured map/GPS locations, selected yard).
+      saveFormDraft(estimate, {
+        ...values,
+        pickupMethod,
+        dropoffMethod,
+        pickupDate,
+        timeSlot,
+        pickupWithinHub,
+        dropoffWithinHub,
+        billingMode,
+        pickupYardName: pickupYard?.name ?? null,
+        dropoffYardName: dropoffYard?.name ?? null,
+        pickupLocation,
+        dropoffLocation,
+      });
+    }, 700);
+  }
+
+  // Covers the non-FormData state fields above — set via buttons/custom
+  // pickers rather than native inputs, so they never bubble a native
+  // 'change' event up to the <form>'s onChange below.
+  useEffect(() => {
+    scheduleFormDraftSave();
+    return () => clearTimeout(formDraftTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scheduleFormDraftSave reads other state (uploads, gstin, FormData) that intentionally isn't tracked here; this effect exists only to catch the non-FormData fields listed below.
+  }, [
+    estimate,
+    pickupMethod,
+    dropoffMethod,
+    pickupDate,
+    timeSlot,
+    pickupWithinHub,
+    dropoffWithinHub,
+    billingMode,
+    pickupYard,
+    dropoffYard,
+    pickupLocation,
+    dropoffLocation,
+  ]);
 
   function triggerUpload(key) {
     pendingUploadKey.current = key;
@@ -902,7 +973,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   );
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form ref={formRef} onSubmit={handleSubmit} onChange={scheduleFormDraftSave} className="flex flex-col gap-6">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
 
       {estimate && (
@@ -920,22 +991,52 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         badge={estimate ? `${estimate.fromCity}${estimate.pickupPin ? `, ${estimate.pickupPin}` : ""}` : undefined}
       >
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField label="Full Name" name="pickup_fullName" type="text" placeholder="e.g. Rahul Sharma" />
-          <TextField label="Phone Number" name="pickup_phone" type="tel" placeholder="+91 98765 43210" />
+          <TextField
+            label="Full Name"
+            name="pickup_fullName"
+            type="text"
+            defaultValue={initialFormValues?.pickup_fullName ?? ""}
+            placeholder="e.g. Rahul Sharma"
+          />
+          <TextField
+            label="Phone Number"
+            name="pickup_phone"
+            type="tel"
+            defaultValue={initialFormValues?.pickup_phone ?? ""}
+            placeholder="+91 98765 43210"
+          />
         </div>
         {pickupMethod === "driver" ? (
           <>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <TextField label="House / Plot / Flat No." name="pickup_house" type="text" placeholder="B-24, 2nd Floor" />
-              <TextField label="Street / Area Name" name="pickup_street" type="text" placeholder="Connaught Place" />
+              <TextField
+                label="House / Plot / Flat No."
+                name="pickup_house"
+                type="text"
+                defaultValue={initialFormValues?.pickup_house ?? ""}
+                placeholder="B-24, 2nd Floor"
+              />
+              <TextField
+                label="Street / Area Name"
+                name="pickup_street"
+                type="text"
+                defaultValue={initialFormValues?.pickup_street ?? ""}
+                placeholder="Connaught Place"
+              />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              <TextField label="Landmark (Optional)" name="pickup_landmark" type="text" placeholder="Near Metro Pillar 12" />
+              <TextField
+                label="Landmark (Optional)"
+                name="pickup_landmark"
+                type="text"
+                defaultValue={initialFormValues?.pickup_landmark ?? ""}
+                placeholder="Near Metro Pillar 12"
+              />
               <TextField
                 label="City"
                 name="pickup_city"
                 type="text"
-                defaultValue={estimate?.fromCity ?? ""}
+                defaultValue={initialFormValues?.pickup_city ?? estimate?.fromCity ?? ""}
                 placeholder="New Delhi"
               />
               <TextField
@@ -943,7 +1044,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="pickup_pin"
                 type="text"
                 inputMode="numeric"
-                defaultValue={estimate?.pickupPin ?? ""}
+                defaultValue={initialFormValues?.pickup_pin ?? estimate?.pickupPin ?? ""}
                 placeholder="110001"
                 readOnly={Boolean(estimate?.pickupPin)}
                 title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : undefined}
@@ -1028,22 +1129,52 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
         badge={estimate ? `${estimate.toCity}${estimate.destinationPin ? `, ${estimate.destinationPin}` : ""}` : undefined}
       >
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField label="Full Name" name="dropoff_fullName" type="text" placeholder="Recipient Name" />
-          <TextField label="Phone Number" name="dropoff_phone" type="tel" placeholder="+91 98765 43210" />
+          <TextField
+            label="Full Name"
+            name="dropoff_fullName"
+            type="text"
+            defaultValue={initialFormValues?.dropoff_fullName ?? ""}
+            placeholder="Recipient Name"
+          />
+          <TextField
+            label="Phone Number"
+            name="dropoff_phone"
+            type="tel"
+            defaultValue={initialFormValues?.dropoff_phone ?? ""}
+            placeholder="+91 98765 43210"
+          />
         </div>
         {dropoffMethod === "driver" ? (
           <>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <TextField label="House / Plot / Flat No." name="dropoff_house" type="text" placeholder="A-12, 5th Floor" />
-              <TextField label="Street / Area Name" name="dropoff_street" type="text" placeholder="Bandra West" />
+              <TextField
+                label="House / Plot / Flat No."
+                name="dropoff_house"
+                type="text"
+                defaultValue={initialFormValues?.dropoff_house ?? ""}
+                placeholder="A-12, 5th Floor"
+              />
+              <TextField
+                label="Street / Area Name"
+                name="dropoff_street"
+                type="text"
+                defaultValue={initialFormValues?.dropoff_street ?? ""}
+                placeholder="Bandra West"
+              />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              <TextField label="Landmark (Optional)" name="dropoff_landmark" type="text" placeholder="Near Linking Road" />
+              <TextField
+                label="Landmark (Optional)"
+                name="dropoff_landmark"
+                type="text"
+                defaultValue={initialFormValues?.dropoff_landmark ?? ""}
+                placeholder="Near Linking Road"
+              />
               <TextField
                 label="City"
                 name="dropoff_city"
                 type="text"
-                defaultValue={estimate?.toCity ?? ""}
+                defaultValue={initialFormValues?.dropoff_city ?? estimate?.toCity ?? ""}
                 placeholder="Mumbai"
               />
               <TextField
@@ -1051,7 +1182,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="dropoff_pin"
                 type="text"
                 inputMode="numeric"
-                defaultValue={estimate?.destinationPin ?? ""}
+                defaultValue={initialFormValues?.dropoff_pin ?? estimate?.destinationPin ?? ""}
                 placeholder="400001"
                 readOnly={Boolean(estimate?.destinationPin)}
                 title={
@@ -1121,6 +1252,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
             label="Vehicle Registration Number"
             name="registration_number"
             type="text"
+            defaultValue={initialFormValues?.registration_number ?? ""}
             placeholder="e.g. DL01AB1234"
             style={{ textTransform: "uppercase" }}
           />
@@ -1269,6 +1401,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 label="Full Name"
                 name="billing_fullName"
                 type="text"
+                defaultValue={initialFormValues?.billing_fullName ?? ""}
                 placeholder="e.g. Rahul Sharma"
                 required
               />
@@ -1276,6 +1409,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 label="Phone Number"
                 name="billing_phone"
                 type="tel"
+                defaultValue={initialFormValues?.billing_phone ?? ""}
                 placeholder="+91 98765 43210"
                 required
               />
@@ -1285,6 +1419,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 label="House / Plot / Flat No."
                 name="billing_house"
                 type="text"
+                defaultValue={initialFormValues?.billing_house ?? ""}
                 placeholder="B-24, 2nd Floor"
                 required
               />
@@ -1292,16 +1427,24 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 label="Street / Area Name"
                 name="billing_street"
                 type="text"
+                defaultValue={initialFormValues?.billing_street ?? ""}
                 placeholder="Connaught Place"
                 required
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              <TextField label="Landmark (Optional)" name="billing_landmark" type="text" placeholder="Near Metro Pillar 12" />
+              <TextField
+                label="Landmark (Optional)"
+                name="billing_landmark"
+                type="text"
+                defaultValue={initialFormValues?.billing_landmark ?? ""}
+                placeholder="Near Metro Pillar 12"
+              />
               <TextField
                 label="City"
                 name="billing_city"
                 type="text"
+                defaultValue={initialFormValues?.billing_city ?? ""}
                 placeholder="New Delhi"
                 required
               />
@@ -1310,6 +1453,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
                 name="billing_pin"
                 type="text"
                 inputMode="numeric"
+                defaultValue={initialFormValues?.billing_pin ?? ""}
                 placeholder="110001"
                 pattern="[0-9]{6}"
                 maxLength={6}

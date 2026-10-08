@@ -103,14 +103,92 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
-export function saveEstimate(estimate) {
+// Shared upsert used by saveEstimate below plus the two draft savers
+// (saveQuoteDraft/saveFormDraft) — one row per account, latest write wins,
+// so form-stage progress (strictly "further along" than a quote-stage
+// draft) naturally supersedes an earlier quote-stage save. Fire-and-forget:
+// callers don't await this, since drafts are a convenience feature, not
+// something the booking flow itself depends on completing.
+async function upsertSavedEstimateRow(details) {
+  if (!isSupabaseConfigured) return;
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) return;
+  const { error } = await supabase
+    .from("saved_estimates")
+    .upsert({ customer_id: userId, details, updated_at: new Date().toISOString() });
+  if (error) console.error("Failed to save draft for later:", error.message);
+}
+
+// Also upserted server-side (fire-and-forget, one row per account — see
+// saved_estimates in supabase-schema.sql) so it can be offered back as
+// "continue where you left off" on a later visit, even from a different
+// browser. Not awaited by callers — this is a convenience feature, not
+// something the booking flow itself depends on completing.
+//
+// The Supabase row written here is the flat estimate object itself, with no
+// envelope (unlike saveQuoteDraft/saveFormDraft below) — this fires at
+// "Book Now" time, before the booking form exists to have any in-progress
+// values yet. getDraft() recognizes this shape (no `stage`) as legacy and
+// treats it the same as a "form" stage draft with no formValues.
+export async function saveEstimate(estimate) {
   if (!isBrowser()) return;
   window.localStorage.setItem(ESTIMATE_KEY, JSON.stringify(estimate));
+  await upsertSavedEstimateRow(estimate);
 }
 
 export function getEstimate() {
   if (!isBrowser()) return null;
   return safeParse(window.localStorage.getItem(ESTIMATE_KEY), null);
+}
+
+// Quote-stage draft — fired by EstimateModal whenever a price is actually
+// showing and the customer changes a live selection (vehicle, add-ons,
+// coupon, etc.), before "Book Now" is ever clicked. Deliberately doesn't
+// store the computed price/breakdown — just the inputs needed to recompute
+// it identically (route, vehicle, methods, add-ons, coupon) when the modal
+// is reopened pre-filled.
+export async function saveQuoteDraft(quote) {
+  await upsertSavedEstimateRow({ stage: "quote", quote });
+}
+
+// Form-stage draft — fired by BookingForm as the customer fills in the
+// booking form on /book. `estimate` is the same full object saveEstimate()
+// already builds in handleBookNow; `formValues` is the FormData-derived
+// snapshot (File objects skipped — see BookingForm.js) plus the handful of
+// real-React-state fields that never show up in FormData (method pickers,
+// date, time slot, hub-radius answers, etc).
+export async function saveFormDraft(estimate, formValues) {
+  await upsertSavedEstimateRow({ stage: "form", estimate, formValues });
+}
+
+const SAVED_ESTIMATE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// The signed-in customer's most recent saved draft — null if they've never
+// saved one, it's more than a week old, or they're signed out. Used by
+// B2cHero.js to offer "continue where you left off" on return visits.
+// Returns the envelope as saved — { stage: "quote", quote } or
+// { stage: "form", estimate, formValues } — so the caller can branch: reopen
+// EstimateModal pre-filled for "quote", or restore the estimate (plus
+// formValues) and head straight to /book for "form".
+//
+// A row saved before this stage split existed (or by saveEstimate's own
+// upsert at "Book Now" time, which still writes the bare estimate with no
+// envelope) has no `stage` field — normalized here to a "form" stage draft
+// with no in-progress form values, matching how "Continue Booking" behaved
+// before drafts existed.
+export async function getDraft(userId) {
+  if (!isSupabaseConfigured || !userId) return null;
+  const { data, error } = await supabase
+    .from("saved_estimates")
+    .select("details, updated_at")
+    .eq("customer_id", userId)
+    .maybeSingle();
+  if (error || !data?.details) return null;
+  if (Date.now() - new Date(data.updated_at).getTime() > SAVED_ESTIMATE_MAX_AGE_MS) return null;
+  const details = data.details;
+  if (!details.stage) return { stage: "form", estimate: details, formValues: null };
+  return details;
 }
 
 // A one-time-use marker, separate from the saved estimate itself — the
@@ -133,6 +211,28 @@ export function consumeBookingIntent() {
   const present = window.sessionStorage.getItem(BOOK_INTENT_KEY) === "1";
   window.sessionStorage.removeItem(BOOK_INTENT_KEY);
   return present;
+}
+
+// One-time handoff of a "form" stage draft's in-progress formValues from
+// B2cHero's "Continue Booking" to BookingPageClient — mirrors
+// markBookingIntent/consumeBookingIntent's pattern (sessionStorage, consumed
+// on first read) since it's only ever meaningful paired with that same
+// booking-intent token: uncontrolled inputs need this as a prop before
+// BookingForm's first render (see initialFormValues there), so it can't be
+// patched in after the fact the way the rest of the estimate already is via
+// getEstimate().
+const FORM_DRAFT_KEY = "carcoolie_b2c_form_draft";
+
+export function stashFormValuesForResume(formValues) {
+  if (!isBrowser() || !formValues) return;
+  window.sessionStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(formValues));
+}
+
+export function consumeFormValuesForResume() {
+  if (!isBrowser()) return null;
+  const values = safeParse(window.sessionStorage.getItem(FORM_DRAFT_KEY), null);
+  window.sessionStorage.removeItem(FORM_DRAFT_KEY);
+  return values;
 }
 
 // ---- localStorage fallback (original implementation) ----

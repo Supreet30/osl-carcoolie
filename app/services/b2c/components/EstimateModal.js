@@ -31,7 +31,7 @@ import {
   getVehicleModels,
   validateCoupon,
 } from "../lib/pricing";
-import { markBookingIntent, saveEstimate } from "../lib/bookingStore";
+import { markBookingIntent, saveEstimate, saveQuoteDraft } from "../lib/bookingStore";
 import Dropdown from "./Dropdown";
 
 const YEARS = Array.from({ length: 15 }, (_, i) => `${new Date().getFullYear() - i}`);
@@ -95,10 +95,25 @@ function LoadingView() {
   );
 }
 
-function ResultView({ estimate, vehicleType, make, model, pickupPin, destinationPin, pickupMethod, dropoffMethod, onClose }) {
+function ResultView({
+  estimate,
+  vehicleType,
+  make,
+  model,
+  pickupPin,
+  destinationPin,
+  pickupMethod,
+  dropoffMethod,
+  appliedCoupon,
+  onCouponChange,
+  onClose,
+}) {
   const router = useRouter();
-  const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  // Seeded from appliedCoupon (lifted to the parent — see EstimateModal
+  // below — so the quote-draft autosave can see it too) rather than always
+  // starting blank, so reopening the modal from a saved "quote" draft shows
+  // the coupon code already sitting in the box, matching appliedCoupon.
+  const [couponInput, setCouponInput] = useState(appliedCoupon?.code ?? "");
   const [couponError, setCouponError] = useState("");
   const [showAddOns, setShowAddOns] = useState(false);
 
@@ -126,11 +141,11 @@ function ResultView({ estimate, vehicleType, make, model, pickupPin, destination
     const coupon = await validateCoupon(couponInput);
     setApplyingCoupon(false);
     if (!coupon) {
-      setAppliedCoupon(null);
+      onCouponChange(null);
       setCouponError("Invalid or expired coupon code.");
       return;
     }
-    setAppliedCoupon(coupon);
+    onCouponChange(coupon);
     setCouponError("");
   }
 
@@ -298,16 +313,23 @@ export default function EstimateModal({
   initialDestinationPin,
   initialPickupPinStatus,
   initialDestinationPinStatus,
+  initialVehicleType,
+  initialMake,
+  initialModel,
+  initialPickupMethod,
+  initialDropoffMethod,
+  initialSelectedAddOns,
+  initialCoupon,
 }) {
   const [step, setStep] = useState("form");
   const [fromCity, setFromCity] = useState(initialFromCity ?? "");
   const [toCity, setToCity] = useState(initialToCity ?? "");
-  const [vehicleType, setVehicleType] = useState("");
+  const [vehicleType, setVehicleType] = useState(initialVehicleType ?? "");
   // Make and Model drive vehicleType automatically (see handleModelChange
   // below) — there's no free text entry for either, both are dropdowns
   // sourced from vehicle_models.
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
+  const [make, setMake] = useState(initialMake ?? "");
+  const [model, setModel] = useState(initialModel ?? "");
   const [vehicleModels, setVehicleModels] = useState(VEHICLE_MODELS);
   // Decorative — collected but not part of the estimate, same as before
   // this was a native <select>.
@@ -323,13 +345,18 @@ export default function EstimateModal({
   // there doesn't get silently re-checked here too.
   const [pickupPinStatus, setPickupPinStatus] = useState(initialPickupPinStatus ?? { status: "idle" });
   const [destinationPinStatus, setDestinationPinStatus] = useState(initialDestinationPinStatus ?? { status: "idle" });
-  const [pickupMethod, setPickupMethod] = useState("self");
-  const [dropoffMethod, setDropoffMethod] = useState("self");
-  const [selectedAddOns, setSelectedAddOns] = useState([]);
+  const [pickupMethod, setPickupMethod] = useState(initialPickupMethod ?? "self");
+  const [dropoffMethod, setDropoffMethod] = useState(initialDropoffMethod ?? "self");
+  const [selectedAddOns, setSelectedAddOns] = useState(initialSelectedAddOns ?? []);
+  // Lifted up from ResultView (rather than kept local there) so the
+  // quote-draft autosave effect below can see it too — see
+  // saveQuoteDraft/getDraft in bookingStore.js.
+  const [appliedCoupon, setAppliedCoupon] = useState(initialCoupon ?? null);
   const [routeError, setRouteError] = useState("");
   const [estimate, setEstimate] = useState(null);
   const [addOnCatalog, setAddOnCatalog] = useState(ADD_ON_SERVICES);
   const routeErrorRef = useRef(null);
+  const quoteDraftTimerRef = useRef(null);
 
   // Same reasoning as B2cHero.js's cityError effect — this form scrolls
   // internally and the error sits partway down it, easy to miss if it
@@ -369,6 +396,13 @@ export default function EstimateModal({
       setDestinationPin(initialDestinationPin ?? "");
       setPickupPinStatus(initialPickupPinStatus ?? { status: "idle" });
       setDestinationPinStatus(initialDestinationPinStatus ?? { status: "idle" });
+      setVehicleType(initialVehicleType ?? "");
+      setMake(initialMake ?? "");
+      setModel(initialModel ?? "");
+      setPickupMethod(initialPickupMethod ?? "self");
+      setDropoffMethod(initialDropoffMethod ?? "self");
+      setSelectedAddOns(initialSelectedAddOns ?? []);
+      setAppliedCoupon(initialCoupon ?? null);
     }
   }
 
@@ -450,6 +484,51 @@ export default function EstimateModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- destinationPinStatus is read, not a trigger; re-resolving whenever it changes would fight the customer's own pincode-driven pick
   }, [destinationPin]);
+
+  // Quote-stage draft autosave — see saveQuoteDraft in bookingStore.js.
+  // Only fires once a price is actually showing (estimate is non-null, i.e.
+  // step === "result"): nothing worth resuming before a route has even
+  // resolved. Debounced (700ms after the last change) so it doesn't fire on
+  // every keystroke while e.g. typing a coupon code, and doesn't block the
+  // UI — saveQuoteDraft's upsert is fire-and-forget. Deliberately doesn't
+  // store the computed estimate itself — reopening re-derives the identical
+  // price from these same inputs.
+  useEffect(() => {
+    if (!estimate) return undefined;
+    quoteDraftTimerRef.current = setTimeout(() => {
+      saveQuoteDraft({
+        fromCity,
+        toCity,
+        pickupPin,
+        destinationPin,
+        pickupPinStatus,
+        destinationPinStatus,
+        vehicleType,
+        make,
+        model,
+        pickupMethod,
+        dropoffMethod,
+        selectedAddOns,
+        coupon: appliedCoupon,
+      });
+    }, 700);
+    return () => clearTimeout(quoteDraftTimerRef.current);
+  }, [
+    estimate,
+    fromCity,
+    toCity,
+    pickupPin,
+    destinationPin,
+    pickupPinStatus,
+    destinationPinStatus,
+    vehicleType,
+    make,
+    model,
+    pickupMethod,
+    dropoffMethod,
+    selectedAddOns,
+    appliedCoupon,
+  ]);
 
   if (!open) return null;
 
@@ -573,6 +652,8 @@ export default function EstimateModal({
             destinationPin={destinationPin}
             pickupMethod={pickupMethod}
             dropoffMethod={dropoffMethod}
+            appliedCoupon={appliedCoupon}
+            onCouponChange={setAppliedCoupon}
             onClose={handleClose}
           />
         )}

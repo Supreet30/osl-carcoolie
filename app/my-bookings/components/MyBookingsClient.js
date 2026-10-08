@@ -1362,7 +1362,17 @@ export default function MyBookingsClient() {
   const [split, setSplit] = useState(PAYMENT_SPLIT);
   const key = requestedId ?? "";
   const result = loaded.key === key ? loaded.data : undefined;
-  const setResult = (data) => setLoaded({ key, data });
+  // Two call sites (ReviewCard's submit, the rejected-document re-upload)
+  // pass a React-setState-style updater function expecting it to run
+  // against the current booking; without this, that function itself got
+  // stored as `data` instead of its result — rendering off a plain JS
+  // function (no booking fields at all) until the next real fetch
+  // (navigating away and back, or a refresh) replaced it.
+  const setResult = (dataOrUpdater) =>
+    setLoaded((prev) => ({
+      key,
+      data: typeof dataOrUpdater === "function" ? dataOrUpdater(prev.data) : dataOrUpdater,
+    }));
 
   // The list view's getBookings() is scoped to the signed-in account, so a
   // sign-in/out needs to re-fetch it — not just gate the empty state.

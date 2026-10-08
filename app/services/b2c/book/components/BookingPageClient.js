@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import BookingForm from "./BookingForm";
 import BookingSummary from "./BookingSummary";
 import AuthModal from "../../../../components/AuthModal";
 import { isSupabaseConfigured, supabase } from "../../../../../lib/supabaseClient";
-import { consumeBookingIntent, getEstimate } from "../../lib/bookingStore";
+import { consumeBookingIntent, consumeFormValuesForResume, getEstimate } from "../../lib/bookingStore";
 
 // Single source of truth for the estimate — loaded once here and handed to
 // both the form and the summary sidebar, instead of each independently
@@ -18,11 +18,23 @@ export default function BookingPageClient() {
   // both the session and the one-time booking-intent token (see below)
   // have actually been read.
   const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
-  const [estimateState, setEstimateState] = useState({ loaded: false, data: null });
+  const [estimateState, setEstimateState] = useState({ loaded: false, data: null, formValues: null });
   const [details, setDetails] = useState({ pickupMethod: "driver", dropoffMethod: "driver", date: "", timeSlot: "" });
   const [authModalOpen, setAuthModalOpen] = useState(true);
+  // Guards the one-time token consumption below against React Strict
+  // Mode's dev-only double-invoke of effects (mount -> cleanup -> mount,
+  // synchronously, on the same fiber/refs). Without this, the first
+  // invocation correctly consumes the token and reads the estimate, then
+  // the second invocation immediately "consumes" again, finds the
+  // sessionStorage key already removed, and overwrites the correct state
+  // with "no estimate" — this is why resuming (from Book Now OR from the
+  // draft toast) intermittently landed on the empty-state gate in dev.
+  // Production (no Strict Mode double-invoke) never hit this.
+  const consumedRef = useRef(false);
 
   useEffect(() => {
+    if (consumedRef.current) return;
+    consumedRef.current = true;
     // The intent token set by EstimateModal's "Book Now" is consumed
     // (removed) the instant this mounts — a direct visit, a refresh, or
     // revisiting this URL later in the same tab session must all land on
@@ -30,8 +42,16 @@ export default function BookingPageClient() {
     // still sitting in localStorage. See markBookingIntent/
     // consumeBookingIntent in bookingStore.js.
     const hasIntent = consumeBookingIntent();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEstimateState({ loaded: true, data: hasIntent ? getEstimate() : null });
+    // Consumed unconditionally (same one-time-token reasoning as the intent
+    // above) so a stale value from an earlier "Continue Booking" never
+    // lingers into a later, unrelated visit — but only actually used when
+    // hasIntent is true, i.e. this really is a legitimate resume.
+    const formValues = consumeFormValuesForResume();
+    setEstimateState({
+      loaded: true,
+      data: hasIntent ? getEstimate() : null,
+      formValues: hasIntent ? formValues : null,
+    });
   }, []);
 
   useEffect(() => {
@@ -103,6 +123,7 @@ export default function BookingPageClient() {
       <BookingForm
         estimate={estimateState.data}
         estimateLoaded={estimateState.loaded}
+        initialFormValues={estimateState.formValues}
         onSummaryChange={handleSummaryChange}
       />
       <BookingSummary estimate={estimateState.data} details={details} />

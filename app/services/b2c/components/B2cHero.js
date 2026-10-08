@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { AlertCircle, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Truck, X } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
 import AuthModal from "../../../components/AuthModal";
 import { isSupabaseConfigured, supabase } from "../../../../lib/supabaseClient";
-import { getRoute } from "../lib/pricing";
+import { getRoute, formatINR } from "../lib/pricing";
+import { getDraft, markBookingIntent, saveEstimate, stashFormValuesForResume } from "../lib/bookingStore";
 
 const PIN_REGEX = /^\d{6}$/;
 
@@ -65,6 +67,7 @@ function RouteMarker({ state }) {
 }
 
 export default function B2cHero() {
+  const router = useRouter();
   // fromCity/toCity are never picked directly anymore — PIN code is the
   // only input, resolved to a city via /api/resolve-pincode below. Still
   // needed as state: EstimateModal wants a city (not a PIN) to pre-fill,
@@ -87,6 +90,37 @@ export default function B2cHero() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const pendingEstimateRef = useRef(false);
 
+  // 3 quotes per rolling 24h per account — backed by the quote_requests
+  // table (see supabase-schema.sql), not localStorage, so clearing browser
+  // storage can't reset it. Checked right before actually showing the
+  // estimate, from both handleSubmit (already signed in) and the
+  // onAuthStateChange listener below (just finished signing in).
+  async function generateQuote(userId) {
+    const sinceISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count, error } = await supabase
+      .from("quote_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", userId)
+      .gte("created_at", sinceISO);
+
+    if (error) {
+      // A transient check failure shouldn't block a legitimate customer —
+      // this is a usage limit, not a security boundary.
+      console.error("Quote rate-limit check failed:", error.message);
+      setShowEstimate(true);
+      return;
+    }
+
+    if (count >= 3) {
+      setCityError("You've reached the limit of 3 quotes in 24 hours. Please try again later.");
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("quote_requests").insert({ customer_id: userId });
+    if (insertError) console.error("Failed to log quote request:", insertError.message);
+    setShowEstimate(true);
+  }
+
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -95,11 +129,74 @@ export default function B2cHero() {
       if (nextSession && pendingEstimateRef.current) {
         pendingEstimateRef.current = false;
         setAuthModalOpen(false);
-        setShowEstimate(true);
+        generateQuote(nextSession.user.id);
       }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // "Continue where you left off" — offered once per sign-in if the
+  // account has a saved draft from the last 7 days (see getDraft/
+  // saveQuoteDraft/saveFormDraft in bookingStore.js). Separate from the
+  // 3-per-24h quote limit above: resuming an old one isn't generating a
+  // new one.
+  const [savedDraft, setSavedDraft] = useState(null);
+  const [savedDraftDismissed, setSavedDraftDismissed] = useState(false);
+  // "quote" stage drafts reopen EstimateModal pre-filled instead of
+  // navigating anywhere — this is what seeds its initial* props below.
+  const [continueQuoteDraft, setContinueQuoteDraft] = useState(null);
+
+  // Resets dismissal on an actual account change (sign out, sign in as
+  // someone else, same tab) — without this, dismissing account A's toast
+  // would also permanently hide account B's, since the flag never otherwise
+  // clears. A dismiss within the same account's session correctly stays
+  // dismissed (this only resets when the id itself changes). Adjusting
+  // state during render, not an effect — same pattern as AuthModal.js's
+  // lastOpen — since a direct setState in an effect body triggers
+  // react-hooks/set-state-in-effect.
+  const [lastDraftUserId, setLastDraftUserId] = useState(session?.user.id);
+  if (session?.user.id !== lastDraftUserId) {
+    setLastDraftUserId(session?.user.id);
+    setSavedDraftDismissed(false);
+  }
+
+  useEffect(() => {
+    if (!session?.user?.id) return undefined;
+    let cancelled = false;
+    getDraft(session.user.id).then((draft) => {
+      if (!cancelled) setSavedDraft(draft);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id]);
+
+  // What the "continue" toast summarizes — the live selections for a
+  // "quote" stage draft, or the full estimate (with its price) for a
+  // "form" stage one.
+  const draftSummary = savedDraft?.stage === "quote" ? savedDraft.quote : savedDraft?.estimate;
+
+  function handleContinueDraft() {
+    if (!savedDraft) return;
+    setSavedDraftDismissed(true);
+    if (savedDraft.stage === "quote") {
+      // Reopens the modal in place, pre-filled from the saved selections —
+      // same as reaching the estimate step normally, just without
+      // navigating anywhere. See EstimateModal's initial* props.
+      setContinueQuoteDraft(savedDraft.quote);
+      setShowEstimate(true);
+      return;
+    }
+    // "form" stage (or a legacy draft getDraft() normalized to this same
+    // shape) — restore the estimate and resume straight on /book, same as
+    // before this feature existed, plus whatever in-progress form values
+    // were captured.
+    saveEstimate(savedDraft.estimate);
+    stashFormValuesForResume(savedDraft.formValues);
+    markBookingIntent();
+    router.push("/services/b2c/book");
+  }
+
   // While the route-exists check (getRoute) is in flight, after the PIN
   // checks above already passed — brief, but worth a disabled/labeled
   // button so a slow connection doesn't look like a dead click.
@@ -214,6 +311,11 @@ export default function B2cHero() {
     if (isSupabaseConfigured && !session) {
       pendingEstimateRef.current = true;
       setAuthModalOpen(true);
+      return;
+    }
+
+    if (isSupabaseConfigured && session) {
+      await generateQuote(session.user.id);
       return;
     }
 
@@ -359,13 +461,23 @@ export default function B2cHero() {
 
       <EstimateModal
         open={showEstimate}
-        onClose={() => setShowEstimate(false)}
-        initialFromCity={fromCity}
-        initialToCity={toCity}
-        initialPickupPin={pickupPin}
-        initialDestinationPin={destinationPin}
-        initialPickupPinStatus={pickupPinStatus}
-        initialDestinationPinStatus={destinationPinStatus}
+        onClose={() => {
+          setShowEstimate(false);
+          setContinueQuoteDraft(null);
+        }}
+        initialFromCity={continueQuoteDraft?.fromCity ?? fromCity}
+        initialToCity={continueQuoteDraft?.toCity ?? toCity}
+        initialPickupPin={continueQuoteDraft?.pickupPin ?? pickupPin}
+        initialDestinationPin={continueQuoteDraft?.destinationPin ?? destinationPin}
+        initialPickupPinStatus={continueQuoteDraft?.pickupPinStatus ?? pickupPinStatus}
+        initialDestinationPinStatus={continueQuoteDraft?.destinationPinStatus ?? destinationPinStatus}
+        initialVehicleType={continueQuoteDraft?.vehicleType}
+        initialMake={continueQuoteDraft?.make}
+        initialModel={continueQuoteDraft?.model}
+        initialPickupMethod={continueQuoteDraft?.pickupMethod}
+        initialDropoffMethod={continueQuoteDraft?.dropoffMethod}
+        initialSelectedAddOns={continueQuoteDraft?.selectedAddOns}
+        initialCoupon={continueQuoteDraft?.coupon}
       />
 
       <AuthModal
@@ -376,6 +488,40 @@ export default function B2cHero() {
         }}
         reason="Sign in or create an account to generate your quote."
       />
+
+      {savedDraft && !savedDraftDismissed && (
+        <div
+          style={{ animation: "slideInRight 0.4s ease-out" }}
+          className="fixed top-4 right-4 z-300 flex max-w-sm items-start gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-2xl ring-1 ring-slate-900/5"
+        >
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Truck className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <div className="flex-1 pt-0.5">
+            <p className="text-sm font-bold text-[#0b1e42]">Continue where you left off?</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {draftSummary?.fromCity} &rarr; {draftSummary?.toCity}
+              {draftSummary?.vehicleType ? ` · ${draftSummary.vehicleType}` : ""}
+              {typeof draftSummary?.total === "number" ? ` · ${formatINR(draftSummary.total)}` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={handleContinueDraft}
+              className="mt-2 rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-red-700"
+            >
+              {savedDraft.stage === "quote" ? "Continue Quote" : "Continue Booking"}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSavedDraftDismissed(true)}
+            aria-label="Dismiss"
+            className="mt-0.5 shrink-0 text-slate-400 transition-colors hover:text-slate-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </>
   );
 }
