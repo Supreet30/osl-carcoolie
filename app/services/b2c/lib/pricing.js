@@ -172,6 +172,20 @@ export async function getCities() {
   return CITIES;
 }
 
+// Active yards for a city, by name — empty (not an error) when the city has
+// none yet or Supabase isn't configured, so the booking form can say so.
+export async function getYardsForCity(cityName) {
+  if (!isSupabaseConfigured || !cityName) return [];
+  const { data, error } = await supabase
+    .from("yards")
+    .select("name, address, maps_url, cities!inner(name)")
+    .eq("cities.name", cityName)
+    .eq("is_active", true)
+    .order("name");
+  if (error) return [];
+  return data.map((y) => ({ name: y.name, address: y.address, mapsUrl: y.maps_url || null }));
+}
+
 // Admin-uploaded blank format files for the booking form's document cards
 // (e.g. "Download Format" on NOC / Customer Authority Letter) — keyed by
 // doc_type, each value the public URL to download. A doc_type with no row

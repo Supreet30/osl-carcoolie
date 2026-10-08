@@ -16,12 +16,22 @@ import { PAYMENT_SPLIT } from "./pricing";
 const ESTIMATE_KEY = "carcoolie_b2c_estimate";
 const BOOKINGS_KEY = "carcoolie_b2c_bookings";
 
+// The signed-in customer's id (or null for a guest) — stamped onto new
+// bookings and used to scope "My Bookings" to the current account instead
+// of every customer_id-null (guest) row in the table.
+async function getCurrentUserId() {
+  if (!isSupabaseConfigured) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
+}
+
 export const BOOKING_STATUS = {
   DOCS_REVIEW: "docs_review",
   QUOTE_SENT: "quote_sent",
   ADVANCE_PAID: "advance_paid",
   CONFIRMED: "confirmed",
   MIDWAY_PAID: "midway_paid",
+  LOADED_ON_CARRIER: "loaded_on_carrier",
   IN_TRANSIT: "in_transit",
   OUT_FOR_DELIVERY: "out_for_delivery",
   DELIVERED: "delivered",
@@ -73,6 +83,7 @@ export function buildStatusSteps(split = PAYMENT_SPLIT) {
     { key: BOOKING_STATUS.ADVANCE_PAID, label: `Advance Paid (${split.advancePercent}%)` },
     { key: BOOKING_STATUS.CONFIRMED, label: "Booking Confirmed" },
     { key: BOOKING_STATUS.MIDWAY_PAID, label: `${split.midwayPercent}% Payment Received` },
+    { key: BOOKING_STATUS.LOADED_ON_CARRIER, label: "Loaded on Carrier" },
     { key: BOOKING_STATUS.IN_TRANSIT, label: "In Transit" },
     { key: BOOKING_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
     { key: BOOKING_STATUS.DELIVERED, label: "Delivered" },
@@ -133,7 +144,10 @@ function updateBookingLocal(id, updates) {
   return bookings.find((b) => b.id === id) ?? null;
 }
 
-function cancelBookingLocal(id, reason) {
+// Local fallback doesn't persist a real coupon (there's no coupons table
+// without Supabase) — it only records which method was chosen and the code
+// that would have been issued, so the UI reads the same either way.
+function cancelBookingLocal(id, reason, refundMethod) {
   const booking = getBookingsLocal().find((b) => b.id === id);
   if (!booking) return null;
   if (!CANCELLABLE_STATUSES.includes(booking.status)) {
@@ -142,12 +156,15 @@ function cancelBookingLocal(id, reason) {
   const advancePaid = Number(booking.advancePaid ?? 0);
   const cancellationFee = Math.round(advancePaid * (CANCELLATION_FEE_PERCENT / 100));
   const refundAmount = Math.round(advancePaid - cancellationFee);
+  const issueCoupon = refundMethod === "coupon" && refundAmount > 0;
   return updateBookingLocal(id, {
     status: BOOKING_STATUS.CANCELLED,
     cancelledAt: new Date().toISOString(),
     cancellationFee,
     refundAmount,
     cancellationReason: reason ?? null,
+    refundMethod: refundAmount > 0 ? refundMethod : null,
+    refundCouponCode: issueCoupon ? generateRefundCouponCode() : null,
   });
 }
 
@@ -275,6 +292,8 @@ function rowToBooking(
     cancellationFee: row.cancellation_fee,
     refundAmount: row.refund_amount,
     cancellationReason: row.cancellation_reason ?? null,
+    refundMethod: row.refund_method ?? null,
+    refundCouponCode: row.refund_coupon_code ?? null,
     pickupPoc: row.pickup_poc_name ? { name: row.pickup_poc_name, phone: row.pickup_poc_phone } : null,
     dropoffPoc: row.dropoff_poc_name ? { name: row.dropoff_poc_name, phone: row.dropoff_poc_phone } : null,
     charges: charges.map((c) => ({
@@ -368,7 +387,7 @@ async function fetchBookingChildren(bookingId) {
   };
 }
 
-async function createBookingSupabase(bookingData) {
+async function createBookingSupabase(bookingData, userId) {
   const { estimate, registrationNumber, pickup, dropoff, billing, documents } = bookingData;
 
   const [{ data: cities }, { data: vehicleTypes }, { data: addOns }] = await Promise.all([
@@ -383,6 +402,7 @@ async function createBookingSupabase(bookingData) {
   const { data: row, error: bookingError } = await supabase
     .from("bookings")
     .insert({
+      customer_id: userId,
       from_city_id: cityIdByName.get(estimate?.fromCity) ?? null,
       to_city_id: cityIdByName.get(estimate?.toCity) ?? null,
       vehicle_type_id: vehicleTypeIdByName.get((estimate?.vehicleType || "").toLowerCase()) ?? null,
@@ -467,10 +487,11 @@ async function getBookingSupabase(id) {
   return rowToBooking(row, children);
 }
 
-async function getBookingsSupabase() {
+async function getBookingsSupabase(userId) {
   const { data: rows, error } = await supabase
     .from("bookings")
     .select(BOOKING_SELECT)
+    .eq("customer_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   const bookings = await Promise.all(
@@ -574,7 +595,18 @@ async function updateBookingSupabase(id, updates) {
 // rejected cancellation (already past CANCELLABLE_STATUSES) is a real
 // business-rule error that should reach the UI, not get silently retried
 // against a local store that doesn't even have this booking.
-async function cancelBookingSupabase(id, reason) {
+// Random, high-entropy, and unambiguous (no 0/O/1/I) so a refund code can't be
+// guessed. Single-use is enforced by usage_limit on the coupon row itself.
+function generateRefundCouponCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  return `REFUND-${Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("")}`;
+}
+
+const REFUND_COUPON_VALID_DAYS = 365;
+
+async function cancelBookingSupabase(id, reason, refundMethod) {
   const { data: row, error: findError } = await supabase
     .from("bookings")
     .select("id, status, advance_paid")
@@ -589,6 +621,22 @@ async function cancelBookingSupabase(id, reason) {
   const cancellationFee = Math.round(advancePaid * (CANCELLATION_FEE_PERCENT / 100));
   const refundAmount = Math.round(advancePaid - cancellationFee);
 
+  // Only issue a coupon when there's actually something to hand back —
+  // cancelling before any advance was paid has nothing to refund either way.
+  let refundCouponCode = null;
+  if (refundMethod === "coupon" && refundAmount > 0) {
+    refundCouponCode = generateRefundCouponCode();
+    const { error: couponError } = await supabase.from("coupons").insert({
+      code: refundCouponCode,
+      type: "flat",
+      value: refundAmount,
+      label: `Cancellation refund (${row.id.slice(0, 8)})`,
+      usage_limit: 1,
+      expires_at: new Date(Date.now() + REFUND_COUPON_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    if (couponError) throw couponError;
+  }
+
   const { data: updated, error } = await supabase
     .from("bookings")
     .update({
@@ -597,6 +645,8 @@ async function cancelBookingSupabase(id, reason) {
       cancellation_fee: cancellationFee,
       refund_amount: refundAmount,
       cancellation_reason: reason ?? null,
+      refund_method: refundAmount > 0 ? refundMethod : null,
+      refund_coupon_code: refundCouponCode,
     })
     .eq("id", row.id)
     .select(BOOKING_SELECT)
@@ -622,9 +672,9 @@ async function cancelBookingSupabase(id, reason) {
   return rowToBooking(updated, children);
 }
 
-export async function cancelBooking(id, reason) {
-  if (isSupabaseConfigured) return cancelBookingSupabase(id, reason);
-  return cancelBookingLocal(id, reason);
+export async function cancelBooking(id, reason, refundMethod = "original") {
+  if (isSupabaseConfigured) return cancelBookingSupabase(id, reason, refundMethod);
+  return cancelBookingLocal(id, reason, refundMethod);
 }
 
 // Re-uploading a rejected document — looked up by booking_code since that's
@@ -692,9 +742,16 @@ async function updateBookingDocumentSupabase(bookingCode, docType, file) {
 
 export async function createBooking(bookingData) {
   if (isSupabaseConfigured) {
+    const userId = await getCurrentUserId();
     try {
-      return await createBookingSupabase(bookingData);
+      return await createBookingSupabase(bookingData, userId);
     } catch (err) {
+      // Signed-in failures must surface, not vanish into local-only storage:
+      // a local fallback here would silently redirect the customer to a
+      // "confirmed" booking that the admin panel, payments and tracking can
+      // never see — worse than a visible error. Guests (no account to lose
+      // visibility into) keep the original offline-resilience fallback.
+      if (userId) throw err;
       console.error("Supabase createBooking failed, falling back to local storage:", err.message);
     }
   }
@@ -715,10 +772,22 @@ export async function getBooking(id) {
 
 export async function getBookings() {
   if (isSupabaseConfigured) {
+    const userId = await getCurrentUserId();
+    // Not signed in: there's no account to scope a Supabase list to (showing
+    // every guest's customer_id-null booking would leak across accounts), so
+    // the list is empty until they sign in — see MyBookingsClient's
+    // sign-in-prompt empty state for the signed-out UI.
+    if (!userId) return [];
     try {
-      return await getBookingsSupabase();
+      return await getBookingsSupabase(userId);
     } catch (err) {
-      console.error("Supabase getBookings failed, falling back to local storage:", err.message);
+      // Deliberately NOT falling back to local storage here (unlike every
+      // other function in this file) — local storage isn't account-scoped,
+      // so on a shared/reused browser it could show a previous guest's
+      // locally-saved bookings as if they belonged to this signed-in
+      // account. An empty list on error is safe; someone else's data isn't.
+      console.error("Supabase getBookings failed:", err.message);
+      return [];
     }
   }
   return getBookingsLocal();

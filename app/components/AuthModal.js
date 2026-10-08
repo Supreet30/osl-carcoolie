@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
-import { Eye, EyeOff, Lock, Mail, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
+import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 
 // lucide-react dropped brand/social glyphs over trademark concerns, so the
 // Google "G" is drawn as an inline SVG instead — same convention Navbar.js
@@ -44,14 +46,46 @@ function FieldInput({ icon: Icon, trailing, ...props }) {
   );
 }
 
-export default function AuthCard() {
+// AuthCard — identical to the old /signin page's component, down to the
+// class names and copy. The only things added here are what a page didn't
+// need: the backdrop/portal to make it a popup, and a close button.
+function AuthCard() {
   const [mode, setMode] = useState("signin");
   const [showPassword, setShowPassword] = useState(false);
+  const [status, setStatus] = useState({ state: "idle", message: "" });
   const isSignup = mode === "signup";
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    // No backend wired up yet — this is UI only.
+    if (!isSupabaseConfigured) {
+      setStatus({ state: "error", message: "Sign in isn't configured yet." });
+      return;
+    }
+
+    const email = event.target.elements.email.value;
+    setStatus({ state: "sending", message: "" });
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href },
+    });
+
+    if (error) {
+      setStatus({ state: "error", message: error.message });
+    } else {
+      setStatus({ state: "sent", message: `Check ${email} for a login link.` });
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    if (!isSupabaseConfigured) {
+      setStatus({ state: "error", message: "Sign in isn't configured yet." });
+      return;
+    }
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.href },
+    });
   }
 
   const promoPanel = (
@@ -105,7 +139,6 @@ export default function AuthCard() {
           type={showPassword ? "text" : "password"}
           name="password"
           placeholder="Password"
-          required
           trailing={
             !isSignup && (
               <button
@@ -134,10 +167,17 @@ export default function AuthCard() {
 
         <button
           type="submit"
-          className="mt-2 rounded-xl bg-red-600 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase shadow-lg transition-colors hover:bg-red-700"
+          disabled={status.state === "sending"}
+          className="mt-2 rounded-xl bg-red-600 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase shadow-lg transition-colors hover:bg-red-700 disabled:opacity-60"
         >
-          {isSignup ? "Sign Up" : "Sign In"}
+          {status.state === "sending" ? "Sending..." : isSignup ? "Sign Up" : "Sign In"}
         </button>
+
+        {status.message && (
+          <p className={`text-center text-xs ${status.state === "error" ? "text-red-600" : "text-emerald-600"}`}>
+            {status.message}
+          </p>
+        )}
       </form>
 
       <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -148,6 +188,7 @@ export default function AuthCard() {
 
       <button
         type="button"
+        onClick={handleGoogleSignIn}
         className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3.5 text-sm font-semibold text-slate-500 transition-colors hover:bg-slate-200"
       >
         <GoogleIcon className="h-4 w-4" />
@@ -161,5 +202,32 @@ export default function AuthCard() {
       {promoPanel}
       {formPanel}
     </div>
+  );
+}
+
+// Portaled straight to <body>: Navbar.js's <header> always has an active
+// CSS transform (the scroll-hide translate-y), and per spec that turns it
+// into the containing block for any position:fixed descendant — this modal
+// would end up positioned (and clipped) relative to the header's own small
+// box instead of the viewport. Portaling sidesteps that regardless of where
+// AuthModal gets mounted from.
+export default function AuthModal({ open, onClose }) {
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50 px-4 py-8" onClick={onClose}>
+      <div className="relative max-h-[90vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-500 shadow-sm transition-colors hover:bg-white hover:text-slate-700"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <AuthCard />
+      </div>
+    </div>,
+    document.body
   );
 }

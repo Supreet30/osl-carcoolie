@@ -29,7 +29,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { createBooking } from "../../lib/bookingStore";
-import { formatINR, getDocumentFormats } from "../../lib/pricing";
+import { formatINR, getDocumentFormats, getYardsForCity } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import Dropdown from "../../components/Dropdown";
 import MapPickerModal from "./MapPickerModal";
@@ -116,16 +116,6 @@ const DROPOFF_METHODS = [
 ];
 
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
-
-// Dummy yards until real yard data exists — four Kolkata locations shown
-// for every city, so the yard selector has something to choose between and
-// the "within 50km" question below always has a concrete reference point.
-const DUMMY_YARDS = [
-  { name: "CarCoolie Yard – Dankuni", address: "Plot 14, Industrial Growth Centre, Dankuni, Kolkata" },
-  { name: "CarCoolie Yard – Howrah", address: "Unit 22, Transport Nagar, Liluah, Howrah, Kolkata" },
-  { name: "CarCoolie Yard – Barasat", address: "Godown 7, Logistics Park, Jessore Road, Barasat, Kolkata" },
-  { name: "CarCoolie Yard – New Town", address: "Yard 4, Auto Hub Road, Action Area II, New Town, Kolkata" },
-];
 
 // The labels drop AM/PM (they're always a daytime business-hours slot), so
 // this is the only unambiguous place "01:00" means 1pm, not 1am — used to
@@ -329,10 +319,25 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, locating
 // shows it too as the reference point for the 50km question below it.
 // `withinHub` is null until the customer picks an answer, so the warning
 // only ever appears after an explicit "No" — never on load.
-function HubLocationCard({ showProximityCheck, withinHub, onWithinHubChange, name, yard, onYardChange }) {
-  const yards = DUMMY_YARDS;
-  const selected = yards.find((y) => y.name === yard?.name) ?? yards[0];
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.name} ${selected.address}`)}`;
+// `yards` are this city's configured hubs (see getYardsForCity in
+// pricing.js) — empty until they load, or when the city has none yet.
+function HubLocationCard({ city, showProximityCheck, withinHub, onWithinHubChange, name, yards, yard, onYardChange }) {
+  const selected = yards.find((y) => y.name === yard?.name) ?? yards[0] ?? null;
+
+  if (!selected) {
+    return (
+      <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+        <p className="text-sm text-slate-500">
+          {city ? `No yard is set up in ${city} yet` : "Choose a city to see its yard"} — we&apos;ll confirm the exact
+          drop point with you once your booking is in.
+        </p>
+      </div>
+    );
+  }
+
+  const mapsUrl =
+    selected.mapsUrl ??
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.name} ${selected.address}`)}`;
 
   return (
     <div className="mt-5 rounded-2xl bg-slate-50 p-4">
@@ -342,7 +347,7 @@ function HubLocationCard({ showProximityCheck, withinHub, onWithinHubChange, nam
           raised
           placeholder="Select a yard"
           value={selected.name}
-          onChange={(name) => onYardChange(yards.find((y) => y.name === name) ?? yards[0])}
+          onChange={(picked) => onYardChange(yards.find((y) => y.name === picked) ?? yards[0])}
           options={yards.map((y) => y.name)}
           optionIcons={Object.fromEntries(yards.map((y) => [y.name, Building2]))}
         />
@@ -486,6 +491,35 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // just never shows a download link, same as always.
   const [documentFormats, setDocumentFormats] = useState({});
 
+  // Each leg's yards come from its own city: pickup from the estimate's
+  // origin, drop-off from its destination. The first yard is pre-selected
+  // once the list lands, so the form always has a concrete hub to submit.
+  const pickupCity = estimate?.fromCity ?? null;
+  const dropoffCity = estimate?.toCity ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    getYardsForCity(pickupCity).then((list) => {
+      if (cancelled) return;
+      setPickupYards(list);
+      setPickupYard(list[0] ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupCity]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getYardsForCity(dropoffCity).then((list) => {
+      if (cancelled) return;
+      setDropoffYards(list);
+      setDropoffYard(list[0] ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dropoffCity]);
+
   useEffect(() => {
     let cancelled = false;
     getDocumentFormats().then((formats) => {
@@ -509,12 +543,14 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // actually answers, true/false after. Not yet wired into pricing; just
   // surfaces the "extra charges may apply" note when they say "No".
   const [pickupWithinHub, setPickupWithinHub] = useState(null);
-  const [pickupYard, setPickupYard] = useState(DUMMY_YARDS[0]);
+  const [pickupYards, setPickupYards] = useState([]);
+  const [pickupYard, setPickupYard] = useState(null);
 
   const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(null);
   const [dropoffWithinHub, setDropoffWithinHub] = useState(null);
-  const [dropoffYard, setDropoffYard] = useState(DUMMY_YARDS[0]);
+  const [dropoffYards, setDropoffYards] = useState([]);
+  const [dropoffYard, setDropoffYard] = useState(null);
 
   // `estimate` loads from localStorage after mount (see BookingPageClient.js
   // — it's null on first render), so the useState defaults above miss it.
@@ -632,6 +668,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   const [confirmedDocs, setConfirmedDocs] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   // Only flips true once a submit attempt actually finds a document
   // missing — the "Still required" banner stays hidden while the customer
   // is still filling the form out, not shown proactively the whole time.
@@ -729,6 +766,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
 
     const formData = new FormData(event.currentTarget);
     setSubmitting(true);
+    setSubmitError("");
 
     // Only styled uppercase via CSS above (textTransform) — the stored
     // value needs the same normalization, not just the on-screen look.
@@ -822,6 +860,7 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
       router.push(`/my-bookings?id=${created.id}`);
     } catch (err) {
       console.error("Failed to create booking:", err);
+      setSubmitError("Something went wrong creating your booking — please try again, or contact us if it keeps happening.");
       setSubmitting(false);
     }
   }
@@ -839,20 +878,24 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
   // down in the details as the reference point for the 50km question.
   const pickupHubCard = (
   <HubLocationCard
+    city={pickupCity}
     showProximityCheck={pickupMethod === "driver"}
     withinHub={pickupWithinHub}
     onWithinHubChange={setPickupWithinHub}
     name="pickup_within_hub_radius"
+    yards={pickupYards}
     yard={pickupYard}
     onYardChange={setPickupYard}
   />
   );
   const dropoffHubCard = (
   <HubLocationCard
+    city={dropoffCity}
     showProximityCheck={dropoffMethod === "driver"}
     withinHub={dropoffWithinHub}
     onWithinHubChange={setDropoffWithinHub}
     name="dropoff_within_hub_radius"
+    yards={dropoffYards}
     yard={dropoffYard}
     onYardChange={setDropoffYard}
   />
@@ -1335,6 +1378,8 @@ export default function BookingForm({ estimate, estimateLoaded, onSummaryChange 
           .
         </label>
       </div>
+
+      {submitError && <p className="text-sm font-semibold text-red-600">{submitError}</p>}
 
       <button
         type="submit"

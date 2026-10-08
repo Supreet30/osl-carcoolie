@@ -48,6 +48,8 @@ import {
   updateBookingDocument,
 } from "../../services/b2c/lib/bookingStore";
 import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/lib/pricing";
+import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
+import AuthModal from "../../components/AuthModal";
 
 // Same number the site-wide WhatsApp CTA (app/components/Whatsapp.jsx) uses
 // — kept as its own constant here since an enquiry from a booking's detail
@@ -79,6 +81,7 @@ const STATUS_BADGE_STYLES = {
   [BOOKING_STATUS.ADVANCE_PAID]: "bg-violet-50 text-violet-700",
   [BOOKING_STATUS.CONFIRMED]: "bg-teal-50 text-teal-700",
   [BOOKING_STATUS.MIDWAY_PAID]: "bg-indigo-50 text-indigo-700",
+  [BOOKING_STATUS.LOADED_ON_CARRIER]: "bg-cyan-50 text-cyan-700",
   [BOOKING_STATUS.IN_TRANSIT]: "bg-orange-50 text-orange-700",
   [BOOKING_STATUS.OUT_FOR_DELIVERY]: "bg-pink-50 text-pink-700",
   [BOOKING_STATUS.DELIVERED]: "bg-green-50 text-green-700",
@@ -143,6 +146,15 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
             </p>
           ) : (
             <p className="mt-2 text-sm text-slate-500">Cancelled before any payment was made — nothing was charged.</p>
+          )}
+          {booking?.refundMethod === "coupon" && booking?.refundCouponCode && (
+            <p className="mt-2 text-sm text-slate-500">
+              Your refund is a coupon:{" "}
+              <span className="rounded-md bg-white px-2 py-0.5 font-mono text-sm font-bold text-[#0b1e42] ring-1 ring-slate-200">
+                {booking.refundCouponCode}
+              </span>{" "}
+              — valid on your next booking for 12 months.
+            </p>
           )}
         </div>
       </div>
@@ -371,6 +383,25 @@ function EmptyState() {
         Get an Estimate
         <ArrowRight className="h-4 w-4" />
       </Link>
+    </div>
+  );
+}
+
+// Bookings are scoped to the signed-in account (see getBookings in
+// bookingStore.js) — without a session there's no account to list, so this
+// replaces EmptyState rather than showing a misleading "No bookings yet".
+function SignInPrompt({ onSignIn }) {
+  return (
+    <div className="rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-100">
+      <p className="text-lg font-extrabold text-[#0b1e42]">Sign in to see your bookings</p>
+      <p className="mt-2 text-sm text-slate-500">Your bookings are tied to your account — sign in to view them.</p>
+      <button
+        type="button"
+        onClick={onSignIn}
+        className="mt-6 inline-flex items-center gap-2 rounded-full bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+      >
+        Sign In
+      </button>
     </div>
   );
 }
@@ -860,6 +891,7 @@ function addressesMatch(a, b) {
 // commits, rather than a one-line browser prompt.
 function CancelBookingModal({ booking, onClose, onCancelled }) {
   const [reason, setReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState("original");
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState("");
 
@@ -872,7 +904,7 @@ function CancelBookingModal({ booking, onClose, onCancelled }) {
     setCancelling(true);
     setError("");
     try {
-      const updated = await cancelBooking(booking.id, reason);
+      const updated = await cancelBooking(booking.id, reason, refundMethod);
       onCancelled(updated);
     } catch (err) {
       setError(err.message);
@@ -972,6 +1004,38 @@ function CancelBookingModal({ booking, onClose, onCancelled }) {
               <p className="mt-2 text-sm text-slate-600">No payment has been made yet — nothing will be charged or refunded.</p>
             )}
           </div>
+
+          {refundAmount > 0 && (
+            <fieldset className="mt-5">
+              <legend className="text-xs font-extrabold tracking-wide text-slate-400 uppercase">Where should we send your refund?</legend>
+              <div className="mt-2 flex flex-col gap-2">
+                {[
+                  { key: "original", label: "Original payment source", hint: "Back to the card, UPI or account you paid with." },
+                  { key: "coupon", label: "As a coupon", hint: `A one-time ${formatINR(refundAmount)} code, valid for 12 months, for your next booking.` },
+                ].map((option) => (
+                  <label
+                    key={option.key}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${
+                      refundMethod === option.key ? "border-red-300 bg-red-50" : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="refund-method"
+                      value={option.key}
+                      checked={refundMethod === option.key}
+                      onChange={() => setRefundMethod(option.key)}
+                      className="mt-1 accent-red-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-bold text-[#0b1e42]">{option.label}</span>
+                      <span className="block text-xs text-slate-500">{option.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
           {error && <p className="mt-4 text-sm font-semibold text-red-600">{error}</p>}
         </div>
@@ -1300,7 +1364,27 @@ export default function MyBookingsClient() {
   const result = loaded.key === key ? loaded.data : undefined;
   const setResult = (data) => setLoaded({ key, data });
 
+  // The list view's getBookings() is scoped to the signed-in account, so a
+  // sign-in/out needs to re-fetch it — not just gate the empty state.
+  // undefined = not checked yet; without Supabase there's no session to
+  // wait on, so it starts resolved (null) instead of hanging forever.
+  const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthModalOpen(false);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const sessionReady = session !== undefined;
+
+  useEffect(() => {
+    if (!sessionReady) return undefined;
     let cancelled = false;
     async function load() {
       const data = requestedId ? await getBooking(requestedId) : await getBookings();
@@ -1310,7 +1394,11 @@ export default function MyBookingsClient() {
     return () => {
       cancelled = true;
     };
-  }, [requestedId]);
+    // session?.user.id (not the session object itself) as the trigger for
+    // "the account changed" — a background token refresh hands
+    // onAuthStateChange a new session object every ~50min without the user
+    // actually changing, and that shouldn't silently re-fetch the list.
+  }, [requestedId, sessionReady, session?.user.id]);
 
   // Fetched once here (not per-card/per-detail-view) since every status
   // label and payment amount on this page shares the same live split.
@@ -1346,7 +1434,19 @@ export default function MyBookingsClient() {
     return <BookingDetailView booking={result} onBookingChange={setResult} split={split} />;
   }
 
-  // List view: every booking as a card.
+  // List view: every booking as a card. Scoped to the signed-in account
+  // (see getBookings), so a signed-out visitor gets a sign-in prompt
+  // instead of an empty/"no bookings" state that would misleadingly imply
+  // there's nothing tied to them.
+  if (isSupabaseConfigured && !session) {
+    return (
+      <>
+        <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        <SignInPrompt onSignIn={() => setAuthModalOpen(true)} />
+      </>
+    );
+  }
+
   if (!Array.isArray(result) || result.length === 0) return <EmptyState />;
 
   return (

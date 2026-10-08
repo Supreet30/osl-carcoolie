@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Truck } from "lucide-react";
+import { LogOut, Truck, User } from "lucide-react";
 import { TABS } from "../../services/data/serviceTabs";
+import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
+import AuthModal from "../../components/AuthModal";
 
 // Absolute (not bare-hash) hrefs — this Navbar is shared across routes
 // (landing page + contact page), so section links must route back to
@@ -237,6 +239,48 @@ export default function Navbar() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const lastScrollY = useRef(0);
 
+  // Session is read client-side (persisted in localStorage by the default
+  // supabase-js browser client) and kept in sync via onAuthStateChange, so
+  // the profile icon reflects sign-in/out immediately — including right
+  // after AuthModal's magic-link/Google redirect lands back on this page.
+  const [session, setSession] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef(null);
+  // next/image's optimizer sometimes fails to fetch Google's profile photo
+  // server-side (it's already sized/cropped by Google, nothing to optimize)
+  // which renders as a blank icon with no visible error — a plain <img>
+  // with this fallback avoids that entirely instead of silently going blank.
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAvatarFailed(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAvatarFailed(false);
+      setAuthModalOpen(false);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+    function handlePointerDown(event) {
+      if (!accountMenuRef.current?.contains(event.target)) setAccountMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [accountMenuOpen]);
+
+  async function handleSignOut() {
+    setAccountMenuOpen(false);
+    await supabase.auth.signOut();
+  }
+
   useEffect(() => {
     lastScrollY.current = window.scrollY;
 
@@ -268,7 +312,8 @@ export default function Navbar() {
         visible ? "translate-y-0" : "-translate-y-full"
       }`}
     >
-      <nav className="mx-auto flex max-w-6xl items-center justify-between rounded-full bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-3">
+      <nav className="flex min-w-0 flex-1 items-center justify-between rounded-full bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur sm:px-6">
         <Link href="/landing-page#home" className="shrink-0">
           <Image
             src="/carcoolie_logo.png"
@@ -301,34 +346,85 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <Link
-          href="/contact"
-          className="hidden shrink-0 rounded-full bg-red-600 px-6 py-2.5 text-lg font-semibold text-white transition-colors hover:bg-red-700 md:inline-block"
-        >
-          Contact Us
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <Link
+            href="/contact"
+            className="hidden rounded-full bg-red-600 px-6 py-2.5 text-lg font-semibold text-white transition-colors hover:bg-red-700 md:inline-block"
+          >
+            Contact Us
+          </Link>
 
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Toggle menu"
+            aria-expanded={open}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-800 md:hidden"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6"
+            >
+              {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      {/* Outside the white pill, on its own — its own shadow matches the
+          nav bar's elevation so the two read as a pair. */}
+      <div className="relative shrink-0" ref={accountMenuRef}>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle menu"
-          aria-expanded={open}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-800 md:hidden"
+          onClick={() => (session ? setAccountMenuOpen((v) => !v) : setAuthModalOpen(true))}
+          aria-label={session ? "Account menu" : "Sign in"}
+          className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full text-sm font-extrabold shadow-lg backdrop-blur transition-colors ${
+            session ? "bg-red-600 text-white hover:bg-red-700" : "bg-white/95 text-slate-500 hover:bg-white"
+          }`}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-6 w-6"
-          >
-            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
+          {session?.user.user_metadata?.avatar_url && !avatarFailed ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external, already-sized Google photo; see avatarFailed comment above
+            <img
+              src={session.user.user_metadata.avatar_url}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="h-full w-full object-cover"
+              onError={() => setAvatarFailed(true)}
+            />
+          ) : session ? (
+            session.user.email?.[0]?.toUpperCase()
+          ) : (
+            <User className="h-5 w-5" strokeWidth={2} />
+          )}
         </button>
-      </nav>
+
+        {accountMenuOpen && session && (
+          <div className="absolute top-full right-0 mt-2 w-56 rounded-2xl bg-white p-2 shadow-xl ring-1 ring-slate-900/5">
+            <p className="truncate px-3 py-2 text-xs text-slate-400">{session.user.email}</p>
+            <Link
+              href="/my-bookings"
+              onClick={() => setAccountMenuOpen(false)}
+              className="block rounded-xl px-3 py-2 text-sm font-semibold text-[#0b1e42] hover:bg-slate-50"
+            >
+              My Bookings
+            </Link>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sign Out
+            </button>
+          </div>
+        )}
+      </div>
+      </div>
 
       {open && (
         <div className="mx-auto mt-2 max-w-6xl rounded-2xl bg-white p-4 shadow-lg md:hidden">
@@ -355,6 +451,8 @@ export default function Navbar() {
           </Link>
         </div>
       )}
+
+      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </header>
   );
 }

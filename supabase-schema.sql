@@ -32,6 +32,7 @@ do $$ begin
     'advance_paid',  -- matches BOOKING_STATUS.ADVANCE_PAID
     'confirmed',     -- matches BOOKING_STATUS.CONFIRMED
     'midway_paid',   -- matches BOOKING_STATUS.MIDWAY_PAID
+    'loaded_on_carrier', -- matches BOOKING_STATUS.LOADED_ON_CARRIER
     'in_transit',    -- matches BOOKING_STATUS.IN_TRANSIT
     'out_for_delivery', -- matches BOOKING_STATUS.OUT_FOR_DELIVERY
     'delivered'      -- matches BOOKING_STATUS.DELIVERED
@@ -44,6 +45,7 @@ exception when duplicate_object then null; end $$;
 -- once.
 alter type booking_status add value if not exists 'midway_paid' after 'confirmed';
 alter type booking_status add value if not exists 'out_for_delivery' after 'in_transit';
+alter type booking_status add value if not exists 'loaded_on_carrier' after 'midway_paid';
 -- Exit state, not a pipeline step — see the cancellation columns on
 -- `bookings` below and CANCELLATION_FEE_PERCENT in bookingStore.js.
 alter type booking_status add value if not exists 'cancelled' after 'delivered';
@@ -134,6 +136,35 @@ create table if not exists customers (
   phone text,
   created_at timestamptz not null default now()
 );
+
+-- bookings.customer_id references this table (not auth.users directly), so
+-- a customer needs a row here before they can book — auto-created the
+-- moment Supabase Auth creates their auth.users row (magic link or Google),
+-- pulling whatever name Google handed back if there is one.
+create or replace function public.handle_new_customer()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.customers (id, full_name)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_customer();
+
+-- Backfill for accounts created before this trigger existed (e.g. the
+-- Google/magic-link accounts already used to test sign-in) — the trigger
+-- above only fires on new auth.users inserts going forward.
+insert into public.customers (id)
+select id from auth.users
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
 -- Cities — the 4 demo cities today (Delhi, Chandigarh, Mumbai,
@@ -422,6 +453,24 @@ insert into payment_settings (id, advance_percent, midway_percent) values (true,
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
+-- ---------------------------------------------------------------------
+-- Yards — the CarCoolie hubs a car is dropped at (pickup side) or collected
+-- from (drop-off side) in each city. Managed per city from the admin panel's
+-- "Yards" page; the booking form lists the yards for the estimate's
+-- from/to city. maps_url is the Google Maps link "View on Map" opens.
+-- ---------------------------------------------------------------------
+create table if not exists yards (
+  id uuid primary key default gen_random_uuid(),
+  city_id uuid not null references cities (id) on delete cascade,
+  name text not null,
+  address text not null,
+  maps_url text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (city_id, name)
+);
+
+-- ---------------------------------------------------------------------
 -- Vehicle models — the "Get an Estimate" modal's Make/Model fields are
 -- dropdowns sourced from this table (no free text), and picking a Model
 -- auto-determines the booking's Vehicle Type from vehicle_type_id below
@@ -586,6 +635,10 @@ create table if not exists bookings (
   -- "Reason for cancellation" dropdown (see CANCELLATION_REASONS in
   -- bookingStore.js) — free text isn't collected, just the picked label.
   cancellation_reason text,
+  -- Where the refund went: 'original' (back to the payment source) or 'coupon'
+  -- (a one-time REFUND-* coupon, see refund_coupon_code). Null if nothing was refunded.
+  refund_method text check (refund_method in ('original', 'coupon')),
+  refund_coupon_code text references coupons (code),
 
   -- Admin-entered (carcoolie-admin's "Pickup/Drop-off Point of Contact"
   -- cards — PocDetailsCard), never by the customer. Pickup is filled in
@@ -597,6 +650,10 @@ create table if not exists bookings (
   pickup_poc_phone text,
   dropoff_poc_name text,
   dropoff_poc_phone text,
+  -- Admin-only (carcoolie-admin's "Carrier Vehicle" card on the Loaded on
+  -- Carrier stage) — never selected into the customer's rowToBooking() in
+  -- osl-carcoolie's bookingStore.js, so it never reaches My Bookings.
+  carrier_vehicle_number text,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -626,10 +683,13 @@ alter table bookings add column if not exists cancelled_at timestamptz;
 alter table bookings add column if not exists cancellation_fee numeric(10, 2);
 alter table bookings add column if not exists refund_amount numeric(10, 2);
 alter table bookings add column if not exists cancellation_reason text;
+alter table bookings add column if not exists refund_method text;
+alter table bookings add column if not exists refund_coupon_code text references coupons (code);
 alter table bookings add column if not exists pickup_poc_name text;
 alter table bookings add column if not exists pickup_poc_phone text;
 alter table bookings add column if not exists dropoff_poc_name text;
 alter table bookings add column if not exists dropoff_poc_phone text;
+alter table bookings add column if not exists carrier_vehicle_number text;
 
 -- vehicle_type_id originally had no ON DELETE behavior, so Postgres
 -- defaulted to NO ACTION and blocked deleting a vehicle_types row that any
@@ -859,6 +919,7 @@ alter table legal_pages enable row level security;
 alter table document_formats enable row level security;
 alter table tax_settings enable row level security;
 alter table payment_settings enable row level security;
+alter table yards enable row level security;
 alter table vehicle_models enable row level security;
 alter table add_on_services enable row level security;
 alter table coupons enable row level security;
@@ -949,6 +1010,11 @@ drop policy if exists "payment_settings readable" on payment_settings;
 create policy "payment_settings readable" on payment_settings for select using (true);
 drop policy if exists "payment_settings admin write" on payment_settings;
 create policy "payment_settings admin write" on payment_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+drop policy if exists "yards readable" on yards;
+create policy "yards readable" on yards for select using (true);
+drop policy if exists "yards admin write" on yards;
+create policy "yards admin write" on yards for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 
 drop policy if exists "vehicle_models readable" on vehicle_models;
 create policy "vehicle_models readable" on vehicle_models for select using (true);
