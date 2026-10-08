@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
-import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
+import { isSupabaseConfigured, setRememberMe, supabase } from "../../lib/supabaseClient";
 
 // lucide-react dropped brand/social glyphs over trademark concerns, so the
 // Google "G" is drawn as an inline SVG instead — same convention Navbar.js
@@ -52,6 +52,7 @@ function AuthCard() {
   const [mode, setMode] = useState("signin");
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState({ state: "idle", message: "" });
+  const [rememberMe, setRememberMeChecked] = useState(true);
   const isSignup = mode === "signup";
   const isForgot = mode === "forgot";
 
@@ -79,6 +80,7 @@ function AuthCard() {
     setStatus({ state: "sending", message: "" });
 
     if (isSignup) {
+      setRememberMe(true); // no checkbox in this mode — always persist, same as before
       const fullName = event.target.elements.name.value;
       const { error } = await supabase.auth.signUp({
         email,
@@ -90,6 +92,7 @@ function AuthCard() {
       return;
     }
 
+    setRememberMe(rememberMe);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     // On success onAuthStateChange (see Navbar.js) closes this modal — no
     // "sent" state to show here, unlike sign-up.
@@ -107,6 +110,7 @@ function AuthCard() {
     }
     const email = event.target.elements.email.value;
     setStatus({ state: "sending", message: "" });
+    setRememberMe(true); // no checkbox on this path — always persist, same as before
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
@@ -125,6 +129,7 @@ function AuthCard() {
       setStatus({ state: "error", message: "Sign in isn't configured yet." });
       return;
     }
+    setRememberMe(true); // no checkbox on this path — always persist, same as before
     const popup = window.open("", "google-oauth", "width=480,height=640");
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -237,7 +242,12 @@ function AuthCard() {
             {!isSignup && (
               <div className="flex items-center justify-between text-xs">
                 <label className="flex items-center gap-2 text-slate-500">
-                  <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMeChecked(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                  />
                   Remember me
                 </label>
                 <button
