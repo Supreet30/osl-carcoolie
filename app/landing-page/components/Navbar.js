@@ -8,6 +8,23 @@ import { TABS } from "../../services/data/serviceTabs";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
 import AuthModal from "../../components/AuthModal";
 
+// "Supreet Singh" -> "SS" (first letter of up to the first two words);
+// falls back to a single letter from the email when there's no name at all
+// (e.g. an account that only ever signed in via magic link).
+function getAccountInitials(user) {
+  const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name;
+  if (fullName) {
+    const initials = fullName
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("");
+    if (initials) return initials.toUpperCase();
+  }
+  return user?.email?.[0]?.toUpperCase() ?? "";
+}
+
 // Absolute (not bare-hash) hrefs — this Navbar is shared across routes
 // (landing page + contact page), so section links must route back to
 // /landing-page's anchors rather than trying to scroll within whatever
@@ -392,14 +409,17 @@ export default function Navbar() {
       </nav>
 
       {/* Outside the white pill, on its own — its own shadow matches the
-          nav bar's elevation so the two read as a pair. */}
-      <div className="relative shrink-0" ref={accountMenuRef}>
+          nav bar's elevation so the two read as a pair. "group" drives the
+          hover tooltip below without needing separate hover state. */}
+      <div className="group relative shrink-0" ref={accountMenuRef}>
         <button
           type="button"
           onClick={() => (session ? setAccountMenuOpen((v) => !v) : setAuthModalOpen(true))}
           aria-label={session ? "Account menu" : "Sign in"}
-          className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full text-sm font-extrabold shadow-lg backdrop-blur transition-colors ${
-            session ? "bg-red-600 text-white hover:bg-red-700" : "bg-white/95 text-slate-500 hover:bg-white"
+          className={`flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-lg font-extrabold shadow-lg ring-2 backdrop-blur transition-all duration-300 ease-out hover:scale-110 hover:shadow-xl active:scale-95 ${
+            session
+              ? "bg-linear-to-br from-red-600 to-red-700 text-white ring-white/70 hover:from-red-500 hover:to-red-600 hover:ring-red-200"
+              : "bg-white/95 text-slate-500 ring-white/70 hover:bg-white hover:text-red-600 hover:ring-red-100"
           }`}
         >
           {session?.user.user_metadata?.avatar_url && !avatarFailed ? (
@@ -412,29 +432,71 @@ export default function Navbar() {
               onError={() => setAvatarFailed(true)}
             />
           ) : session ? (
-            session.user.email?.[0]?.toUpperCase()
+            getAccountInitials(session.user)
           ) : (
-            <User className="h-5 w-5" strokeWidth={2} />
+            <User className="h-6 w-6 transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
           )}
         </button>
 
+        {/* Hover tooltip — hidden while the dropdown itself is open so they
+            don't stack. */}
+        {!accountMenuOpen && (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute top-full left-1/2 z-20 mt-2.5 -translate-x-1/2 translate-y-1 rounded-lg bg-[#0b1e42] px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100"
+          >
+            {session ? "My Account" : "Sign In / Sign Up"}
+            <span className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-[#0b1e42]" />
+          </span>
+        )}
+
+        {/* Same visual language as ResourcesDropdown/ServicesDropdown — diamond
+            caret, rounded-[28px] white card, icon-badge rows — just right-anchored
+            under the circular trigger instead of centered under a nav link. */}
         {accountMenuOpen && session && (
-          <div className="absolute top-full right-0 mt-2 w-56 rounded-2xl bg-white p-2 shadow-xl ring-1 ring-slate-900/5">
-            <p className="truncate px-3 py-2 text-xs text-slate-400">{session.user.email}</p>
-            <Link
-              href="/my-bookings"
-              onClick={() => setAccountMenuOpen(false)}
-              className="block rounded-xl px-3 py-2 text-sm font-semibold text-[#0b1e42] hover:bg-slate-50"
-            >
-              My Bookings
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign Out
-            </button>
+          <div className="absolute top-full left-1/2 z-40 w-72 -translate-x-1/2 pt-3">
+            <div className="absolute -top-0.75 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 rounded-sm bg-white shadow-[0_2px_2px_-1px_rgba(15,23,42,0.08)]" />
+            <div className="rounded-[28px] bg-white p-3 shadow-2xl ring-1 ring-slate-900/5">
+              <div className="flex items-center gap-4 px-2 pt-2 pb-4">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                  <User className="h-5 w-5" strokeWidth={1.7} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-base font-extrabold text-[#0b1e42]">
+                    {session.user.user_metadata?.full_name || session.user.user_metadata?.name || "My Account"}
+                  </span>
+                  <span className="block truncate text-sm text-slate-500">{session.user.email}</span>
+                </span>
+              </div>
+
+              <ul className="divide-y divide-slate-100">
+                <li>
+                  <Link
+                    href="/my-bookings"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="group/item flex items-center gap-4 rounded-2xl px-2 py-3 transition-colors hover:bg-slate-50"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                      <Truck className="h-5 w-5" strokeWidth={1.7} />
+                    </span>
+                    <span className="flex-1 text-base font-extrabold text-[#0b1e42]">My Bookings</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover/item:text-red-600" />
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="group/item flex w-full items-center gap-4 rounded-2xl px-2 py-3 text-left transition-colors hover:bg-red-50"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                      <LogOut className="h-5 w-5" strokeWidth={1.7} />
+                    </span>
+                    <span className="flex-1 text-base font-extrabold text-red-600">Sign Out</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         )}
       </div>
