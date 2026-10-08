@@ -55,6 +55,11 @@ function AuthCard() {
   const [status, setStatus] = useState({ state: "idle", message: "" });
   const isSignup = mode === "signup";
 
+  // Sign-up creates a real email+password account; Supabase emails a
+  // confirmation link (its "Confirm signup" template, separate from the
+  // Magic Link one) purely to verify the address — clicking it doesn't sign
+  // them in on its own, it just activates the account. Sign-in afterward is
+  // always password-based, no link involved.
   async function handleSubmit(event) {
     event.preventDefault();
     if (!isSupabaseConfigured) {
@@ -63,18 +68,25 @@ function AuthCard() {
     }
 
     const email = event.target.elements.email.value;
+    const password = event.target.elements.password.value;
     setStatus({ state: "sending", message: "" });
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href },
-    });
-
-    if (error) {
-      setStatus({ state: "error", message: error.message });
-    } else {
-      setStatus({ state: "sent", message: `Check ${email} for a login link.` });
+    if (isSignup) {
+      const fullName = event.target.elements.name.value;
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.href, data: { full_name: fullName } },
+      });
+      if (error) setStatus({ state: "error", message: error.message });
+      else setStatus({ state: "sent", message: `Check ${email} to verify your account, then sign in.` });
+      return;
     }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // On success onAuthStateChange (see Navbar.js) closes this modal — no
+    // "sent" state to show here, unlike sign-up.
+    if (error) setStatus({ state: "error", message: error.message });
   }
 
   // Opens Google's consent screen in a popup instead of navigating this tab
@@ -153,17 +165,17 @@ function AuthCard() {
           type={showPassword ? "text" : "password"}
           name="password"
           placeholder="Password"
+          required
+          minLength={6}
           trailing={
-            !isSignup && (
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute top-1/2 right-4 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            )
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute top-1/2 right-4 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           }
         />
 
