@@ -190,6 +190,39 @@ select id from auth.users
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
+-- Pincode directory — the full India Post office list (one row per post
+-- office, ~165k rows), self-hosted so /api/resolve-pincode no longer
+-- depends on the free, unofficial api.postalpincode.in (no SLA, and an
+-- audit found it internally inconsistent — e.g. the same district spelled
+-- with and without a space across different pincodes). Seeded from a
+-- static CSV; India Post's office/district boundaries change rarely
+-- enough that this only needs an occasional manual refresh, not a live
+-- sync. One pincode can have many rows (many post offices share it).
+-- ---------------------------------------------------------------------
+
+create table if not exists pincode_directory (
+  id bigint generated always as identity primary key,
+  pincode text not null,
+  office_name text not null,
+  office_type text,
+  delivery_status text,
+  district text not null,
+  state_name text not null,
+  division_name text,
+  region_name text,
+  circle_name text,
+  latitude double precision,
+  longitude double precision
+);
+
+create index if not exists pincode_directory_pincode_idx on pincode_directory (pincode);
+create index if not exists pincode_directory_district_idx on pincode_directory (district);
+
+alter table pincode_directory enable row level security;
+drop policy if exists "pincode_directory readable" on pincode_directory;
+create policy "pincode_directory readable" on pincode_directory for select using (true);
+
+-- ---------------------------------------------------------------------
 -- Cities — the 4 demo cities today (Delhi, Chandigarh, Mumbai,
 -- Bangalore), extensible by the admin panel later.
 -- ---------------------------------------------------------------------

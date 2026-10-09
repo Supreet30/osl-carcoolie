@@ -13,6 +13,19 @@ import { getDraft, markBookingIntent, saveEstimate, stashFormValuesForResume } f
 
 const PIN_REGEX = /^\d{6}$/;
 
+// Shared with handleSubmit below — a PIN that resolved to a real, known
+// place (we have its district/state) just isn't serviced yet; that's a
+// different situation from a PIN that never resolved at all, and needed
+// its own wording in both the inline field note and the submit-time error
+// (which used to lump every unresolved PIN into "enter a valid PIN code",
+// misleadingly implying the PIN itself was wrong rather than just
+// unserviced — see the bug this fixed).
+function notServicedMessage(status) {
+  return status.district
+    ? `${status.district}${status.state ? `, ${status.state}` : ""} — we're expanding our network and will be there shortly.`
+    : "We don't recognize this PIN code — double-check it or try a nearby one.";
+}
+
 // Small status note under a PIN field. PIN code is the only way to set a
 // city here now — no dropdown fallback — so "not_matched"/"error" can't
 // point at one; they just ask for a different/rechecked PIN instead.
@@ -32,11 +45,7 @@ function PincodeStatus({ status }) {
     );
   }
   if (status.status === "not_matched") {
-    return (
-      <span className="mt-1.5 block text-xs text-amber-600">
-        We don&apos;t recognize this PIN code as a serviced city yet — double-check it or try a nearby one.
-      </span>
-    );
+    return <span className="mt-1.5 block text-xs text-amber-600">{notServicedMessage(status)}</span>;
   }
   if (status.status === "error") {
     return <span className="mt-1.5 block text-xs text-slate-400">Couldn&apos;t check this PIN right now — please try again.</span>;
@@ -239,7 +248,9 @@ export default function B2cHero() {
         if (cancelled) return;
         if (data.matched) setFromCity(data.city);
         setPickupPinStatus(
-          data.matched ? { status: "matched", city: data.city, pin: pickupPin } : { status: "not_matched" }
+          data.matched
+            ? { status: "matched", city: data.city, pin: pickupPin }
+            : { status: "not_matched", district: data.district, state: data.state }
         );
       } catch {
         if (!cancelled) setPickupPinStatus({ status: "error" });
@@ -265,7 +276,9 @@ export default function B2cHero() {
         if (cancelled) return;
         if (data.matched) setToCity(data.city);
         setDestinationPinStatus(
-          data.matched ? { status: "matched", city: data.city, pin: destinationPin } : { status: "not_matched" }
+          data.matched
+            ? { status: "matched", city: data.city, pin: destinationPin }
+            : { status: "not_matched", district: data.district, state: data.state }
         );
       } catch {
         if (!cancelled) setDestinationPinStatus({ status: "error" });
@@ -290,8 +303,16 @@ export default function B2cHero() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    // A PIN that resolved to a real place but just isn't serviced yet
+    // (not_matched, with a district/state) is not the same problem as a
+    // PIN that's empty or still unresolved — the generic "enter a valid
+    // PIN code" below was misleadingly implying the PIN itself was wrong
+    // even when it had been read correctly, just not covered.
+    const unserviced = pickupPinStatus.status === "not_matched" ? pickupPinStatus : destinationPinStatus;
     if (!fromCity || !toCity) {
-      setCityError("Enter a valid pickup and destination PIN code.");
+      setCityError(
+        unserviced.status === "not_matched" ? notServicedMessage(unserviced) : "Enter a valid pickup and destination PIN code."
+      );
       return;
     }
     if (fromCity === toCity) {
