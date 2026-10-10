@@ -20,10 +20,10 @@ const SHARE_LINKS = [
 
 export default function LatestResource() {
   return (
-    <section className="relative overflow-hidden bg-white px-6 py-20 sm:py-24">
+    <section className="relative overflow-hidden bg-slate-50 px-6 py-24 sm:py-28">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"
+        className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-size-[40px_40px]"
       />
 
       <div className="relative mx-auto max-w-6xl">
@@ -91,10 +91,10 @@ export default function LatestResource() {
           </div>
 
           <div className="grid grid-cols-2 gap-6">
-            {[0, 1].map((i) => (
-              <div key={i} className="relative aspect-2/3 overflow-hidden rounded-2xl shadow-xl">
+            {["/blog-images/blog1-1.jpg", "/blog-images/blog2-1.jpg"].map((src) => (
+              <div key={src} className="relative aspect-2/3 overflow-hidden rounded-2xl shadow-xl">
                 <Image
-                  src="/res-new-blog.jpg"
+                  src={src}
                   alt="Latest blog preview — writing a car transport story"
                   fill
                   sizes="(max-width: 1023px) 50vw, 25vw"

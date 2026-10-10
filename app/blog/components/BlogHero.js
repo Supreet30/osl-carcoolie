@@ -49,7 +49,7 @@ export default function BlogHero() {
             </a>
           </div>
 
-          <div className="mt-20 flex items-center gap-3">
+          <div className="mt-10 inline-flex w-fit items-center gap-3 rounded-full bg-white/10 py-2 pr-5 pl-2 ring-1 ring-white/15 backdrop-blur-sm">
             <div className="flex -space-x-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-600 text-xs font-bold text-white ring-2 ring-[#0b1220]">
                 JD
@@ -61,7 +61,9 @@ export default function BlogHero() {
                 +5k
               </span>
             </div>
-            <p className="text-sm text-slate-300">Joined by 5,000+ industry professionals</p>
+            <p className="text-sm font-semibold text-slate-200">
+              Joined by <span className="text-white">5,000+</span> industry professionals
+            </p>
           </div>
         </div>
       </div>

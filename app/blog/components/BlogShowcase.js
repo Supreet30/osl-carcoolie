@@ -30,23 +30,20 @@ const HIGHLIGHTS = [
   {
     tag: "Guides",
     title: "Expert Guides",
-    description:
-      "Step-by-step advice on preparing your vehicle, choosing between standard and premium enclosed carriers, and knowing exactly what to expect at every stage of transit.",
-    image: "/servicehero.png",
+    description: "Step-by-step advice on preparing your vehicle and choosing the right carrier for transit.",
+    image: "/finalimages/homepage/ourservices2.JPG",
   },
   {
     tag: "Industry",
     title: "Industry Insights",
-    description:
-      "Market trends, regulation updates, and behind-the-scenes looks at how nationwide vehicle logistics actually works — written for anyone who wants to understand the business, not just use it.",
-    image: "/contact-hero-truck.png",
+    description: "Market trends and behind-the-scenes looks at how nationwide vehicle logistics works.",
+    image: "/finalimages/company-numbers/fleet.JPG",
   },
   {
     tag: "Company",
     title: "Customer Stories",
-    description:
-      "Real experiences from dealers, manufacturers, and individual owners who've moved vehicles with CarCoolie — the wins, the lessons, and what made the difference.",
-    image: "/core.jpg",
+    description: "Real wins and lessons from dealers, manufacturers, and owners who've moved with CarCoolie.",
+    image: "/finalimages/company-numbers/happy-cust.JPG",
   },
 ];
 

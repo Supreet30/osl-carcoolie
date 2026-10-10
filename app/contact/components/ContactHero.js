@@ -1,11 +1,12 @@
 import Image from "next/image";
+import { ArrowRight } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
 
 export default function ContactHero() {
   return (
     <>
       <Navbar />
-      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#fffafa] px-6 pt-32 pb-16 sm:pt-36 sm:pb-20">
+      <section className="relative isolate flex flex-col overflow-hidden bg-[#fffafa] px-6 pt-28 pb-14 sm:pt-32 sm:pb-16">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
@@ -21,20 +22,24 @@ export default function ContactHero() {
             quotations, shipment tracking, pickup scheduling and door-to-door delivery, all handled by
             specialized carrier trucks.
           </p>
-          <div className="mt-10 flex flex-wrap gap-3">
+          <div className="mt-10 flex flex-wrap items-center gap-4">
             <a
               href="#contact-form"
-              className="inline-flex items-center justify-center rounded-full bg-red-600 px-8 py-3.5 text-sm font-bold text-white transition-colors hover:bg-red-700"
+              className="group inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-9 py-4 text-base font-bold text-white shadow-lg shadow-red-600/25 transition-all hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-xl hover:shadow-red-600/30"
             >
               Request A Quote
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a
               href="tel:+919876543210"
-              className="inline-flex items-center justify-center rounded-full border-2 border-[#0b1e42] px-8 py-3 text-sm font-bold text-[#0b1e42] transition-colors hover:bg-[#0b1e42] hover:text-white"
+              className="inline-flex items-center justify-center rounded-full border-2 border-[#0b1e42] px-7 py-3.5 text-sm font-bold text-[#0b1e42] transition-colors hover:bg-[#0b1e42] hover:text-white"
             >
               Call Our Team
             </a>
           </div>
+          <p className="mt-4 text-xs font-semibold text-slate-400">
+            No sign-up needed — get a response within 1 hour on working days.
+          </p>
         </div>
 
         <div className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0">

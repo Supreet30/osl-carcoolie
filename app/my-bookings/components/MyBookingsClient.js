@@ -8,6 +8,7 @@ import {
   Calendar,
   Car,
   CheckCircle2,
+  ChevronDown,
   Circle,
   ExternalLink,
   Clock,
@@ -16,6 +17,8 @@ import {
   FileSignature,
   FileText,
   Fingerprint,
+  Gift,
+  Handshake,
   IdCard,
   LayoutList,
   Loader2,
@@ -25,11 +28,14 @@ import {
   Receipt,
   Shield,
   ShieldCheck,
+  ShoppingBag,
+  Sparkles,
   Star,
   Tag,
   Truck,
   Upload,
   User,
+  Utensils,
   Wind,
   X,
   XCircle,
@@ -44,6 +50,8 @@ import {
   getBooking,
   getBookings,
   getChargeReceiptUrl,
+  listAvailableBenefits,
+  selectBookingBenefit,
   submitBookingReview,
   updateBookingDocument,
 } from "../../services/b2c/lib/bookingStore";
@@ -254,13 +262,127 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
   );
 }
 
+// One set of pre-written, selectable comments per star rating (1-5) — see
+// the spec: each rating has its own dropdown of options, worded positively/
+// neutrally/subtly even at the low end so nothing reads as an overtly
+// negative complaint. The first option in each list is the one that
+// auto-fills the dropdown the moment that rating is picked (see ReviewCard's
+// handleRate) — the customer can still change it to another option in the
+// same list before submitting.
+const REVIEW_COMMENTS = {
+  5: ["The overall experience was very smooth and convenient.", "Everything went exactly as expected — great service."],
+  4: ["The experience was good and the process was quite convenient.", "A positive experience overall, with minor room for improvement."],
+  3: ["The overall experience was satisfactory.", "The process worked out fine overall."],
+  2: ["The experience was okay, with some areas that could be improved.", "There were a few bumps along the way, but it got done."],
+  1: ["The experience could have been more convenient.", "There's definitely room to improve the process."],
+};
+
+const BENEFIT_CATEGORY_ICONS = {
+  gift_card: Gift,
+  brand_coupon: Tag,
+  food_beverage_voucher: Utensils,
+  ecommerce_voucher: ShoppingBag,
+  partner_offer: Handshake,
+  other: Sparkles,
+};
+
+// Shown once a review is submitted but before a benefit's been decided
+// (booking.review.benefitSelectedAt is still null) — rendered inline below
+// the review summary in ReviewCard, not as its own separate card, so the
+// stars/comment the customer just submitted stay visible while they pick.
+// See list_available_benefits()/select_booking_benefit's comments in
+// supabase-schema.sql. Picking a benefit (or "No thanks") is final, same
+// as the review itself — there's no way back to this screen afterwards.
+function BenefitChooser({ booking, onBookingChange }) {
+  const [state, setState] = useState({ loading: true, error: "", benefits: [] });
+  const [selectingId, setSelectingId] = useState(null);
+
+  useEffect(() => {
+    listAvailableBenefits()
+      .then((benefits) => setState({ loading: false, error: "", benefits }))
+      .catch((err) => setState({ loading: false, error: err.message || "Couldn't load benefits.", benefits: [] }));
+  }, []);
+
+  async function handleChoose(benefitId) {
+    setSelectingId(benefitId ?? "skip");
+    try {
+      const saved = await selectBookingBenefit(booking.id, benefitId);
+      onBookingChange?.((prev) => ({ ...prev, review: saved }));
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: err.message || "Couldn't record your choice — try again." }));
+      setSelectingId(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+        <Gift className="h-3.5 w-3.5 text-red-600" />
+        Choose Your Benefit
+      </p>
+      <p className="mt-1 text-sm text-slate-500">
+        Thanks for the feedback — pick a thank-you gift if you&apos;d like one. Totally optional.
+      </p>
+
+      {state.loading ? (
+        <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading&hellip;
+        </div>
+      ) : state.benefits.length === 0 ? (
+        <p className="mt-6 text-sm text-slate-400">No benefits are available right now.</p>
+      ) : (
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {state.benefits.map((benefit) => {
+            const Icon = BENEFIT_CATEGORY_ICONS[benefit.category] ?? Sparkles;
+            const busy = selectingId === benefit.id;
+            return (
+              <button
+                key={benefit.id}
+                type="button"
+                onClick={() => handleChoose(benefit.id)}
+                disabled={selectingId !== null}
+                className="flex items-start gap-3 rounded-2xl bg-slate-50 p-4 text-left transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 shadow-sm">
+                  {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Icon className="h-5 w-5" strokeWidth={1.75} />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-bold text-[#0b1e42]">{benefit.name}</span>
+                  {benefit.brand && <span className="block text-xs text-slate-400">{benefit.brand}</span>}
+                  {benefit.description && (
+                    <span className="mt-1 block text-xs text-slate-500">{benefit.description}</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {state.error && <p className="mt-3 text-xs font-semibold text-red-600">{state.error}</p>}
+
+      <button
+        type="button"
+        onClick={() => handleChoose(null)}
+        disabled={selectingId !== null}
+        className="mt-5 text-xs font-bold text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:cursor-wait"
+      >
+        {selectingId === "skip" ? "Saving…" : "No thanks, I'll pass"}
+      </button>
+    </div>
+  );
+}
+
 // Offered once a booking reaches Delivered — one review per booking, and
 // it's final: the moment a rating or comment is saved, this switches to a
 // frozen, read-only view instead of an editable form. There's no "Update
-// Review" — a submitted review can't be changed.
+// Review" — a submitted review can't be changed. Once submitted, the
+// benefit choice (BenefitChooser above) is offered next if it hasn't been
+// decided yet (booking.review.benefitSelectedAt is null).
 function ReviewCard({ booking, onBookingChange }) {
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
+  const [rating, setRating] = useState(null);
+  const [hoverRating, setHoverRating] = useState(null);
+  const [selectedComment, setSelectedComment] = useState("");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -283,24 +405,59 @@ function ReviewCard({ booking, onBookingChange }) {
             />
           ))}
         </div>
-        {booking.review.comment && <p className="mt-3 text-sm leading-relaxed text-slate-600">{booking.review.comment}</p>}
+        {booking.review.selectedComment && (
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">{booking.review.selectedComment}</p>
+        )}
+        {booking.review.comment && <p className="mt-2 text-sm leading-relaxed text-slate-600">{booking.review.comment}</p>}
         <p className="mt-4 text-xs text-slate-400">Submitted — reviews can&apos;t be edited once sent.</p>
+
+        {!booking.review.benefitSelectedAt ? (
+          <BenefitChooser booking={booking} onBookingChange={onBookingChange} />
+        ) : (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            {booking.review.benefitId ? (
+              <>
+                <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
+                  <Gift className="h-3.5 w-3.5 text-red-600" />
+                  Your Benefit
+                </p>
+                <p className="mt-1.5 text-sm font-semibold text-[#0b1e42]">{booking.review.benefitType}</p>
+                {booking.review.benefitStatus === "issued" ? (
+                  <p className="mt-1 text-sm text-slate-600">
+                    Code: <span className="font-mono font-bold text-red-600">{booking.review.benefitReference}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-400">We&apos;ll issue this shortly — check back here.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">You chose not to select a benefit this time.</p>
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
-  const displayRating = hoverRating || rating;
+  const displayRating = hoverRating ?? rating;
+  const commentOptions = rating === null ? [] : REVIEW_COMMENTS[rating];
+
+  function handleRate(value) {
+    setRating(value);
+    setSelectedComment(REVIEW_COMMENTS[value][0]);
+    setError("");
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!rating) {
+    if (rating === null) {
       setError("Pick a star rating before submitting.");
       return;
     }
     setSubmitting(true);
     setError("");
     try {
-      const saved = await submitBookingReview(booking.id, { rating, comment });
+      const saved = await submitBookingReview(booking.id, { rating, selectedComment, comment });
       onBookingChange?.((prev) => ({ ...prev, review: saved }));
     } catch (err) {
       setError(err.message || "Couldn't submit your review — try again.");
@@ -319,12 +476,7 @@ function ReviewCard({ booking, onBookingChange }) {
       </p>
 
       <form onSubmit={handleSubmit} className="mt-5">
-        <div
-          className="flex items-center gap-1.5"
-          onMouseLeave={() => setHoverRating(0)}
-          role="radiogroup"
-          aria-label="Rating out of 5 stars"
-        >
+        <div className="flex items-center gap-1.5" onMouseLeave={() => setHoverRating(null)} role="radiogroup" aria-label="Rating out of 5 stars">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
@@ -333,15 +485,14 @@ function ReviewCard({ booking, onBookingChange }) {
               aria-checked={rating === value}
               aria-label={`${value} star${value === 1 ? "" : "s"}`}
               onMouseEnter={() => setHoverRating(value)}
-              onClick={() => {
-                setRating(value);
-                setError("");
-              }}
+              onClick={() => handleRate(value)}
               className="p-0.5"
             >
               <Star
                 className={`h-8 w-8 transition-colors ${
-                  value <= displayRating ? "fill-red-500 text-red-500" : "fill-transparent text-slate-300"
+                  displayRating !== null && value <= displayRating
+                    ? "fill-red-500 text-red-500"
+                    : "fill-transparent text-slate-300"
                 }`}
                 strokeWidth={1.5}
               />
@@ -349,12 +500,29 @@ function ReviewCard({ booking, onBookingChange }) {
           ))}
         </div>
 
+        {rating !== null && (
+          <div className="relative mt-4">
+            <select
+              value={selectedComment}
+              onChange={(e) => setSelectedComment(e.target.value)}
+              className="w-full appearance-none rounded-xl bg-slate-50 px-4 py-3 pr-10 text-sm text-[#0b1e42] outline-none focus:ring-2 focus:ring-red-500"
+            >
+              {commentOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+        )}
+
         <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Tell us about your experience — pickup, communication, condition on delivery..."
+          placeholder="Anything else you'd like to add? (optional)"
           rows={3}
-          className="mt-4 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+          className="mt-3 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
         />
 
         {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}

@@ -106,7 +106,7 @@ export default function CaseStudiesShowcase() {
               )}
             </div>
 
-            <div className="mt-10 grid overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-100 lg:grid-cols-2">
+            <div className="mt-10 grid overflow-hidden rounded-3xl bg-white shadow-2xl ring-2 ring-red-600/20 lg:grid-cols-2">
               <div className="relative h-96 lg:h-auto">
                 <Image
                   key={featured.image + featured.title}
@@ -117,6 +117,10 @@ export default function CaseStudiesShowcase() {
                   className="object-cover"
                   style={{ animation: "fadeIn 0.4s ease-out" }}
                 />
+                <div className="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent" />
+                <span className="absolute top-5 left-5 inline-flex items-center gap-1.5 rounded-full bg-red-600 px-4 py-1.5 text-xs font-extrabold tracking-wide text-white uppercase shadow-lg">
+                  Featured
+                </span>
               </div>
 
               <div key={featured.title} className="p-8 sm:p-12" style={{ animation: "fadeIn 0.4s ease-out" }}>
@@ -167,14 +171,14 @@ export default function CaseStudiesShowcase() {
           {visibleCaseStudies.length > 0 ? (
             <>
               <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleCaseStudies.map(({ slug, category, title, description, icon: Icon }) => (
+                {visibleCaseStudies.map(({ slug, category, title, description, icon: Icon, image }) => (
                   <div
                     key={slug}
                     className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100"
                   >
                     <div className="relative h-60">
                       <Image
-                        src="/contact-hero-truck.png"
+                        src={image}
                         alt={title}
                         fill
                         sizes="(max-width: 1023px) 100vw, 33vw"
@@ -190,7 +194,7 @@ export default function CaseStudiesShowcase() {
                         {category}
                       </p>
                       <h3 className="mt-2 text-xl font-extrabold text-[#0b1e42]">{title}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
+                      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-500">{description}</p>
                       <Link
                         href={`/case-studies/${slug}`}
                         className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-red-600 transition-colors hover:text-red-700"

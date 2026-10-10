@@ -9,23 +9,19 @@ import { ChevronDown } from "lucide-react";
 const FAQ_ITEMS = [
   {
     question: "How long does transport typically take?",
-    answer:
-      "Most intercity deliveries are completed within 3-7 days depending on distance, route, and the type of carrier booked. You'll get an estimated delivery window at the time of booking and live updates throughout transit.",
+    answer: "Usually 3-7 days depending on distance and route, with an estimated window given at booking.",
   },
   {
     question: "Is my vehicle insured during transit?",
-    answer:
-      "Yes — every vehicle we transport is covered by comprehensive transit insurance from the moment it's loaded until it reaches your doorstep, at no extra cost to you.",
+    answer: "Yes — every vehicle is covered by comprehensive transit insurance at no extra cost, door to door.",
   },
   {
     question: "Can I track my car?",
-    answer:
-      "Absolutely. Every shipment includes GPS-enabled live tracking so you always know exactly where your vehicle is, with instant status updates and accurate arrival estimates.",
+    answer: "Yes, every shipment includes GPS live tracking with instant status updates and arrival estimates.",
   },
   {
     question: "Do you offer door-to-door service?",
-    answer:
-      "Yes, our standard service includes pickup and drop-off at the addresses you specify, subject to local access restrictions for larger carriers.",
+    answer: "Yes, pickup and drop-off at the addresses you specify, subject to access for larger carriers.",
   },
 ];
 

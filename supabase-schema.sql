@@ -895,17 +895,220 @@ create table if not exists booking_inspections (
 
 create index if not exists booking_inspections_booking_id_idx on booking_inspections (booking_id);
 
+-- Benefit/reward catalog ("Choose Your Benefit", offered after a review is
+-- submitted — see ReviewCard in MyBookingsClient.js). Admin-managed (see
+-- the admin Benefits page); customers only ever read the active ones.
+-- total_quantity is the redemption cap for a benefit with no uploaded code
+-- pool (e.g. a partner offer redeemed by booking ID, nothing to hand out) —
+-- null means unlimited. A benefit that has codes uploaded into
+-- benefit_codes below is capped by that pool's size instead; total_quantity
+-- is ignored for it (see /api/benefits in osl-carcoolie for exactly how
+-- "remaining" is computed).
+create table if not exists benefits (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  brand text,
+  category text not null default 'other' check (
+    category in ('gift_card', 'brand_coupon', 'food_beverage_voucher', 'ecommerce_voucher', 'partner_offer', 'other')
+  ),
+  description text,
+  expires_at timestamptz,
+  total_quantity integer,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- One row per individual gift card/coupon code an admin has uploaded for a
+-- benefit — claimed atomically (see claim_benefit_code() below) the moment
+-- a customer selects that benefit, so two customers racing for the last
+-- code can never both get it. Never exposed to the customer app directly
+-- (no RLS policy at all, not even a read one — only service_role bypasses
+-- RLS here); a customer only ever learns their own assigned code back from
+-- /api/select-booking-benefit's response, denormalized onto their own
+-- booking_reviews row as benefit_reference.
+create table if not exists benefit_codes (
+  id uuid primary key default gen_random_uuid(),
+  benefit_id uuid not null references benefits (id) on delete cascade,
+  code text not null,
+  status text not null default 'available' check (status in ('available', 'assigned')),
+  assigned_booking_id uuid references bookings (id) on delete set null,
+  assigned_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (benefit_id, code)
+);
+create index if not exists benefit_codes_benefit_id_idx on benefit_codes (benefit_id);
+
+-- Claims one available code for a benefit, or returns no row if the pool is
+-- empty — "for update skip locked" is what makes this safe under
+-- concurrency: two customers selecting the same benefit at the same instant
+-- can never both walk away with the same code (one gets it, the other sees
+-- an empty pool and falls back to "pending" for an admin to fulfil
+-- manually later). security definer + the revoke/grant below mean only a
+-- service_role request (the API routes below) can ever call this — never
+-- directly from the anon/authenticated roles, since nothing here re-checks
+-- that the calling customer's review is even eligible for the benefit.
+create or replace function claim_benefit_code(p_benefit_id uuid, p_booking_id uuid)
+returns benefit_codes
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_row benefit_codes;
+begin
+  update benefit_codes
+  set status = 'assigned', assigned_booking_id = p_booking_id, assigned_at = now()
+  where id = (
+    select id from benefit_codes
+    where benefit_id = p_benefit_id and status = 'available'
+    order by created_at
+    for update skip locked
+    limit 1
+  )
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+revoke execute on function claim_benefit_code(uuid, uuid) from public, anon, authenticated;
+grant execute on function claim_benefit_code(uuid, uuid) to service_role;
+
 -- Customer's post-delivery review — offered once a booking reaches
 -- 'delivered' (see MyBookingsClient.js's ReviewCard). One review per
 -- booking; submitting again from the same form updates it rather than
 -- creating a second row (see submitBookingReview()'s upsert).
+--
+-- rating: 1-5.
+-- selected_comment: the pre-written comment picked from the per-rating
+-- dropdown; `comment` (pre-existing) is the separate, optional free-text
+-- feedback alongside it.
+-- benefit_id/benefit_selected_at: which catalog benefit (if any) the
+-- customer picked in "Choose Your Benefit", and when — null/null means
+-- they haven't been offered the choice yet (or it's still pending in the
+-- UI), not-null/not-null once they've picked one or explicitly skipped
+-- (benefit_id stays null for a skip). benefit_code_id is the specific code
+-- claim_benefit_code() claimed for them, if any.
+-- benefit_status/benefit_type/benefit_reference/benefit_issued_at: the
+-- fulfilment record — auto-filled as a snapshot of the benefit/code at the
+-- moment of issue (so it still reads correctly even if the catalog entry
+-- is later edited/removed), or filled in by hand from the admin Reviews
+-- page for a benefit that's out of stock or wasn't in the catalog at all.
+-- All of the benefit_* columns (including the new ones) are protected by a
+-- trigger below so a customer's own review submission can never set or
+-- change these, even by crafting the request directly.
 create table if not exists booking_reviews (
   booking_id uuid primary key references bookings (id) on delete cascade,
   rating smallint not null check (rating between 1 and 5),
   comment text,
+  selected_comment text,
+  benefit_id uuid references benefits (id) on delete set null,
+  benefit_code_id uuid references benefit_codes (id) on delete set null,
+  benefit_selected_at timestamptz,
+  benefit_status text not null default 'pending' check (benefit_status in ('pending', 'issued', 'declined')),
+  benefit_type text,
+  benefit_reference text,
+  benefit_issued_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Idempotent widen for a project whose booking_reviews predates the
+-- selected_comment/benefit_* columns.
+alter table booking_reviews drop constraint if exists booking_reviews_rating_check;
+alter table booking_reviews add constraint booking_reviews_rating_check check (rating between 1 and 5);
+alter table booking_reviews add column if not exists selected_comment text;
+alter table booking_reviews add column if not exists benefit_id uuid references benefits (id) on delete set null;
+alter table booking_reviews add column if not exists benefit_code_id uuid references benefit_codes (id) on delete set null;
+alter table booking_reviews add column if not exists benefit_selected_at timestamptz;
+alter table booking_reviews add column if not exists benefit_status text not null default 'pending';
+alter table booking_reviews drop constraint if exists booking_reviews_benefit_status_check;
+alter table booking_reviews add constraint booking_reviews_benefit_status_check check (benefit_status in ('pending', 'issued', 'declined'));
+alter table booking_reviews add column if not exists benefit_type text;
+alter table booking_reviews add column if not exists benefit_reference text;
+alter table booking_reviews add column if not exists benefit_issued_at timestamptz;
+
+-- What "Choose Your Benefit" lists — every active, unexpired benefit along
+-- with how many are actually left to give out. Callable directly by the
+-- customer app's anon/authenticated client (see bookingStore.js's
+-- listAvailableBenefits()); security definer so it can read benefit_codes'
+-- count without that table needing any RLS policy of its own — only a
+-- count is ever returned, never a code. "remaining" is null for unlimited,
+-- otherwise the pool size (benefit_codes rows left 'available') for a
+-- benefit with uploaded codes, or total_quantity minus how many reviews
+-- have already picked it for one that has none. Sold-out benefits
+-- (remaining = 0) are left out entirely rather than shown disabled. Defined
+-- here rather than alongside benefits/benefit_codes above because it reads
+-- booking_reviews.benefit_id — a plain SQL function's body is validated
+-- against the catalog at creation time, so that column has to exist first.
+create or replace function list_available_benefits()
+returns table (
+  id uuid, name text, brand text, category text, description text, expires_at timestamptz, remaining integer
+)
+language sql
+security definer set search_path = public
+stable
+as $$
+  with computed as (
+    select
+      b.id, b.name, b.brand, b.category, b.description, b.expires_at,
+      case
+        when exists (select 1 from benefit_codes bc where bc.benefit_id = b.id)
+          then (select count(*)::int from benefit_codes bc where bc.benefit_id = b.id and bc.status = 'available')
+        when b.total_quantity is not null
+          then greatest(0, b.total_quantity - (select count(*)::int from booking_reviews br where br.benefit_id = b.id))
+        else null
+      end as remaining
+    from benefits b
+    where b.is_active and (b.expires_at is null or b.expires_at > now())
+  )
+  select * from computed where remaining is null or remaining > 0 order by id;
+$$;
+
+grant execute on function list_available_benefits() to anon, authenticated;
+
+-- RLS is row-level only — without this, a customer's own insert (allowed
+-- by "booking_reviews owner insert" below, since they do legitimately own
+-- their review row) could still set arbitrary values on the admin-only
+-- benefit_* columns by crafting the request directly, bypassing the UI
+-- entirely. There's no update policy for a customer at all (a submitted
+-- review is final), so in practice only an admin/select-booking-benefit API
+-- route using the service_role key can ever reach the UPDATE branch here —
+-- this trigger is the belt-and-suspenders backstop either way: INSERT
+-- always resets to the defaults; UPDATE preserves whatever the row already
+-- had unless the request really is service_role.
+create or replace function protect_review_benefit_fields()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.role() <> 'service_role' then
+    if TG_OP = 'INSERT' then
+      new.benefit_id := null;
+      new.benefit_code_id := null;
+      new.benefit_selected_at := null;
+      new.benefit_status := 'pending';
+      new.benefit_type := null;
+      new.benefit_reference := null;
+      new.benefit_issued_at := null;
+    else
+      new.benefit_id := old.benefit_id;
+      new.benefit_code_id := old.benefit_code_id;
+      new.benefit_selected_at := old.benefit_selected_at;
+      new.benefit_status := old.benefit_status;
+      new.benefit_type := old.benefit_type;
+      new.benefit_reference := old.benefit_reference;
+      new.benefit_issued_at := old.benefit_issued_at;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_review_benefit_fields_trigger on booking_reviews;
+create trigger protect_review_benefit_fields_trigger
+  before insert or update on booking_reviews
+  for each row execute function protect_review_benefit_fields();
 
 -- 10% advance + 50% midway + remaining balance payments.
 create table if not exists payments (
@@ -987,6 +1190,8 @@ alter table booking_document_versions enable row level security;
 alter table booking_charges enable row level security;
 alter table booking_inspections enable row level security;
 alter table booking_reviews enable row level security;
+alter table benefits enable row level security;
+alter table benefit_codes enable row level security;
 alter table payments enable row level security;
 alter table booking_status_history enable row level security;
 alter table quote_requests enable row level security;
@@ -1194,6 +1399,26 @@ create policy "booking_reviews owner insert" on booking_reviews for insert with 
 -- view the moment booking.review exists). Without this, an update would
 -- just be silently rejected by RLS rather than actually changing anything.
 drop policy if exists "booking_reviews owner update" on booking_reviews;
+
+-- benefits: the catalog is readable by anyone once active, same as cities/
+-- vehicle_types (public reference data for pricing) — "Choose Your
+-- Benefit" needs to list what's on offer before the customer has signed
+-- in to anything booking-specific. Inactive rows (and all codes, via
+-- benefit_codes having no policy at all below) stay admin-only, reached
+-- only through the service_role-backed /api/benefits and admin routes.
+drop policy if exists "benefits public read" on benefits;
+create policy "benefits public read" on benefits for select using (is_active);
+-- No insert/update/delete policy — the admin Benefits page manages this
+-- exclusively through a service_role API route (see carcoolie-admin's
+-- /api/benefits), same reasoning as every other admin-managed table here.
+
+-- benefit_codes: deliberately has NO policy at all, for any operation —
+-- RLS defaults to deny, so even an authenticated customer can never read
+-- another customer's (or their own) code directly from this table. The
+-- only way a code ever reaches a customer is via claim_benefit_code()
+-- (service_role only, see its own grant/revoke) echoing it back through
+-- /api/select-booking-benefit's response, denormalized onto their own
+-- booking_reviews.benefit_reference.
 
 drop policy if exists "payments via booking" on payments;
 create policy "payments via booking" on payments for all using (

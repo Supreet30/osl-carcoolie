@@ -66,7 +66,7 @@ const CATEGORIES = [
     label: "Visuals",
     singular: "Visual",
     caption: "Photos and videos from real vehicle transport operations across India.",
-    image: "/res-visuals.jfif",
+    image: "/res-visuals.jpg",
     items: [
       {
         title: "Behind the Scenes: Loading an Enclosed Carrier",
@@ -122,7 +122,7 @@ export default function ExploreResources() {
       </div>
 
       <div className="mx-auto max-w-6xl px-6 py-14 sm:py-16">
-        <div className="grid gap-10 lg:grid-cols-[260px_1fr_1fr] lg:gap-10">
+        <div className="grid gap-10 rounded-4xl bg-slate-50 p-6 ring-1 ring-slate-100 sm:p-10 lg:grid-cols-[260px_1fr_1fr] lg:gap-10">
           <div className="flex gap-4 overflow-x-auto lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-8">
             {CATEGORIES.map((category) => {
               const isActive = category.id === activeId;
@@ -173,14 +173,23 @@ export default function ExploreResources() {
             </a>
           </div>
 
-          <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden rounded-2xl shadow-xl">
-            <Image
-              src="/res-blog-placeholder.jpg"
-              alt="Resource content preview"
-              fill
-              sizes="(max-width: 1023px) 100vw, 30vw"
-              className="object-cover"
+          <div className="relative mx-auto w-full max-w-sm">
+            <div
+              aria-hidden
+              className="absolute -inset-3 -z-10 rounded-[28px] bg-linear-to-br from-red-500 to-red-700 opacity-90"
             />
+            <div className="relative aspect-3/4 w-full overflow-hidden rounded-2xl shadow-2xl ring-4 ring-white">
+              <Image
+                src="/res-blog-placeholder.jpg"
+                alt="Resource content preview"
+                fill
+                sizes="(max-width: 1023px) 100vw, 30vw"
+                className="object-cover"
+              />
+            </div>
+            <span className="absolute -top-3 -right-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#0b1e42] text-[10px] font-extrabold tracking-wide text-white uppercase shadow-lg">
+              New
+            </span>
           </div>
         </div>
       </div>

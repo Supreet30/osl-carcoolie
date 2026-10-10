@@ -134,7 +134,7 @@ export const MORE_CASE_STUDIES = [
     title: "Leading NBFC Company",
     description: "Secure vehicle logistics for field teams across 500+ locations.",
     icon: Landmark,
-    image: "/servicehero.png",
+    image: "/finalimages/company-numbers/service-locs.JPG",
     stats: [
       { value: "500+", label: "Locations Served", icon: MapPin },
       { value: "0", label: "Security Incidents", icon: ShieldCheck },
@@ -165,7 +165,7 @@ export const MORE_CASE_STUDIES = [
     title: "Auto Dealer Network",
     description: "Nationwide vehicle relocation for a growing dealership network.",
     icon: Car,
-    image: "/contact-hero-truck.png",
+    image: "/finalimages/homepage/ourservices2.JPG",
     stats: [
       { value: "28%", label: "Faster Onboarding", icon: TrendingUp },
       { value: "12+", label: "New Dealerships", icon: MapPin },
@@ -197,7 +197,7 @@ export const MORE_CASE_STUDIES = [
     title: "Healthcare Group",
     description: "Transporting emergency and support vehicles across multiple states.",
     icon: HeartPulse,
-    image: "/core.jpg",
+    image: "/finalimages/company-numbers/cars-delivery.png",
     stats: [
       { value: "99.5%", label: "On-Time Rate", icon: Clock },
       { value: "8", label: "States Covered", icon: MapPin },
@@ -229,7 +229,7 @@ export const MORE_CASE_STUDIES = [
     title: "Retail Chain",
     description: "Multi-city vehicle movement for store expansions and supply chain.",
     icon: ShoppingCart,
-    image: "/servicehero.png",
+    image: "/finalimages/company-numbers/fleet.JPG",
     stats: [
       { value: "22%", label: "Faster Store Launches", icon: TrendingUp },
       { value: "18+", label: "Cities Covered", icon: MapPin },
@@ -261,7 +261,7 @@ export const MORE_CASE_STUDIES = [
     title: "Online Marketplace",
     description: "Last-mile delivery fleet relocation across metro hubs.",
     icon: PackageSearch,
-    image: "/contact-hero-truck.png",
+    image: "/finalimages/homepage/aboutus2.JPG",
     stats: [
       { value: "30%", label: "Faster Hub Ramp-Up", icon: TrendingUp },
       { value: "6", label: "Metro Hubs", icon: MapPin },
@@ -293,7 +293,7 @@ export const MORE_CASE_STUDIES = [
     title: "Auto Parts Manufacturer",
     description: "Just-in-time component and vehicle transfers between plants.",
     icon: Factory,
-    image: "/core.jpg",
+    image: "/finalimages/company-numbers/happy-cust.JPG",
     stats: [
       { value: "97%", label: "JIT Accuracy", icon: ShieldCheck },
       { value: "5", label: "Plants Connected", icon: MapPin },

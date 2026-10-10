@@ -391,7 +391,22 @@ function rowToBooking(
 ) {
   const chargesTotal = charges.reduce((sum, c) => sum + Number(c.amount), 0);
   return {
-    review: review ? { rating: review.rating, comment: review.comment, updatedAt: review.updated_at } : null,
+    review: review
+      ? {
+          rating: review.rating,
+          selectedComment: review.selected_comment,
+          comment: review.comment,
+          updatedAt: review.updated_at,
+          // null/null means "Choose Your Benefit" hasn't been decided yet
+          // (shown by ReviewCard's BenefitChooser); benefitId stays null
+          // even once decided if the customer picked "No thanks".
+          benefitSelectedAt: review.benefit_selected_at,
+          benefitId: review.benefit_id,
+          benefitStatus: review.benefit_status,
+          benefitType: review.benefit_type,
+          benefitReference: review.benefit_reference,
+        }
+      : null,
     id: row.booking_code,
     status: row.status,
     createdAt: row.created_at,
@@ -969,7 +984,7 @@ export async function getChargeReceiptUrl(path) {
 // but this is only ever called once per booking in practice — the UI
 // (ReviewCard in MyBookingsClient.js) hides the form once booking.review
 // exists, and the table has no update RLS policy, so a review is final.
-export async function submitBookingReview(bookingCode, { rating, comment }) {
+export async function submitBookingReview(bookingCode, { rating, selectedComment, comment }) {
   if (!isSupabaseConfigured) throw new Error("Reviews aren't available yet — try again shortly.");
 
   const { data: booking, error: bookingError } = await supabase
@@ -982,11 +997,80 @@ export async function submitBookingReview(bookingCode, { rating, comment }) {
   const { data, error } = await supabase
     .from("booking_reviews")
     .upsert(
-      { booking_id: booking.id, rating, comment: comment?.trim() || null, updated_at: new Date().toISOString() },
+      {
+        booking_id: booking.id,
+        rating,
+        selected_comment: selectedComment?.trim() || null,
+        comment: comment?.trim() || null,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "booking_id" }
     )
     .select()
     .single();
   if (error) throw error;
-  return { rating: data.rating, comment: data.comment, updatedAt: data.updated_at };
+  return {
+    rating: data.rating,
+    selectedComment: data.selected_comment,
+    comment: data.comment,
+    updatedAt: data.updated_at,
+    benefitSelectedAt: data.benefit_selected_at,
+    benefitId: data.benefit_id,
+    benefitStatus: data.benefit_status,
+    benefitType: data.benefit_type,
+    benefitReference: data.benefit_reference,
+  };
+}
+
+// Lists what "Choose Your Benefit" can offer right now (active, unexpired,
+// still in stock) — see list_available_benefits() in supabase-schema.sql
+// for how "remaining" is computed and why this can be called directly
+// (security definer; benefit_codes itself has no RLS policy a plain select
+// could use).
+export async function listAvailableBenefits() {
+  if (!isSupabaseConfigured) return [];
+  const { data, error } = await supabase.rpc("list_available_benefits");
+  if (error) throw error;
+  return data.map((b) => ({
+    id: b.id,
+    name: b.name,
+    brand: b.brand,
+    category: b.category,
+    description: b.description,
+    expiresAt: b.expires_at,
+    remaining: b.remaining,
+  }));
+}
+
+// Records the customer's "Choose Your Benefit" pick (or their "No thanks",
+// when benefitId is null) — goes through /api/select-booking-benefit
+// rather than a direct Supabase call, since claiming a code and writing
+// booking_reviews' benefit_* columns both need the service_role key (see
+// that route's own comment). The access token (if signed in) lets the
+// route redo the ownership check RLS would otherwise do for it.
+export async function selectBookingBenefit(bookingCode, benefitId) {
+  if (!isSupabaseConfigured) throw new Error("Benefits aren't available yet — try again shortly.");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token ?? null;
+
+  const res = await fetch("/api/select-booking-benefit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookingCode, benefitId, accessToken }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Couldn't record your choice — try again.");
+
+  return {
+    rating: body.data.rating,
+    selectedComment: body.data.selected_comment,
+    comment: body.data.comment,
+    updatedAt: body.data.updated_at,
+    benefitSelectedAt: body.data.benefit_selected_at,
+    benefitId: body.data.benefit_id,
+    benefitStatus: body.data.benefit_status,
+    benefitType: body.data.benefit_type,
+    benefitReference: body.data.benefit_reference,
+  };
 }

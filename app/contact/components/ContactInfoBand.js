@@ -1,4 +1,14 @@
-import { Clock3, Mail, MapPin, Phone } from "lucide-react";
+import { Clock3, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+
+// Same number/greeting pattern as the site-wide floating button (see
+// components/Whatsapp.jsx) — kept separate since that one opens from a
+// fixed corner position everywhere, while this is a clickable item inline
+// in the Contact Information band for customers who'd rather see it listed
+// alongside phone/email than hunt for the floating icon.
+const WHATSAPP_PHONE = "911234567890";
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(
+  "Hi! I have a question about vehicle transport."
+)}`;
 
 const CONTACT_ITEMS = [
   {
@@ -39,6 +49,16 @@ const CONTACT_ITEMS = [
       { text: "10:00 AM to 6:30 PM", bold: true },
     ],
   },
+  {
+    icon: MessageCircle,
+    title: "Chat On",
+    highlight: "WhatsApp",
+    href: WHATSAPP_URL,
+    lines: [
+      { text: "Quick questions? Message us", bold: true },
+      { text: "Usually replies within minutes during working hours." },
+    ],
+  },
 ];
 
 export default function ContactInfoBand() {
@@ -55,15 +75,25 @@ export default function ContactInfoBand() {
           Contact <span className="text-red-600">Information</span>
         </h2>
 
-        <div className="relative mt-16 grid grid-cols-2 gap-y-14 sm:grid-cols-4 lg:gap-y-0">
+        <div className="relative mt-16 grid grid-cols-2 gap-y-14 sm:grid-cols-5 lg:gap-y-0">
           <div
             aria-hidden
-            className="pointer-events-none absolute left-[12.5%] right-[12.5%] top-18 hidden border-t-4 border-dashed border-red-500 lg:block"
+            className="pointer-events-none absolute left-[10%] right-[10%] top-18 hidden border-t-4 border-dashed border-red-500 lg:block"
           />
 
-          {CONTACT_ITEMS.map(({ icon: Icon, title, highlight, lines }) => (
-            <div key={highlight} className="relative z-10 flex flex-col items-center px-2 text-center">
-              <span className="flex h-28 w-28 items-center justify-center rounded-full border-8 border-red-500 bg-slate-100 text-red-600 sm:h-36 sm:w-36">
+          {CONTACT_ITEMS.map(({ icon: Icon, title, highlight, href, lines }) => {
+            const Wrapper = href ? "a" : "div";
+            return (
+            <Wrapper
+              key={highlight}
+              {...(href ? { href, target: "_blank", rel: "noopener noreferrer" } : {})}
+              className={`relative z-10 flex flex-col items-center px-2 text-center ${href ? "group" : ""}`}
+            >
+              <span
+                className={`flex h-28 w-28 items-center justify-center rounded-full border-8 border-red-500 bg-slate-100 text-red-600 sm:h-36 sm:w-36 ${
+                  href ? "transition-colors group-hover:bg-red-600 group-hover:text-white" : ""
+                }`}
+              >
                 <Icon className="h-16 w-16 sm:h-20 sm:w-20" strokeWidth={2} />
               </span>
 
@@ -86,8 +116,9 @@ export default function ContactInfoBand() {
                   </p>
                 ))}
               </div>
-            </div>
-          ))}
+            </Wrapper>
+            );
+          })}
         </div>
       </div>
     </section>

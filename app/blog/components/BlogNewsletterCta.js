@@ -15,11 +15,20 @@ export default function BlogNewsletterCta() {
 
   return (
     <section className="bg-white px-6 py-16 sm:py-20">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[24px] bg-[#0b1220] px-6 py-6 shadow-2xl sm:px-10 sm:py-12">
-        <div className="flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
+      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[24px] bg-linear-to-br from-[#0b1220] via-[#0b1220] to-[#2a0a0a] px-6 py-6 shadow-2xl ring-1 ring-red-600/20 sm:px-10 sm:py-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-50 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-size-[32px_32px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-red-600/30 blur-3xl"
+        />
+
+        <div className="relative flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
           <div className="flex items-center gap-4 self-start lg:self-center">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/20 text-white">
-              <Mail className="h-10 w-10" strokeWidth={2} />
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-600/30">
+              <Mail className="h-9 w-9" strokeWidth={2} />
             </span>
             <div>
               <p className="text-3xl font-semibold text-white">
