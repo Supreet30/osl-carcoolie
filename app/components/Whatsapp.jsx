@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 // Site-wide WhatsApp CTA — rendered inside FloatingActions.jsx, which owns
 // the fixed bottom-right positioning for this and GetQuoteButton together.
 export default function WhatsAppButton() {
-  const phone = "911234567890";
+  const phone = "918447995566";
   const message = encodeURIComponent(
     "Hi! I'm looking for more information about your services."
   );

@@ -45,8 +45,8 @@ export default function ContactFormSection() {
             className="relative min-h-[420px] overflow-hidden rounded-3xl bg-slate-100 shadow-xl ring-1 ring-slate-100 lg:min-h-full"
           >
             <iframe
-              title="Car Coolie location in Gurugram"
-              src="https://www.google.com/maps?q=Car+Coolie+Logistics%2C+B-124+Industrial+Area%2C+Block+B%2C+Prem+Puri%2C+Phase+2%2C+Gurugram%2C+Haryana+122011&z=14&output=embed"
+              title="Car Coolie location in Kolkata"
+              src="https://www.google.com/maps?q=Marble+Arch%2C+236B+AJC+Bose+Road%2C+Kolkata+700020&z=15&output=embed"
               className="h-full min-h-[420px] w-full border-0"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
@@ -55,12 +55,10 @@ export default function ContactFormSection() {
             <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-3 rounded-2xl bg-white/95 px-5 py-4 shadow-lg backdrop-blur-sm">
               <div>
                 <p className="text-xs font-bold text-red-600">Car Coolie Logistics Pvt Ltd</p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  B-124 Industrial Area, Block B, Prem Puri, Phase 2, Gurugram, Haryana 122011
-                </p>
+                <p className="mt-0.5 text-xs text-slate-500">Marble Arch, 236B AJC Bose Road, Kolkata 700020</p>
               </div>
               <a
-                href="https://www.google.com/maps/dir/?api=1&destination=Car+Coolie+Logistics%2C+B-124+Industrial+Area%2C+Block+B%2C+Prem+Puri%2C+Phase+2%2C+Gurugram%2C+Haryana+122011"
+                href="https://www.google.com/maps/dir/?api=1&destination=Marble+Arch%2C+236B+AJC+Bose+Road%2C+Kolkata+700020"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white whitespace-nowrap transition-colors hover:bg-red-700"

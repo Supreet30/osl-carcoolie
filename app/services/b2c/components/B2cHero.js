@@ -307,11 +307,17 @@ export default function B2cHero() {
     // (not_matched, with a district/state) is not the same problem as a
     // PIN that's empty or still unresolved — the generic "enter a valid
     // PIN code" below was misleadingly implying the PIN itself was wrong
-    // even when it had been read correctly, just not covered.
+    // even when it had been read correctly, just not covered. Worded
+    // differently from the inline PincodeStatus note right above/below the
+    // field (which already shows notServicedMessage) rather than repeating
+    // it verbatim — this one's job is just to point there and scroll it
+    // into view via cityErrorRef.
     const unserviced = pickupPinStatus.status === "not_matched" ? pickupPinStatus : destinationPinStatus;
     if (!fromCity || !toCity) {
       setCityError(
-        unserviced.status === "not_matched" ? notServicedMessage(unserviced) : "Enter a valid pickup and destination PIN code."
+        unserviced.status === "not_matched"
+          ? "That PIN code isn't serviced yet — see the note above."
+          : "Enter a valid pickup and destination PIN code."
       );
       return;
     }

@@ -9,6 +9,182 @@ const spec = {
   },
   servers: [{ url: "/" }],
   paths: {
+    "/api/auth/signup": {
+      post: {
+        summary:
+          "Creates an account — the same supabase.auth.signUp() the website's own sign-up modal calls directly from the browser, wrapped as a REST call for a client (e.g. a native app) that doesn't embed the Supabase SDK. Writes into the same Supabase project the website uses, so the returned user.id is the same id the website would show for that person — one shared identity, not a separate per-surface account.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  password: { type: "string", minLength: 6 },
+                  fullName: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description:
+              "Account created. session is null until the confirmation email is clicked — same as the website's own sign-up flow.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    user: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        email: { type: "string" },
+                        fullName: { type: "string", nullable: true },
+                      },
+                    },
+                    session: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        accessToken: { type: "string" },
+                        refreshToken: { type: "string" },
+                        expiresAt: { type: "integer" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: "Missing email/password, or Supabase rejected the signup (e.g. email already registered)",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+        },
+      },
+    },
+    "/api/auth/login": {
+      post: {
+        summary:
+          "Signs in with email + password — the same supabase.auth.signInWithPassword() the website's sign-in form calls directly. Returns the same user.id the website's own session carries for that person.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  password: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Signed in",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    user: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        email: { type: "string" },
+                        fullName: { type: "string", nullable: true },
+                      },
+                    },
+                    session: {
+                      type: "object",
+                      properties: {
+                        accessToken: { type: "string" },
+                        refreshToken: { type: "string" },
+                        expiresAt: { type: "integer" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: "Missing email/password",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+          401: {
+            description: "Wrong email/password, or the account hasn't confirmed its email yet",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+        },
+      },
+    },
+    "/api/auth/google": {
+      post: {
+        summary:
+          "Google sign-in for a client that can't do a browser redirect (e.g. a native app) — exchanges an ID token obtained from Google's own native Sign-In SDK on the device for a Supabase session, via supabase.auth.signInWithIdToken(). The website's own Google button uses a popup-redirect flow instead (see AuthModal.js); this is the equivalent for a client with no browser to redirect. Requires the Google provider to be enabled in the Supabase dashboard with the app's OAuth client ID allow-listed.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["idToken"],
+                properties: {
+                  idToken: { type: "string", description: "The ID token Google's native Sign-In SDK returned on the device." },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Signed in",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    user: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        email: { type: "string" },
+                        fullName: { type: "string", nullable: true },
+                      },
+                    },
+                    session: {
+                      type: "object",
+                      properties: {
+                        accessToken: { type: "string" },
+                        refreshToken: { type: "string" },
+                        expiresAt: { type: "integer" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: "Missing idToken",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+          401: {
+            description: "Google rejected the token, or the Google provider isn't configured in Supabase",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+        },
+      },
+    },
     "/api/catalog": {
       get: {
         summary: "Read-only bootstrap data for building a quote — cities, vehicle types, vehicle models, add-on services, and the current GST rate.",

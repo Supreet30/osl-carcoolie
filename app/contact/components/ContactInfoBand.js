@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Clock3, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+import { Clock3, Mail, MapPin, Phone } from "lucide-react";
 
 const container = {
   hidden: {},
@@ -13,15 +13,27 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
 };
 
-// Same number/greeting pattern as the site-wide floating button (see
-// components/Whatsapp.jsx) — kept separate since that one opens from a
-// fixed corner position everywhere, while this is a clickable item inline
-// in the Contact Information band for customers who'd rather see it listed
-// alongside phone/email than hunt for the floating icon.
-const WHATSAPP_PHONE = "911234567890";
-const WHATSAPP_URL = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(
-  "Hi! I have a question about vehicle transport."
-)}`;
+// lucide-react dropped brand/social glyphs over trademark concerns (see
+// AuthModal.js's GoogleIcon) — drawn as a plain outline SVG instead, same
+// convention.
+function InstagramIcon({ className, strokeWidth = 2 }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="2" y="2" width="20" height="20" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37Z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </svg>
+  );
+}
 
 const CONTACT_ITEMS = [
   {
@@ -30,17 +42,16 @@ const CONTACT_ITEMS = [
     highlight: "Address",
     lines: [
       { text: "Car Coolie Logistics Pvt Ltd", bold: true },
-      {
-        text: "B-124 Industrial Area, Block B, Prem Puri, Phase 2, Gurugram, Haryana 122011, India.",
-      },
+      { text: "Marble Arch, 236B AJC Bose Road, Kolkata 700020, India." },
     ],
   },
   {
     icon: Phone,
     title: "Contact",
     highlight: "No.",
+    href: "tel:+918447990088",
     lines: [
-      { text: "+1234567890", bold: true },
+      { text: "+91 84479 90088", bold: true },
       { text: "Available Mon to Sat for vehicle transport queries and bookings." },
     ],
   },
@@ -48,8 +59,9 @@ const CONTACT_ITEMS = [
     icon: Mail,
     title: "Email",
     highlight: "Us",
+    href: "mailto:carcooliesupport@oslgroup.co.in",
     lines: [
-      { text: "support@carcoolie.com", bold: true },
+      { text: "carcooliesupport@oslgroup.co.in", bold: true },
       { text: "Our team responds to every vehicle transport enquiry as soon as possible." },
     ],
   },
@@ -63,13 +75,13 @@ const CONTACT_ITEMS = [
     ],
   },
   {
-    icon: MessageCircle,
-    title: "Chat On",
-    highlight: "WhatsApp",
-    href: WHATSAPP_URL,
+    icon: InstagramIcon,
+    title: "Follow On",
+    highlight: "Instagram",
+    href: "https://instagram.com/carcooliedotcom",
     lines: [
-      { text: "Quick questions? Message us", bold: true },
-      { text: "Usually replies within minutes during working hours." },
+      { text: "@carcooliedotcom", bold: true },
+      { text: "See our latest drops, deliveries and behind-the-scenes." },
     ],
   },
 ];
@@ -108,12 +120,16 @@ export default function ContactInfoBand() {
 
           {CONTACT_ITEMS.map(({ icon: Icon, title, highlight, href, lines }) => {
             const MotionWrapper = href ? motion.a : motion.div;
+            // tel:/mailto: open the device's own dialer/mail app in place —
+            // target="_blank" only makes sense for a real external page
+            // (WhatsApp, Instagram).
+            const isExternal = href?.startsWith("http");
             return (
             <MotionWrapper
               key={highlight}
               variants={fadeUp}
-              {...(href ? { href, target: "_blank", rel: "noopener noreferrer" } : {})}
-              className={`relative z-10 flex flex-col items-center px-2 text-center ${href ? "group" : ""}`}
+              {...(href ? { href, ...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {}) } : {})}
+              className={`relative z-10 flex min-w-0 flex-col items-center px-2 text-center ${href ? "group" : ""}`}
             >
               <span
                 className={`flex h-28 w-28 items-center justify-center rounded-full border-8 border-red-500 bg-slate-100 text-red-600 sm:h-36 sm:w-36 ${
@@ -128,14 +144,14 @@ export default function ContactInfoBand() {
               </h3>
               <span className="mt-2 h-0.5 w-8 bg-red-500" />
 
-              <div className="mt-4 space-y-1">
+              <div className="mt-4 w-full space-y-1">
                 {lines.map((line) => (
                   <p
                     key={line.text}
                     className={
                       line.bold
-                        ? "text-lg font-bold text-[#0b1e42]"
-                        : "text-sm leading-relaxed text-slate-500"
+                        ? "text-base font-bold wrap-break-word text-[#0b1e42] sm:text-lg"
+                        : "text-sm leading-relaxed wrap-break-word text-slate-500"
                     }
                   >
                     {line.text}
