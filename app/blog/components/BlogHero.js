@@ -1,38 +1,70 @@
+"use client";
+
 import Image from "next/image";
+import { motion } from "motion/react";
 import { FileText, ShieldCheck, TrendingUp } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+};
 
 export default function BlogHero() {
   return (
     <>
       <Navbar />
       <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#0b1220] px-6 pt-32 pb-16 sm:pt-40 sm:pb-24">
-      <div aria-hidden className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]">
+      <motion.div
+        initial={{ opacity: 0, scale: 1.05 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true }}
+        transition={{ duration: 1.1, ease: "easeOut" }}
+        aria-hidden
+        className="absolute inset-y-0 right-0 -z-10 hidden w-[58%] sm:block lg:w-[52%]"
+      >
         <Image src="/finalimages/blog/hero.jpeg" alt="" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-linear-to-r from-[#0b1220] via-[#0b1220]/20 to-transparent" />
-      </div>
+      </motion.div>
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center">
-        <div className="max-w-xl">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-red-600">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          variants={container}
+          className="max-w-xl"
+        >
+          <motion.span
+            variants={fadeUp}
+            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-red-600"
+          >
             <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
             Our Official Blog
-          </span>
+          </motion.span>
 
-          <h1 className="mt-6 text-6xl font-extrabold leading-[1.15] tracking-tight text-white">
+          <motion.h1
+            variants={fadeUp}
+            className="mt-6 text-6xl font-extrabold leading-[1.15] tracking-tight text-white"
+          >
             Insights, Updates
             <span className="block">
               <span className="text-white">&amp; Stories </span>
               <span className="text-red-600">From The Road</span>
             </span>
-          </h1>
+          </motion.h1>
 
-          <p className="mt-6 max-w-md text-base leading-relaxed text-slate-300">
+          <motion.p variants={fadeUp} className="mt-6 max-w-md text-base leading-relaxed text-slate-300">
             Stay informed with expert car transport tips, vehicle logistics insights and the latest
             updates from Car Coolie.
-          </p>
+          </motion.p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
             <a
               href="#latest-blogs"
               className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[#0b1e42] transition-colors hover:bg-slate-100"
@@ -47,9 +79,12 @@ export default function BlogHero() {
               <TrendingUp className="h-4 w-4" />
               Market Insights
             </a>
-          </div>
+          </motion.div>
 
-          <div className="mt-10 inline-flex w-fit items-center gap-3 rounded-full bg-white/10 py-2 pr-5 pl-2 ring-1 ring-white/15 backdrop-blur-sm">
+          <motion.div
+            variants={fadeUp}
+            className="mt-10 inline-flex w-fit items-center gap-3 rounded-full bg-white/10 py-2 pr-5 pl-2 ring-1 ring-white/15 backdrop-blur-sm"
+          >
             <div className="flex -space-x-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-600 text-xs font-bold text-white ring-2 ring-[#0b1220]">
                 JD
@@ -64,11 +99,17 @@ export default function BlogHero() {
             <p className="text-sm font-semibold text-slate-200">
               Joined by <span className="text-white">5,000+</span> industry professionals
             </p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
 
-      <div className="absolute right-[6%] bottom-16 hidden items-center gap-3 rounded-2xl bg-black/50 px-5 py-4 backdrop-blur-sm sm:flex sm:right-[10%] lg:right-[18%]">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6, ease: "easeOut", delay: 0.7 }}
+        className="absolute right-[6%] bottom-16 hidden items-center gap-3 rounded-2xl bg-black/50 px-5 py-4 backdrop-blur-sm sm:flex sm:right-[10%] lg:right-[18%]"
+      >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-600 text-white">
           <ShieldCheck className="h-5 w-5" />
         </span>
@@ -76,7 +117,7 @@ export default function BlogHero() {
           <p className="text-sm font-bold text-white">Delivering Trust</p>
           <p className="text-xs text-slate-300">Across Every Mile</p>
         </div>
-      </div>
+      </motion.div>
       </section>
     </>
   );

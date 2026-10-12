@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
 
@@ -13,7 +16,13 @@ export default function ContactHero() {
       />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-        <div className="max-w-lg">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          viewport={{ once: true }}
+          className="max-w-lg"
+        >
           <h1 className="text-6xl font-extrabold leading-[1.2] tracking-tight text-[#0b1e42]">
             Talk To India&apos;s <span className="block text-red-600">Vehicle Transport Experts</span>
           </h1>
@@ -40,9 +49,15 @@ export default function ContactHero() {
           <p className="mt-4 text-xs font-semibold text-slate-400">
             No sign-up needed — get a response within 1 hour on working days.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+          viewport={{ once: true }}
+          className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0"
+        >
           <div className="relative aspect-[16/10] overflow-hidden rounded-[22px] shadow-xl">
             <Image
               src="/finalimages/contact/hero.JPG"
@@ -53,11 +68,17 @@ export default function ContactHero() {
               className="object-cover"
             />
           </div>
-          <div className="absolute -bottom-2 left-0 rounded-xl bg-[#0b1e42] px-5 py-4 text-white shadow-lg sm:-left-9">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.5 }}
+            viewport={{ once: true }}
+            className="absolute -bottom-2 left-0 rounded-xl bg-[#0b1e42] px-5 py-4 text-white shadow-lg sm:-left-9"
+          >
             <p className="text-2xl font-extrabold leading-none">&lt;0.01%</p>
             <p className="mt-1 text-[9px] font-semibold tracking-[0.14em] text-slate-300">DAMAGE RATIO</p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
       </section>
     </>

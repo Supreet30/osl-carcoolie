@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { motion } from "motion/react";
 import Navbar from "../../landing-page/components/Navbar";
 
 export default function ResourcesHero() {
@@ -18,7 +21,13 @@ export default function ResourcesHero() {
       </div>
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-        <div className="max-w-lg">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          viewport={{ once: true }}
+          className="max-w-lg"
+        >
           <h1 className="text-4xl font-extrabold leading-[1.2] tracking-tight sm:text-5xl">
             <span className="block text-[#0b1e42]">Everything You Need To Know</span>
             <span className="block text-red-600">About Vehicle Transport</span>
@@ -41,9 +50,15 @@ export default function ResourcesHero() {
               Talk to Expert
             </a>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+          viewport={{ once: true }}
+          className="relative mx-auto w-full max-w-2xl pb-6 lg:pb-0"
+        >
           <div className="relative aspect-[16/10] overflow-hidden rounded-[22px] shadow-xl">
             <Image
               src="/finalimages/resources/hero.JPG"
@@ -53,7 +68,7 @@ export default function ResourcesHero() {
               className="object-cover"
             />
           </div>
-        </div>
+        </motion.div>
       </div>
       </section>
     </>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "motion/react";
 import { Mail, Send } from "lucide-react";
 
 export default function BlogNewsletterCta() {
@@ -15,7 +16,13 @@ export default function BlogNewsletterCta() {
 
   return (
     <section className="bg-white px-6 py-16 sm:py-20">
-      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[24px] bg-linear-to-br from-[#0b1220] via-[#0b1220] to-[#2a0a0a] px-6 py-6 shadow-2xl ring-1 ring-red-600/20 sm:px-10 sm:py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        viewport={{ once: true }}
+        className="relative mx-auto max-w-6xl overflow-hidden rounded-[24px] bg-linear-to-br from-[#0b1220] via-[#0b1220] to-[#2a0a0a] px-6 py-6 shadow-2xl ring-1 ring-red-600/20 sm:px-10 sm:py-12"
+      >
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-50 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-size-[32px_32px]"
@@ -71,7 +78,7 @@ export default function BlogNewsletterCta() {
             />
           </div>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

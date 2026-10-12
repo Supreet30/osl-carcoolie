@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "motion/react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function NewsletterCTA() {
@@ -15,7 +16,13 @@ export default function NewsletterCTA() {
 
   return (
     <section className="relative bg-white px-6 py-16 sm:py-20">
-      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-[#0b1e42] px-8 py-12 shadow-2xl sm:px-12 sm:py-14">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        viewport={{ once: true }}
+        className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-[#0b1e42] px-8 py-12 shadow-2xl sm:px-12 sm:py-14"
+      >
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_85%_0%,rgba(239,68,68,0.15),transparent_55%)]"
@@ -74,7 +81,7 @@ export default function NewsletterCTA() {
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

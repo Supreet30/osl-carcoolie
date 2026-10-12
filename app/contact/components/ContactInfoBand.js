@@ -1,4 +1,17 @@
+"use client";
+
+import { motion } from "motion/react";
 import { Clock3, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+};
 
 // Same number/greeting pattern as the site-wide floating button (see
 // components/Whatsapp.jsx) — kept separate since that one opens from a
@@ -69,23 +82,36 @@ export default function ContactInfoBand() {
         className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#fee2e2_1px,transparent_1px),linear-gradient(90deg,#fee2e2_1px,transparent_1px)] bg-size-[40px_40px]"
       />
 
-      <div className="relative mx-auto max-w-6xl">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        viewport={{ once: true }}
+        className="relative mx-auto max-w-6xl"
+      >
         <p className="text-sm font-semibold text-red-600">Let&apos;s Connect With Us</p>
         <h2 className="mt-2 text-4xl font-extrabold text-[#0b1e42] sm:text-5xl">
           Contact <span className="text-red-600">Information</span>
         </h2>
 
-        <div className="relative mt-16 grid grid-cols-2 gap-y-14 sm:grid-cols-5 lg:gap-y-0">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={container}
+          className="relative mt-16 grid grid-cols-2 gap-y-14 sm:grid-cols-5 lg:gap-y-0"
+        >
           <div
             aria-hidden
             className="pointer-events-none absolute left-[10%] right-[10%] top-18 hidden border-t-4 border-dashed border-red-500 lg:block"
           />
 
           {CONTACT_ITEMS.map(({ icon: Icon, title, highlight, href, lines }) => {
-            const Wrapper = href ? "a" : "div";
+            const MotionWrapper = href ? motion.a : motion.div;
             return (
-            <Wrapper
+            <MotionWrapper
               key={highlight}
+              variants={fadeUp}
               {...(href ? { href, target: "_blank", rel: "noopener noreferrer" } : {})}
               className={`relative z-10 flex flex-col items-center px-2 text-center ${href ? "group" : ""}`}
             >
@@ -116,11 +142,11 @@ export default function ContactInfoBand() {
                   </p>
                 ))}
               </div>
-            </Wrapper>
+            </MotionWrapper>
             );
           })}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </section>
   );
 }

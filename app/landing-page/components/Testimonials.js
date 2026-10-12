@@ -86,14 +86,20 @@ export default function Testimonials() {
       </p>
 
       <div className="relative mx-auto max-w-6xl px-6">
-        <div className="text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          viewport={{ once: true }}
+          className="text-center"
+        >
           <h2 className="text-6xl font-extrabold tracking-tight text-[#0b1e42] uppercase">
             Testi<span className="text-red-600">monials</span>
           </h2>
           <p className="mt-3 text-3xl font-bold text-[#0b1e42]">
             Trusted by <span className="text-red-600">Dealers, Manufacturers And Vehicle Owners</span>
           </p>
-        </div>
+        </motion.div>
 
         <div className="relative mt-14 h-64">
           {TESTIMONIALS.map((testimonial, i) => {

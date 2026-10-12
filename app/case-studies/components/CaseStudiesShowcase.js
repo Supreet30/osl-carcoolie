@@ -3,10 +3,21 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { motion } from "motion/react";
 import { ArrowRight, ChevronLeft, ChevronRight, Truck } from "lucide-react";
 import { FEATURED_STUDIES, MORE_CASE_STUDIES } from "../case-studies";
 
 const INDUSTRIES = ["All", "BFSI", "Automotive", "Healthcare", "Retail", "E-commerce", "Manufacturing"];
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+};
 
 const CASE_STUDIES_PER_PAGE = 3;
 
@@ -48,7 +59,13 @@ export default function CaseStudiesShowcase() {
   return (
     <>
       <section className="bg-white px-6 pt-20 sm:pt-24">
-        <div className="mx-auto max-w-6xl overflow-hidden rounded-[40px] bg-[#0b1e42] px-8 py-10 sm:px-12">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          viewport={{ once: true }}
+          className="mx-auto max-w-6xl overflow-hidden rounded-[40px] bg-[#0b1e42] px-8 py-10 sm:px-12"
+        >
           <p className="text-center text-xs font-bold tracking-[0.25em] text-white/50">
             EXPLORE BY INDUSTRY
           </p>
@@ -71,12 +88,18 @@ export default function CaseStudiesShowcase() {
               );
             })}
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {featured && (
         <section className="bg-white px-6 py-20 sm:py-24">
-          <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+            viewport={{ once: true, amount: 0.1 }}
+            className="mx-auto max-w-6xl"
+          >
             <div className="flex items-start justify-between gap-6">
               <div>
                 <p className="text-sm font-semibold text-red-600">Featured Case Study</p>
@@ -152,13 +175,19 @@ export default function CaseStudiesShowcase() {
                 </Link>
               </div>
             </div>
-          </div>
+          </motion.div>
         </section>
       )}
 
       <section className="bg-slate-50 px-6 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl">
-          <div className="flex items-center justify-center gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            viewport={{ once: true }}
+            className="flex items-center justify-center gap-4"
+          >
             <span className="h-px flex-1 bg-slate-200" />
             <div className="flex shrink-0 items-center gap-3">
               <Truck className="h-5 w-5 text-red-600" strokeWidth={2} />
@@ -166,14 +195,21 @@ export default function CaseStudiesShowcase() {
               <Truck className="h-5 w-5 text-red-600" strokeWidth={2} />
             </div>
             <span className="h-px flex-1 bg-slate-200" />
-          </div>
+          </motion.div>
 
           {visibleCaseStudies.length > 0 ? (
             <>
-              <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              <motion.div
+                initial="hidden"
+                whileInView="show"
+                viewport={{ once: true, amount: 0.1 }}
+                variants={container}
+                className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3"
+              >
                 {visibleCaseStudies.map(({ slug, category, title, description, icon: Icon, image }) => (
-                  <div
+                  <motion.div
                     key={slug}
+                    variants={fadeUp}
                     className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100"
                   >
                     <div className="relative h-60">
@@ -203,9 +239,9 @@ export default function CaseStudiesShowcase() {
                         <ArrowRight className="h-3.5 w-3.5" />
                       </Link>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
 
               {pageCount > 1 && (
                 <div className="mt-12 flex items-center justify-center gap-2">

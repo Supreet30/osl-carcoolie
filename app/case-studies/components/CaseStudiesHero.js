@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { motion } from "motion/react";
 import { MapPin, ShieldCheck, Truck, Users } from "lucide-react";
 import Navbar from "../../landing-page/components/Navbar";
 
@@ -8,6 +11,16 @@ const STATS = [
   { icon: Users, value: "75K+", label: "Happy Customers" },
   { icon: ShieldCheck, value: ">99.89%", label: "On-Time Delivery" },
 ];
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12, delayChildren: 0.3 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
 
 export default function CaseStudiesHero() {
   return (
@@ -20,23 +33,29 @@ export default function CaseStudiesHero() {
       />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-        <div className="max-w-lg">
-          <h1 className="text-6xl font-extrabold leading-[1.2] tracking-tight">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          variants={container}
+          className="max-w-lg"
+        >
+          <motion.h1 variants={fadeUp} className="text-6xl font-extrabold leading-[1.2] tracking-tight">
             <span className="block text-[#0b1e42]">Real Vehicle Logistics</span>
             <span className="block">
               <span className="text-[#0b1e42]">Results, </span>
               <span className="text-red-600">Backed</span>
             </span>
             <span className="block text-red-600">By Data</span>
-          </h1>
-          <p className="mt-6 max-w-md text-base leading-relaxed text-slate-600">
+          </motion.h1>
+          <motion.p variants={fadeUp} className="mt-6 max-w-md text-base leading-relaxed text-slate-600">
             From manufacturers to dealerships and individual owners, see how our nationwide vehicle
             transportation network delivers speed, safety and reliability at scale.
-          </p>
+          </motion.p>
 
-          <div className="mt-10 grid grid-cols-4 gap-3">
+          <motion.div variants={container} className="mt-10 grid grid-cols-4 gap-3">
             {STATS.map(({ icon: Icon, value, label }) => (
-              <div key={label}>
+              <motion.div key={label} variants={fadeUp}>
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
                   <Icon className="h-8 w-8" strokeWidth={2} />
                 </span>
@@ -44,12 +63,18 @@ export default function CaseStudiesHero() {
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                   {label}
                 </p>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        <div className="relative">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
+          className="relative"
+        >
           {/* Sized well past the grid column and positioned absolute so it
               bleeds beyond the max-w-6xl container — only the section's own
               overflow-hidden edge (near the viewport edge) clips it, not
@@ -64,7 +89,7 @@ export default function CaseStudiesHero() {
               className="object-contain"
             />
           </div>
-        </div>
+        </motion.div>
       </div>
       </section>
     </>

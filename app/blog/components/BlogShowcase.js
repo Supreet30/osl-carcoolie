@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { motion } from "motion/react";
 import {
   BookOpen,
   Building2,
@@ -14,6 +15,16 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { BLOG_POSTS } from "../posts";
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+};
 
 const CATEGORIES = [
   { id: "all", label: "All Posts", icon: LayoutGrid },
@@ -80,16 +91,22 @@ export default function BlogShowcase() {
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"
         />
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-center gap-4">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          variants={container}
+          className="relative mx-auto max-w-6xl"
+        >
+          <motion.div variants={fadeUp} className="flex items-center justify-center gap-4">
             <span className="h-px w-16 bg-red-200" />
             <h2 className="shrink-0 text-4xl font-extrabold text-[#0b1e42]">
               Explore by Categories
             </h2>
             <span className="h-px w-16 bg-red-200" />
-          </div>
+          </motion.div>
 
-          <div className="my-8 flex flex-wrap items-center justify-center gap-3">
+          <motion.div variants={fadeUp} className="my-8 flex flex-wrap items-center justify-center gap-3">
             {CATEGORIES.map(({ id, label, icon: Icon }) => {
               const isActive = id === selectedCategory;
               return (
@@ -108,8 +125,8 @@ export default function BlogShowcase() {
                 </button>
               );
             })}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </section>
 
       <section className="relative overflow-hidden bg-white px-6 py-14">
@@ -138,7 +155,13 @@ export default function BlogShowcase() {
                     className="absolute top-0 left-1/2 hidden h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 ring-4 ring-white lg:block"
                   />
 
-                  <div className="w-full lg:w-1/2">
+                  <motion.div
+                    initial={{ opacity: 0, x: i % 2 === 1 ? 30 : -30 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.7, ease: "easeOut" }}
+                    viewport={{ once: true, amount: 0.3 }}
+                    className="w-full lg:w-1/2"
+                  >
                     <div className="relative aspect-4/3 overflow-hidden rounded-3xl shadow-xl">
                       <Image
                         src={image}
@@ -148,9 +171,15 @@ export default function BlogShowcase() {
                         className="object-cover"
                       />
                     </div>
-                  </div>
+                  </motion.div>
 
-                  <div className="w-full lg:w-1/2">
+                  <motion.div
+                    initial={{ opacity: 0, x: i % 2 === 1 ? -30 : 30 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
+                    viewport={{ once: true, amount: 0.3 }}
+                    className="w-full lg:w-1/2"
+                  >
                     <h3 className="text-3xl font-extrabold text-[#0b1e42] sm:text-4xl">
                       About <span className="text-red-600">{title}</span>
                     </h3>
@@ -161,7 +190,7 @@ export default function BlogShowcase() {
                     >
                       Learn More
                     </a>
-                  </div>
+                  </motion.div>
                 </div>
               ))}
             </div>
@@ -176,53 +205,66 @@ export default function BlogShowcase() {
 
       <section id="latest-blogs" className="bg-slate-50 px-6 py-14">
         <div className="mx-auto max-w-6xl">
-          <div className="flex items-center justify-center gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            viewport={{ once: true }}
+            className="flex items-center justify-center gap-4"
+          >
             <span className="h-px flex-1 bg-slate-200" />
             <h2 className="shrink-0 text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">
               Latest Articles
             </h2>
             <span className="h-px flex-1 bg-slate-200" />
-          </div>
+          </motion.div>
 
           {visibleArticles.length > 0 ? (
             <>
-              <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+              <motion.div
+                initial="hidden"
+                whileInView="show"
+                viewport={{ once: true, amount: 0.1 }}
+                variants={container}
+                className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-4"
+              >
                 {visibleArticles.map(({ slug, category, tag, title, date, image }) => (
-                  <Link
-                    key={slug}
-                    href={`/blog/${slug}`}
-                    className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-lg"
-                  >
-                    <div className="relative h-40">
-                      <Image
-                        src={image}
-                        alt={title}
-                        fill
-                        sizes="(max-width: 1023px) 50vw, 25vw"
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    </div>
-                    <div className="p-5">
-                      <p className="text-xs font-extrabold uppercase tracking-wide text-red-600">
-                        {category}
-                      </p>
-                      <h3 className="mt-2 text-sm font-extrabold leading-snug text-[#0b1e42] transition-colors group-hover:text-red-600">
-                        {title}
-                      </h3>
-                      <div className="mt-4 flex items-center gap-3 text-[11px] font-medium text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" strokeWidth={2} />
-                          {date}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Tag className="h-3 w-3" strokeWidth={2} />
-                          {tag}
-                        </span>
+                  <motion.div key={slug} variants={fadeUp}>
+                    <Link
+                      href={`/blog/${slug}`}
+                      className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-lg"
+                    >
+                      <div className="relative h-40">
+                        <Image
+                          src={image}
+                          alt={title}
+                          fill
+                          sizes="(max-width: 1023px) 50vw, 25vw"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
                       </div>
-                    </div>
-                  </Link>
+                      <div className="p-5">
+                        <p className="text-xs font-extrabold uppercase tracking-wide text-red-600">
+                          {category}
+                        </p>
+                        <h3 className="mt-2 text-sm font-extrabold leading-snug text-[#0b1e42] transition-colors group-hover:text-red-600">
+                          {title}
+                        </h3>
+                        <div className="mt-4 flex items-center gap-3 text-[11px] font-medium text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" strokeWidth={2} />
+                            {date}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Tag className="h-3 w-3" strokeWidth={2} />
+                            {tag}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
 
               {pageCount > 1 && (
                 <div className="mt-12 flex items-center justify-center gap-2">

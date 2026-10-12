@@ -2,9 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { motion } from "motion/react";
 import { ArrowUpRight } from "lucide-react";
 
 const ROTATE_INTERVAL_MS = 3000;
+
+const railContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+};
 
 // Dummy placeholder content — swap in real posts/case studies/visuals once
 // they exist. The right-side mockup photo (res-blog-placeholder) is the
@@ -113,23 +124,42 @@ export default function ExploreResources() {
   return (
     <section className="relative overflow-hidden bg-white">
       <div className="relative px-6 pt-14">
-        <div className="relative mx-auto max-w-6xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          viewport={{ once: true }}
+          className="relative mx-auto max-w-6xl"
+        >
           <p className="text-sm font-semibold text-red-600">Resources</p>
           <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-[#0b1e42] sm:text-4xl">
             EXPLORE OUR <span className="text-red-600">RESOURCES</span>
           </h2>
-        </div>
+        </motion.div>
       </div>
 
       <div className="mx-auto max-w-6xl px-6 py-14 sm:py-16">
-        <div className="grid gap-10 rounded-4xl bg-slate-50 p-6 ring-1 ring-slate-100 sm:p-10 lg:grid-cols-[260px_1fr_1fr] lg:gap-10">
-          <div className="flex gap-4 overflow-x-auto lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-8">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          viewport={{ once: true, amount: 0.15 }}
+          className="grid gap-10 rounded-4xl bg-slate-50 p-6 ring-1 ring-slate-100 sm:p-10 lg:grid-cols-[260px_1fr_1fr] lg:gap-10"
+        >
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+            variants={railContainer}
+            className="flex gap-4 overflow-x-auto lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-8"
+          >
             {CATEGORIES.map((category) => {
               const isActive = category.id === activeId;
               return (
-                <button
+                <motion.button
                   key={category.id}
                   type="button"
+                  variants={fadeUp}
                   onClick={() => selectCategory(category.id)}
                   className={`group relative flex h-42 w-56 shrink-0 flex-col justify-end overflow-hidden rounded-2xl text-left shadow-md ring-2 transition-all lg:w-full ${
                     isActive ? "ring-red-500" : "ring-transparent hover:ring-red-200"
@@ -150,10 +180,10 @@ export default function ExploreResources() {
                   <span className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white text-red-600 shadow">
                     <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
                   </span>
-                </button>
+                </motion.button>
               );
             })}
-          </div>
+          </motion.div>
 
           <div
             className="flex flex-col lg:justify-center"
@@ -173,7 +203,13 @@ export default function ExploreResources() {
             </a>
           </div>
 
-          <div className="relative mx-auto w-full max-w-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, ease: "easeOut", delay: 0.25 }}
+            viewport={{ once: true }}
+            className="relative mx-auto w-full max-w-sm"
+          >
             <div
               aria-hidden
               className="absolute -inset-3 -z-10 rounded-[28px] bg-linear-to-br from-red-500 to-red-700 opacity-90"
@@ -190,8 +226,8 @@ export default function ExploreResources() {
             <span className="absolute -top-3 -right-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#0b1e42] text-[10px] font-extrabold tracking-wide text-white uppercase shadow-lg">
               New
             </span>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );

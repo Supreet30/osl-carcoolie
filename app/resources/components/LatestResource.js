@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { motion } from "motion/react";
 import { ArrowRight, Calendar, Check, Clock, Link2 } from "lucide-react";
 
 // Dummy placeholder — swap in the real latest post once one exists.
@@ -27,13 +30,26 @@ export default function LatestResource() {
       />
 
       <div className="relative mx-auto max-w-6xl">
-        <p className="text-sm font-semibold text-red-600">Latest Resources</p>
-        <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-[#0b1e42] sm:text-4xl">
-          LATEST ACROSS <span className="text-red-600">RESOURCES</span>
-        </h2>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          viewport={{ once: true }}
+        >
+          <p className="text-sm font-semibold text-red-600">Latest Resources</p>
+          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-[#0b1e42] sm:text-4xl">
+            LATEST ACROSS <span className="text-red-600">RESOURCES</span>
+          </h2>
+        </motion.div>
 
         <div className="mt-12 grid gap-8 lg:grid-cols-[1fr_1.3fr] lg:items-stretch lg:gap-10">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <motion.div
+            initial={{ opacity: 0, x: -24 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+            viewport={{ once: true, amount: 0.2 }}
+            className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm"
+          >
             <p className="text-xs font-extrabold uppercase tracking-wide text-red-600">Latest Blog</p>
             <h3 className="mt-3 text-2xl font-extrabold leading-snug text-[#0b1e42]">
               How to Prepare Your Car for Safe Transport
@@ -88,9 +104,15 @@ export default function LatestResource() {
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <motion.div
+            initial={{ opacity: 0, x: 24 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
+            viewport={{ once: true, amount: 0.2 }}
+            className="grid grid-cols-2 gap-6"
+          >
             {["/blog-images/blog1-1.jpg", "/blog-images/blog2-1.jpg"].map((src) => (
               <div key={src} className="relative aspect-2/3 overflow-hidden rounded-2xl shadow-xl">
                 <Image
@@ -102,7 +124,7 @@ export default function LatestResource() {
                 />
               </div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>

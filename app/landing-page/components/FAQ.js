@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
 
 // Placeholder Q&A copy — swap for real transport/policy answers before
 // shipping.
@@ -62,28 +73,42 @@ export default function FAQ() {
     <section className="bg-white px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl">
         <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr] lg:gap-12">
-          <div>
-            <p className="text-sm font-semibold text-red-600">Know Your Queries</p>
-            <h2 className="mt-3 text-4xl font-extrabold leading-tight text-[#0b1e42] sm:text-5xl">
-              Frequently Ask <span className="text-red-600">Questions</span>
-            </h2>
-            <p className="mt-4 text-base text-slate-500">
-              Everything You Need To Know Before Booking Car Transport
-            </p>
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+            variants={container}
+          >
+            <motion.div variants={fadeUp}>
+              <p className="text-sm font-semibold text-red-600">Know Your Queries</p>
+              <h2 className="mt-3 text-4xl font-extrabold leading-tight text-[#0b1e42] sm:text-5xl">
+                Frequently Ask <span className="text-red-600">Questions</span>
+              </h2>
+              <p className="mt-4 text-base text-slate-500">
+                Everything You Need To Know Before Booking Car Transport
+              </p>
+            </motion.div>
 
             <div className="mt-10 space-y-4">
               {FAQ_ITEMS.map((item, i) => (
-                <FAQItem
-                  key={item.question}
-                  item={item}
-                  isOpen={openIndex === i}
-                  onToggle={() => setOpenIndex((prev) => (prev === i ? -1 : i))}
-                />
+                <motion.div key={item.question} variants={fadeUp}>
+                  <FAQItem
+                    item={item}
+                    isOpen={openIndex === i}
+                    onToggle={() => setOpenIndex((prev) => (prev === i ? -1 : i))}
+                  />
+                </motion.div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="lg:mt-28">
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.97 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
+            viewport={{ once: true, amount: 0.2 }}
+            className="lg:mt-28"
+          >
             <div className="rounded-3xl bg-white p-8 text-center shadow-xl ring-1 ring-slate-100">
               <div className="relative mx-auto h-24 w-24">
                 <Image src="/mailicon.png" alt="" fill sizes="96px" className="object-contain" />
@@ -102,7 +127,7 @@ export default function FAQ() {
                 Shoot a Direct Mail
               </a>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>
