@@ -52,9 +52,8 @@ body {
   }
 }
 
-/* Auto-advancing blog/case-study/visual item in the Explore Resources
-   section — each new item enters from the right as the previous one is
-   replaced, keyed by item index so React remounts and replays this. */
+/* AuthModal's "why this popup opened" toast and B2cHero's pin-matched
+   status note slide in from the right when they appear. */
 @keyframes slideInRight {
   from {
     opacity: 0;
@@ -79,6 +78,62 @@ body {
   }
   to {
     transform: translateX(0);
+  }
+}
+
+/* Explore Resources — the category icon briefly pops when its tab becomes
+   the selected one. */
+@keyframes exploreTabPop {
+  40% {
+    transform: scale(1.18) rotate(-6deg);
+  }
+}
+
+/* Explore Resources — the small dot inside the active category's chip
+   badge, pulsing like a "live" indicator. */
+@keyframes exploreChipPulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Explore Resources — the ring that expands and fades out of the "NEW"
+   badge on the featured image, on a loop. */
+@keyframes exploreBadgeRing {
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Blog newsletter ticket (BlogNewsletterCta.js) — the envelope icon in the
+   red stub gently bobs up and down on a loop. */
+@keyframes ticketBob {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Blog newsletter ticket — the bright scan line sweeping down the barcode
+   pattern in the red stub. */
+@keyframes ticketScan {
+  0%,
+  100% {
+    top: 0%;
+  }
+  50% {
+    top: calc(100% - 3px);
+  }
+}
+
+/* Blog newsletter ticket — the subscribe form jolts side to side when an
+   invalid email is submitted. */
+@keyframes ticketShake {
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
   }
 }
 

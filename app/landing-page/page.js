@@ -1,12 +1,12 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
+import TrustBar from "./components/TrustBar";
 import AboutUs from "./components/AboutUs";
 import OurServices from "./components/OurServices";
 import OurPartners from "./components/OurPartners";
 // import BookingSteps from "./components/BookingSteps"; // hidden for now
 import CaseStudies from "./components/CaseStudies";
 import WhyCarcoolie from "./components/WhyCarcoolie";
-import ChairmanMessage from "./components/ChairmanMessage";
 import Testimonials from "./components/Testimonials";
 import CallToAction from "./components/CallToAction";
 import Footer from "./components/Footer";
@@ -22,9 +22,9 @@ export default function LandingPage() {
     <main className="relative">
       <Navbar />
       <Hero />
+      <TrustBar />
       <AboutUs />
       <OurServices />
-      <ChairmanMessage />
       <OurPartners />
       {/* <BookingSteps /> hidden for now */}
       <CaseStudies />

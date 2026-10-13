@@ -2,6 +2,7 @@ import Footer from "../landing-page/components/Footer";
 import Testimonials from "../landing-page/components/Testimonials";
 import AboutHero from "./components/AboutHero";
 import AboutStats from "./components/AboutStats";
+import ChairmanMessage from "./components/ChairmanMessage";
 import CoreValues from "./components/CoreValues";
 import FoundersSection from "./components/FoundersSection";
 import JoinUsSection from "./components/JoinUsSection";
@@ -20,6 +21,7 @@ export default function AboutUsPage() {
     <main className="relative">
       <AboutHero />
       <WhatWeProvide />
+      <ChairmanMessage />
       <CoreValues />
       <AboutStats />
       <LeadershipSection />

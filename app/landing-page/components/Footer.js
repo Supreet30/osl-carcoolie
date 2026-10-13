@@ -54,8 +54,8 @@ export default function Footer() {
             />
           </div>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-300">
-            Redefining luxury vehicle transport across India since 2014. Safety,
-            transparency, and precision in every mile.
+            Transporting every vehicle, from everyday cars to luxury rides, across India since
+            2014. Safety, transparency, and precision in every mile.
           </p>
           <div className="mt-5 flex gap-3">
             <a
