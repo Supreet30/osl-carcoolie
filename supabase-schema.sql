@@ -159,18 +159,84 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_customer();
 
+-- A customer's reusable addresses (app/account) — same field shape as a
+-- booking_addresses leg (house/street/landmark/city/pin) but standalone,
+-- not tied to any one booking; `label` is the customer's own name for it
+-- ("Home", "Office"). Not wired into the booking form yet — BookingForm.js
+-- still captures its own address per booking — this is just account-level
+-- storage/management for now.
+create table if not exists customer_addresses (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references customers (id) on delete cascade,
+  label text not null default 'Home',
+  full_name text,
+  phone text,
+  house text,
+  street text,
+  landmark text,
+  city text,
+  pin text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists customer_addresses_customer_id_idx on customer_addresses (customer_id);
+
 -- One row per quote actually generated (B2cHero.js, after the sign-in gate
 -- passes) — purely an append-only rate-limit log, not read anywhere else.
--- Enforces "3 quotes per rolling 24h per account": the customer site counts
--- rows from the last 24h before allowing another, backed by RLS (not
+-- Enforces "3 *different* pickup/destination PIN combinations per rolling
+-- 24h per account": the customer site counts the DISTINCT (pickup_pin,
+-- destination_pin) pairs among rows from the last 24h, not the row count
+-- itself — rechecking a combination it's already seen in that window is
+-- always allowed and doesn't use up one of the 3, since it's not a new
+-- lookup. pickup_pin/destination_pin are nullable so rows logged before
+-- this column existed don't need backfilling. Backed by RLS (not
 -- localStorage) so clearing browser storage can't reset it.
 create table if not exists quote_requests (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references customers (id) on delete cascade,
+  pickup_pin text,
+  destination_pin text,
   created_at timestamptz not null default now()
 );
 
+alter table quote_requests add column if not exists pickup_pin text;
+alter table quote_requests add column if not exists destination_pin text;
+
 create index if not exists quote_requests_customer_id_created_at_idx on quote_requests (customer_id, created_at);
+
+-- One row per "we don't service this route yet" moment the customer
+-- acknowledged (B2cHero.js's ServiceGapModal — shown whenever a submitted
+-- PIN doesn't resolve to a serviced city, or both resolve but no route
+-- exists between them yet; its Okay button is what actually inserts this).
+-- Unlike quote_requests this *does* gate on sign-in first (same AuthModal
+-- prompt as generating a quote) purely so there's an account to attach —
+-- the row itself carries no name/phone/email of its own; admin's
+-- /api/service-leads joins customer_id against customers/auth.users for
+-- that, live, the same way /api/reviews already does, so it's never a stale
+-- snapshot. Read and actioned entirely from carcoolie-admin's Service Leads
+-- page via that service_role-backed route.
+create table if not exists service_area_leads (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references customers (id) on delete cascade,
+  pickup_pin text,
+  destination_pin text,
+  status text not null default 'new' check (status in ('new', 'contacted', 'closed')),
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- Drops columns from an earlier draft of this table (name/phone/email,
+-- NOT NULL) for anyone who ran this file before the simplification above —
+-- `create table if not exists` alone doesn't touch a table that already
+-- exists, so a project that ran the old version would otherwise still have
+-- name/phone NOT NULL, and every insert from B2cHero.js (which only ever
+-- sends customer_id/pickup_pin/destination_pin) would fail silently.
+alter table service_area_leads drop column if exists name;
+alter table service_area_leads drop column if exists phone;
+alter table service_area_leads drop column if exists email;
+alter table service_area_leads alter column customer_id set not null;
+
+create index if not exists service_area_leads_created_at_idx on service_area_leads (created_at desc);
 
 -- One row per account, always the most recently generated estimate
 -- (upserted, not appended — unlike quote_requests above) — lets B2cHero.js
@@ -1168,6 +1234,7 @@ create trigger bookings_log_status_change
 -- but only admin-writable.
 
 alter table customers enable row level security;
+alter table customer_addresses enable row level security;
 alter table admin_users enable row level security;
 alter table cities enable row level security;
 alter table routes enable row level security;
@@ -1196,6 +1263,7 @@ alter table payments enable row level security;
 alter table booking_status_history enable row level security;
 alter table quote_requests enable row level security;
 alter table saved_estimates enable row level security;
+alter table service_area_leads enable row level security;
 
 create or replace function is_admin()
 returns boolean as $$
@@ -1227,12 +1295,27 @@ create policy "customers update own" on customers for update using (id = auth.ui
 drop policy if exists "customers insert own" on customers;
 create policy "customers insert own" on customers for insert with check (id = auth.uid());
 
+-- customer_addresses: fully self-managed (unlike most tables here, a
+-- customer can update/delete their own rows, not just insert/read) — this
+-- is their own address book, nothing else references it.
+drop policy if exists "customer_addresses owner all" on customer_addresses;
+create policy "customer_addresses owner all" on customer_addresses
+  for all using (customer_id = auth.uid()) with check (customer_id = auth.uid());
+
 -- quote_requests: append-only rate-limit log, own rows only — no update/
 -- delete policy at all, so a customer can't erase their own count either.
 drop policy if exists "quote_requests owner read" on quote_requests;
 create policy "quote_requests owner read" on quote_requests for select using (customer_id = auth.uid() or is_admin());
 drop policy if exists "quote_requests owner insert" on quote_requests;
 create policy "quote_requests owner insert" on quote_requests for insert with check (customer_id = auth.uid());
+
+-- service_area_leads: own rows only, append-only — same shape as
+-- quote_requests just above (insert-only, no select/update policy), since
+-- this is also a signed-in-customer log a customer never needs to read
+-- back themselves. Read/actioned only through carcoolie-admin's
+-- service_role-backed /api/service-leads routes.
+drop policy if exists "service_area_leads owner insert" on service_area_leads;
+create policy "service_area_leads owner insert" on service_area_leads for insert with check (customer_id = auth.uid());
 
 -- saved_estimates: own row only, upsert needs both insert and update
 drop policy if exists "saved_estimates owner read" on saved_estimates;

@@ -15,15 +15,18 @@ const PIN_REGEX = /^\d{6}$/;
 
 // Shared with handleSubmit below — a PIN that resolved to a real, known
 // place (we have its district/state) just isn't serviced yet; that's a
-// different situation from a PIN that never resolved at all, and needed
-// its own wording in both the inline field note and the submit-time error
-// (which used to lump every unresolved PIN into "enter a valid PIN code",
+// different situation from a PIN that never resolved at all, and needed its
+// own wording in both the inline field note and the submit-time flow (which
+// used to lump every unresolved PIN into "enter a valid PIN code",
 // misleadingly implying the PIN itself was wrong rather than just
-// unserviced — see the bug this fixed).
+// unserviced — see the bug this fixed). Deliberately styled/worded exactly
+// like a normal "matched" detection (PincodeStatus below) rather than as a
+// warning — ServiceGapModal is where the actual "not serviced" explanation
+// and follow-up happen, once the customer submits.
 function notServicedMessage(status) {
   return status.district
-    ? `${status.district}${status.state ? `, ${status.state}` : ""} — we're expanding our network and will be there shortly.`
-    : "We don't recognize this PIN code — double-check it or try a nearby one.";
+    ? `Detected: ${status.district}${status.state ? `, ${status.state}` : ""}`
+    : "PIN code received — we'll confirm this route for you.";
 }
 
 // Small status note under a PIN field. PIN code is the only way to set a
@@ -45,12 +48,45 @@ function PincodeStatus({ status }) {
     );
   }
   if (status.status === "not_matched") {
-    return <span className="mt-1.5 block text-xs text-amber-600">{notServicedMessage(status)}</span>;
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
+        <CheckCircle2 className="h-3 w-3" /> {notServicedMessage(status)}
+      </span>
+    );
   }
   if (status.status === "error") {
     return <span className="mt-1.5 block text-xs text-slate-400">Couldn&apos;t check this PIN right now — please try again.</span>;
   }
   return null;
+}
+
+// Shown after Get Estimated Quote on a route that can't be quoted — either
+// PIN didn't resolve to a serviced city, or both did but no route exists
+// between them yet. onConfirm (its Okay button) is what actually logs the
+// service_area_leads row tied to the signed-in account — nothing is saved
+// just from the PIN check above, only once the customer's seen and
+// acknowledged this.
+function ServiceGapModal({ onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-2xl">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+          <AlertCircle className="h-7 w-7" strokeWidth={2} />
+        </span>
+        <h3 className="mt-4 text-lg font-extrabold text-[#0b1e42]">We Don&apos;t Service This Route Yet</h3>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500">
+          Our team will contact you about it soon.
+        </p>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="mt-6 w-full rounded-full bg-red-600 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
+        >
+          Okay
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // One photo per stage of the journey — cycled automatically below so the
@@ -90,25 +126,47 @@ export default function B2cHero() {
   const [showEstimate, setShowEstimate] = useState(false);
   const [cityError, setCityError] = useState("");
 
-  // Generating a quote requires an account — see the session tracking and
-  // handleSubmit's gate below. pendingEstimateRef survives the sign-in
-  // redirect/popup round trip so the quote the customer was asking for
-  // actually opens the moment they're signed in, instead of making them
-  // resubmit the PIN form a second time.
+  // Both generating a quote and logging a service-gap lead require an
+  // account (a lead needs one to attach to; a quote needs one for the
+  // 3-combos limit) — see the session tracking and handleSubmit's gate
+  // below. "quote" | "service-gap" | null, survives the sign-in redirect/
+  // popup round trip so whichever one the customer was asking for actually
+  // happens the moment they're signed in, instead of making them resubmit
+  // the PIN form a second time. Kept in both a ref (pendingActionRef — read
+  // inside the onAuthStateChange listener below, which subscribes once on
+  // mount and would otherwise see a stale closed-over value) and state
+  // (pendingAction — read by AuthModal's `reason` text during render,
+  // which refs can't be); setPendingAction (below) keeps the two in sync.
   const [session, setSession] = useState(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const pendingEstimateRef = useRef(false);
+  // Controls ServiceGapModal (see above) — opened once the route is
+  // confirmed un-quotable (see flagServiceGap in handleSubmit) and the
+  // customer is signed in (or just finished signing in, via the listener
+  // below). Its own Okay button is what actually logs the lead. Declared
+  // here (not nearer its own use) because the listener below also sets it.
+  const [showServiceGapModal, setShowServiceGapModal] = useState(false);
+  const [pendingAction, setPendingActionState] = useState(null);
+  const pendingActionRef = useRef(null);
+  function setPendingAction(action) {
+    pendingActionRef.current = action;
+    setPendingActionState(action);
+  }
+  // Read alongside pendingActionRef for the same reason — set at the moment
+  // the auth gate actually triggers, not rendered so a ref alone is enough.
+  const pendingPinsRef = useRef({ pickupPin: "", destinationPin: "" });
 
-  // 3 quotes per rolling 24h per account — backed by the quote_requests
-  // table (see supabase-schema.sql), not localStorage, so clearing browser
-  // storage can't reset it. Checked right before actually showing the
-  // estimate, from both handleSubmit (already signed in) and the
-  // onAuthStateChange listener below (just finished signing in).
-  async function generateQuote(userId) {
+  // Rechecking the same pickup/destination PIN combination is unlimited;
+  // only 3 *different* combinations are allowed per rolling 24h per
+  // account. Backed by the quote_requests table (see supabase-schema.sql),
+  // not localStorage, so clearing browser storage can't reset it. Checked
+  // right before actually showing the estimate, from both handleSubmit
+  // (already signed in) and the onAuthStateChange listener below (just
+  // finished signing in).
+  async function generateQuote(userId, pickupPinValue, destinationPinValue) {
     const sinceISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("quote_requests")
-      .select("id", { count: "exact", head: true })
+      .select("pickup_pin, destination_pin")
       .eq("customer_id", userId)
       .gte("created_at", sinceISO);
 
@@ -120,14 +178,34 @@ export default function B2cHero() {
       return;
     }
 
-    if (count >= 3) {
-      setCityError("You've reached the limit of 3 quotes in 24 hours. Please try again later.");
+    const seenCombos = new Set((data ?? []).map((row) => `${row.pickup_pin}_${row.destination_pin}`));
+    const isRepeatCombo = seenCombos.has(`${pickupPinValue}_${destinationPinValue}`);
+
+    if (!isRepeatCombo && seenCombos.size >= 3) {
+      setCityError(
+        "You've checked 3 different pickup/destination combinations in the last 24 hours. Try again later, or recheck one you've already used."
+      );
       return;
     }
 
-    const { error: insertError } = await supabase.from("quote_requests").insert({ customer_id: userId });
+    const { error: insertError } = await supabase
+      .from("quote_requests")
+      .insert({ customer_id: userId, pickup_pin: pickupPinValue, destination_pin: destinationPinValue });
     if (insertError) console.error("Failed to log quote request:", insertError.message);
     setShowEstimate(true);
+  }
+
+  // Logs a service_area_leads row so carcoolie-admin's Service Leads page
+  // can follow up — no form, no name/phone typed here, since that page
+  // looks the account's own saved contact info up live via customer_id
+  // (see /api/service-leads). Called from ServiceGapModal's Okay button
+  // below, never automatically — a transient failure here just means one
+  // fewer admin-visible lead, not a blocked customer.
+  async function logServiceGapLead(userId, pickupPinValue, destinationPinValue) {
+    const { error } = await supabase
+      .from("service_area_leads")
+      .insert({ customer_id: userId, pickup_pin: pickupPinValue, destination_pin: destinationPinValue });
+    if (error) console.error("Failed to log service-area lead:", error.message);
   }
 
   useEffect(() => {
@@ -135,10 +213,19 @@ export default function B2cHero() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      if (nextSession && pendingEstimateRef.current) {
-        pendingEstimateRef.current = false;
+      if (nextSession && pendingActionRef.current) {
+        const action = pendingActionRef.current;
+        const { pickupPin: pendingPickupPin, destinationPin: pendingDestinationPin } = pendingPinsRef.current;
+        setPendingAction(null);
         setAuthModalOpen(false);
-        generateQuote(nextSession.user.id);
+        if (action === "quote") {
+          generateQuote(nextSession.user.id, pendingPickupPin, pendingDestinationPin);
+        } else {
+          // Don't log yet — ServiceGapModal's Okay button is what actually
+          // saves the lead, same as the already-signed-in path in
+          // handleSubmit below.
+          setShowServiceGapModal(true);
+        }
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -213,10 +300,10 @@ export default function B2cHero() {
   const [activeStop, setActiveStop] = useState(0);
   const cityErrorRef = useRef(null);
 
-  // Scrolls the error into view the moment one appears, regardless of
-  // which check set it (PIN format, same city, or no route) — the form
-  // sits well down the page, so a silently-appearing error above/below the
-  // fold is easy to miss otherwise.
+  // Scrolls the error into view the moment one appears, regardless of which
+  // check set it (PIN format, same city, no route) — the form sits well
+  // down the page, so a silently-appearing message above/below the fold is
+  // easy to miss otherwise.
   useEffect(() => {
     if (cityError) cityErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [cityError]);
@@ -303,22 +390,36 @@ export default function B2cHero() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    // Surfaces the route as a service gap — ServiceGapModal if already
+    // signed in (its own Okay button is what actually logs the lead), or
+    // the same sign-in gate generateQuote uses below otherwise, so there's
+    // always an account for carcoolie-admin's Service Leads page to pull
+    // contact info from instead of asking the customer to type it in again.
+    function flagServiceGap() {
+      setCityError("");
+      pendingPinsRef.current = { pickupPin, destinationPin };
+      if (isSupabaseConfigured && !session) {
+        setPendingAction("service-gap");
+        setAuthModalOpen(true);
+        return;
+      }
+      setShowServiceGapModal(true);
+    }
+
     // A PIN that resolved to a real place but just isn't serviced yet
     // (not_matched, with a district/state) is not the same problem as a
     // PIN that's empty or still unresolved — the generic "enter a valid
     // PIN code" below was misleadingly implying the PIN itself was wrong
-    // even when it had been read correctly, just not covered. Worded
-    // differently from the inline PincodeStatus note right above/below the
-    // field (which already shows notServicedMessage) rather than repeating
-    // it verbatim — this one's job is just to point there and scroll it
-    // into view via cityErrorRef.
+    // even when it had been read correctly, just not covered. Either way,
+    // this is a real service gap (not a form mistake), so it goes through
+    // flagServiceGap instead of a plain error.
     const unserviced = pickupPinStatus.status === "not_matched" ? pickupPinStatus : destinationPinStatus;
     if (!fromCity || !toCity) {
-      setCityError(
-        unserviced.status === "not_matched"
-          ? "That PIN code isn't serviced yet — see the note above."
-          : "Enter a valid pickup and destination PIN code."
-      );
+      if (unserviced.status === "not_matched") {
+        flagServiceGap();
+      } else {
+        setCityError("Enter a valid pickup and destination PIN code.");
+      }
       return;
     }
     if (fromCity === toCity) {
@@ -331,18 +432,21 @@ export default function B2cHero() {
     const route = await getRoute(fromCity, toCity);
     setCheckingRoute(false);
     if (!route) {
-      setCityError("Coming soon to this location — we're expanding our network and will be there shortly.");
+      // Both PINs are individually serviced, just no route between them yet
+      // — same real service gap as the unmatched-PIN case above.
+      flagServiceGap();
       return;
     }
 
     if (isSupabaseConfigured && !session) {
-      pendingEstimateRef.current = true;
+      setPendingAction("quote");
+      pendingPinsRef.current = { pickupPin, destinationPin };
       setAuthModalOpen(true);
       return;
     }
 
     if (isSupabaseConfigured && session) {
-      await generateQuote(session.user.id);
+      await generateQuote(session.user.id, pickupPin, destinationPin);
       return;
     }
 
@@ -510,11 +614,30 @@ export default function B2cHero() {
       <AuthModal
         open={authModalOpen}
         onClose={() => {
-          pendingEstimateRef.current = false;
+          setPendingAction(null);
           setAuthModalOpen(false);
         }}
-        reason="Sign in or create an account to generate your quote."
+        reason={
+          pendingAction === "service-gap"
+            ? "Sign in or create an account so our team can contact you about this route."
+            : "Sign in or create an account to generate your quote."
+        }
       />
+
+      {showServiceGapModal && (
+        <ServiceGapModal
+          onConfirm={async () => {
+            setShowServiceGapModal(false);
+            if (session) {
+              await logServiceGapLead(
+                session.user.id,
+                pendingPinsRef.current.pickupPin,
+                pendingPinsRef.current.destinationPin
+              );
+            }
+          }}
+        />
+      )}
 
       {savedDraft && !savedDraftDismissed && (
         <div

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { LogOut, Truck, User } from "lucide-react";
+import { LogOut, Settings, Truck, User } from "lucide-react";
 import { TABS } from "../../services/data/serviceTabs";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
 import AuthModal from "../../components/AuthModal";
@@ -470,6 +470,19 @@ export default function Navbar() {
               </div>
 
               <ul className="divide-y divide-slate-100">
+                <li>
+                  <Link
+                    href="/account"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="group/item flex items-center gap-4 rounded-2xl px-2 py-3 transition-colors hover:bg-slate-50"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                      <Settings className="h-5 w-5" strokeWidth={1.7} />
+                    </span>
+                    <span className="flex-1 text-base font-extrabold text-[#0b1e42]">Account Settings</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover/item:text-red-600" />
+                  </Link>
+                </li>
                 <li>
                   <Link
                     href="/my-bookings"

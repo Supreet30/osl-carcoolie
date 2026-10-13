@@ -9,7 +9,7 @@ export default function ContactHero() {
   return (
     <>
       <Navbar />
-      <section className="relative isolate flex flex-col overflow-hidden bg-[#fffafa] px-6 pt-28 pb-14 sm:pt-32 sm:pb-16">
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#fffafa] px-6 pt-28 pb-14 sm:pt-32 sm:pb-16">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-28 -left-28 -z-10 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_35%_35%,#fecaca_0%,#fee2e2_45%,transparent_70%)]"
