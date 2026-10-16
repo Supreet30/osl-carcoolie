@@ -13,25 +13,17 @@ import { getDraft, markBookingIntent, saveEstimate, stashFormValuesForResume } f
 
 const PIN_REGEX = /^\d{6}$/;
 
-// Shared with handleSubmit below — a PIN that resolved to a real, known
-// place (we have its district/state) just isn't serviced yet; that's a
-// different situation from a PIN that never resolved at all, and needed its
-// own wording in both the inline field note and the submit-time flow (which
-// used to lump every unresolved PIN into "enter a valid PIN code",
-// misleadingly implying the PIN itself was wrong rather than just
-// unserviced — see the bug this fixed). Deliberately styled/worded exactly
-// like a normal "matched" detection (PincodeStatus below) rather than as a
-// warning — ServiceGapModal is where the actual "not serviced" explanation
-// and follow-up happen, once the customer submits.
-function notServicedMessage(status) {
-  return status.district
-    ? `Detected: ${status.district}${status.state ? `, ${status.state}` : ""}`
-    : "PIN code received — we'll confirm this route for you.";
-}
-
 // Small status note under a PIN field. PIN code is the only way to set a
 // city here now — no dropdown fallback — so "not_matched"/"error" can't
 // point at one; they just ask for a different/rechecked PIN instead.
+// "not_matched" covers two different cases, styled differently: a PIN that
+// exists in pincode_directory (we have its district/state) just isn't
+// serviced yet — green, same as a real match, since ServiceGapModal is
+// where the actual "not serviced" explanation happens once the customer
+// submits; a PIN that doesn't exist in the directory at all is a genuinely
+// invalid PIN code, flagged as such rather than treated like a valid one —
+// see handleSubmit below, which only offers the sign-in-and-notify flow for
+// the first case.
 function PincodeStatus({ status }) {
   if (status.status === "checking") {
     return (
@@ -47,10 +39,18 @@ function PincodeStatus({ status }) {
       </span>
     );
   }
-  if (status.status === "not_matched") {
+  if (status.status === "not_matched" && status.district) {
     return (
       <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
-        <CheckCircle2 className="h-3 w-3" /> {notServicedMessage(status)}
+        <CheckCircle2 className="h-3 w-3" /> Detected: {status.district}
+        {status.state ? `, ${status.state}` : ""}
+      </span>
+    );
+  }
+  if (status.status === "not_matched") {
+    return (
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-red-600">
+        <AlertCircle className="h-3 w-3" /> Invalid PIN code
       </span>
     );
   }
@@ -406,20 +406,33 @@ export default function B2cHero() {
       setShowServiceGapModal(true);
     }
 
-    // A PIN that resolved to a real place but just isn't serviced yet
-    // (not_matched, with a district/state) is not the same problem as a
-    // PIN that's empty or still unresolved — the generic "enter a valid
-    // PIN code" below was misleadingly implying the PIN itself was wrong
-    // even when it had been read correctly, just not covered. Either way,
-    // this is a real service gap (not a form mistake), so it goes through
-    // flagServiceGap instead of a plain error.
-    const unserviced = pickupPinStatus.status === "not_matched" ? pickupPinStatus : destinationPinStatus;
+    // "Resolved" = this PIN actually means something, whether serviced
+    // (matched) or not (not_matched with a district/state) — as opposed to
+    // empty/still-checking (idle/checking) or not a real PIN at all
+    // (not_matched with no district). Both legs have to be resolved before
+    // a service gap is worth flagging — one blank/invalid PIN alongside one
+    // valid-but-unserviced PIN isn't "this route needs a lead", it's just
+    // an incomplete form, so it falls through to the plain errors below
+    // instead of opening the sign-in gate / popup over a field the
+    // customer hasn't actually filled in correctly yet.
+    function isResolved(status) {
+      return status.status === "matched" || (status.status === "not_matched" && status.district);
+    }
+
+    if (!isResolved(pickupPinStatus) || !isResolved(destinationPinStatus)) {
+      const invalid = [pickupPinStatus, destinationPinStatus].find(
+        (status) => status.status === "not_matched" && !status.district
+      );
+      setCityError(
+        invalid ? "That PIN code doesn't exist — please double-check it." : "Enter a valid pickup and destination PIN code."
+      );
+      return;
+    }
+
+    // Both PINs are resolved — if either leg is a known-but-unserviced
+    // place (not_matched with a district), that's a genuine service gap.
     if (!fromCity || !toCity) {
-      if (unserviced.status === "not_matched") {
-        flagServiceGap();
-      } else {
-        setCityError("Enter a valid pickup and destination PIN code.");
-      }
+      flagServiceGap();
       return;
     }
     if (fromCity === toCity) {

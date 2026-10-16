@@ -30,10 +30,22 @@ export const BOOKING_STATUS = {
   QUOTE_SENT: "quote_sent",
   ADVANCE_PAID: "advance_paid",
   CONFIRMED: "confirmed",
+  // Self-pickup only (see buildStatusSteps below) — the customer has
+  // dropped the car off at CarCoolie's own yard themselves, so there's no
+  // driver collection to track before loading.
+  CAR_ARRIVED_AT_YARD: "car_arrived_at_yard",
   MIDWAY_PAID: "midway_paid",
   LOADED_ON_CARRIER: "loaded_on_carrier",
   IN_TRANSIT: "in_transit",
+  // Driver drop-off only — the carrier has reached the destination yard and
+  // the vehicle's been received there, before a CarCoolie driver takes it
+  // out for final delivery to the customer's own location.
+  RECEIVED_AT_DESTINATION_YARD: "received_at_destination_yard",
   OUT_FOR_DELIVERY: "out_for_delivery",
+  // Self drop-off only — replaces "Out for Delivery" entirely, since the
+  // customer collects the car from the destination yard themselves rather
+  // than a driver delivering it anywhere.
+  REACHED_DESTINATION_YARD: "reached_destination_yard",
   DELIVERED: "delivered",
   // Exit state, not a pipeline step — deliberately left out of
   // buildStatusSteps() below, same as "docs_sent" is included there despite
@@ -64,30 +76,73 @@ export const CANCELLATION_REASONS = [
   "Other",
 ];
 
-// "docs_sent" is display-only — it's never an actual bookings.status value,
-// since submitting the booking form (with its document uploads) is what
-// creates the row in the first place, so by the time a booking exists at
-// all it's already true. It exists purely so the stepper below shows it as
-// the first, already-completed step rather than starting the customer's
-// view mid-pipeline at "Documents Under Review".
-// A function of the live payment split (from the admin's Payment Settings
-// page) rather than a static array, since the Advance/Midway step labels
-// quote the actual percentage — callers that don't have the live split
-// handy fall back to PAYMENT_SPLIT (the same 10/50 default the DB row
-// starts with).
-export function buildStatusSteps(split = PAYMENT_SPLIT) {
-  return [
-    { key: "docs_sent", label: "Documents Sent for Review" },
-    { key: BOOKING_STATUS.DOCS_REVIEW, label: "Documents Under Review" },
-    { key: BOOKING_STATUS.QUOTE_SENT, label: "Final Quote Generated" },
-    { key: BOOKING_STATUS.ADVANCE_PAID, label: `Advance Paid (${split.advancePercent}%)` },
-    { key: BOOKING_STATUS.CONFIRMED, label: "Booking Confirmed" },
-    { key: BOOKING_STATUS.MIDWAY_PAID, label: `${split.midwayPercent}% Payment Received` },
-    { key: BOOKING_STATUS.LOADED_ON_CARRIER, label: "Loaded on Carrier" },
-    { key: BOOKING_STATUS.IN_TRANSIT, label: "In Transit" },
-    { key: BOOKING_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
-    { key: BOOKING_STATUS.DELIVERED, label: "Delivered" },
-  ];
+// Every status's label in one place, keyed by status — shared by
+// buildStatusSteps below (which picks which keys apply, per leg method) and
+// statusLabel (a plain lookup, e.g. for a booking-list row's badge, where no
+// one step array is "the" right one to search). A function of the live
+// payment split (from the admin's Payment Settings page) rather than a
+// static object, since the Advance/Midway labels quote the actual
+// percentage — callers that don't have the live split handy fall back to
+// PAYMENT_SPLIT (the same 10/50 default the DB row starts with).
+function allStatusLabels(split) {
+  return {
+    // Display-only — never an actual bookings.status value, since
+    // submitting the booking form (with its document uploads) is what
+    // creates the row in the first place, so by the time a booking exists
+    // at all it's already true. Exists purely so the stepper shows it as
+    // the first, already-completed step rather than starting the
+    // customer's view mid-pipeline at "Documents Under Review".
+    docs_sent: "Documents Sent for Review",
+    [BOOKING_STATUS.DOCS_REVIEW]: "Documents Under Review",
+    [BOOKING_STATUS.QUOTE_SENT]: "Final Quote Generated",
+    [BOOKING_STATUS.ADVANCE_PAID]: `Advance Paid (${split.advancePercent}%)`,
+    [BOOKING_STATUS.CONFIRMED]: "Booking Confirmed",
+    [BOOKING_STATUS.CAR_ARRIVED_AT_YARD]: "Car Arrived at Yard",
+    [BOOKING_STATUS.MIDWAY_PAID]: `${split.midwayPercent}% Payment Received`,
+    [BOOKING_STATUS.LOADED_ON_CARRIER]: "Loaded on Carrier",
+    [BOOKING_STATUS.IN_TRANSIT]: "In Transit",
+    [BOOKING_STATUS.RECEIVED_AT_DESTINATION_YARD]: "Received at Destination Yard",
+    [BOOKING_STATUS.REACHED_DESTINATION_YARD]: "Car Has Reached the Destination Yard",
+    [BOOKING_STATUS.OUT_FOR_DELIVERY]: "Out for Delivery",
+    [BOOKING_STATUS.DELIVERED]: "Delivered",
+    [BOOKING_STATUS.CANCELLED]: "Cancelled",
+  };
+}
+
+// The ordered pipeline a given booking actually follows, branching
+// independently on each leg's own method (a booking can mix self/driver
+// across pickup and dropoff — see booking_addresses.method in
+// supabase-schema.sql, one row per leg, no constraint linking the two):
+//   - pickupMethod "self" inserts "Car Arrived at Yard" between Booking
+//     Confirmed and the midway payment — the customer dropped the car off
+//     at CarCoolie's yard themselves, so there's no driver collection leg.
+//   - dropoffMethod "self" replaces "Received at Destination Yard" +
+//     "Out for Delivery" with a single "Car Has Reached the Destination
+//     Yard" step — the customer collects the car from the yard themselves,
+//     so there's no final driver-delivery leg either.
+// Defaults to "driver" for both legs (matching booking_addresses.method's
+// own column default) when the caller doesn't have a specific booking's
+// methods handy, e.g. before any address has been captured yet.
+export function buildStatusSteps({ split = PAYMENT_SPLIT, pickupMethod = "driver", dropoffMethod = "driver" } = {}) {
+  const labels = allStatusLabels(split);
+  const keys = ["docs_sent", BOOKING_STATUS.DOCS_REVIEW, BOOKING_STATUS.QUOTE_SENT, BOOKING_STATUS.ADVANCE_PAID, BOOKING_STATUS.CONFIRMED];
+  if (pickupMethod === "self") keys.push(BOOKING_STATUS.CAR_ARRIVED_AT_YARD);
+  keys.push(BOOKING_STATUS.MIDWAY_PAID, BOOKING_STATUS.LOADED_ON_CARRIER, BOOKING_STATUS.IN_TRANSIT);
+  if (dropoffMethod === "self") {
+    keys.push(BOOKING_STATUS.REACHED_DESTINATION_YARD);
+  } else {
+    keys.push(BOOKING_STATUS.RECEIVED_AT_DESTINATION_YARD, BOOKING_STATUS.OUT_FOR_DELIVERY);
+  }
+  keys.push(BOOKING_STATUS.DELIVERED);
+  return keys.map((key) => ({ key, label: labels[key] }));
+}
+
+// Plain status -> label lookup, independent of which leg-method branch a
+// particular booking follows (every status's label is fixed regardless of
+// which pipeline it appears in) — for places that just need to show a
+// badge/list-row label for a known status, not render the full stepper.
+export function statusLabel(status, split = PAYMENT_SPLIT) {
+  return allStatusLabels(split)[status] ?? status;
 }
 
 function safeParse(raw, fallback) {
@@ -458,6 +513,11 @@ function rowToBooking(
           )
         : null,
     registrationNumber: row.vehicle_registration_number ?? null,
+    // The carrier truck assigned to this booking (admin-set, see
+    // carcoolie-admin's booking detail page) — lets the In Transit step
+    // show a live location card for exactly this truck. Only ever
+    // meaningful once the booking's actually in transit; null otherwise.
+    carrierVehicleNumber: row.carrier_vehicle_number ?? null,
     estimate: {
       fromCity: row.from_city?.name ?? null,
       toCity: row.to_city?.name ?? null,
@@ -1020,6 +1080,28 @@ export async function submitBookingReview(bookingCode, { rating, selectedComment
     benefitType: data.benefit_type,
     benefitReference: data.benefit_reference,
   };
+}
+
+// Live GPS lookup for the carrier truck on this booking — the In Transit
+// step's location card (TruckLocationCard in MyBookingsClient.js). Goes
+// through /api/truck-tracking (server-side proxy + ownership check) rather
+// than a direct Supabase call, same reasoning as selectBookingBenefit below:
+// the plate itself never leaves the server, only the live position for
+// whichever plate the verified booking actually has.
+export async function fetchTruckLocation(bookingCode) {
+  if (!isSupabaseConfigured) throw new Error("Live tracking isn't available yet — try again shortly.");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token ?? null;
+
+  const res = await fetch("/api/truck-tracking", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookingCode, accessToken }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Couldn't load live location — try again.");
+  return body.truck;
 }
 
 // Lists what "Choose Your Benefit" can offer right now (active, unexpired,

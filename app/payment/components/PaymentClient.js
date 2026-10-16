@@ -14,7 +14,15 @@ import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/li
 // or already past midway_paid) has nothing due here. The advance/midway
 // percentages come from the admin's payment_settings row (getPaymentSplit),
 // so this is a function of the live split rather than a static object.
-function buildPaymentStages(split) {
+//
+// The final-payment stage's trigger status depends on the booking's own
+// dropoff method (see buildStatusSteps in bookingStore.js): a driver
+// drop-off still goes through "Out for Delivery", but a self drop-off skips
+// straight from "In Transit" to "Car Has Reached the Destination Yard" —
+// there's no driver-delivery leg to collect the final balance against, so
+// that's the equivalent final-leg status to key this stage off instead.
+function buildPaymentStages(split, dropoffMethod = "driver") {
+  const finalLegStatus = dropoffMethod === "self" ? BOOKING_STATUS.REACHED_DESTINATION_YARD : BOOKING_STATUS.OUT_FOR_DELIVERY;
   return {
     [BOOKING_STATUS.QUOTE_SENT]: {
       amountFn: (booking) => Math.round(booking.finalQuote * (split.advancePercent / 100)),
@@ -39,7 +47,7 @@ function buildPaymentStages(split) {
       // explicitly sent the request (see MidwayPaymentCard in the admin panel).
       requiresFlag: "midwayRequested",
     },
-    [BOOKING_STATUS.OUT_FOR_DELIVERY]: {
+    [finalLegStatus]: {
       // Not a flat percentage — whatever's actually left of the final quote
       // once the advance/midway checkpoints and any admin-added charges
       // (pickup, dropoff, tolls) are accounted for. See remainingBalance in
@@ -51,7 +59,7 @@ function buildPaymentStages(split) {
       // Paying this doesn't move the booking to Delivered by itself — that's
       // a real-world event the admin confirms separately once the vehicle's
       // actually handed over, same as Advance Paid still needs a dedicated
-      // "Mark Booking Confirmed" click. Status just stays out_for_delivery.
+      // "Mark Booking Confirmed" click. Status just stays at finalLegStatus.
       targetStatus: null,
       paidField: "finalPaid",
       successHeading: "Final Payment Received",
@@ -129,7 +137,7 @@ export default function PaymentClient() {
     );
   }
 
-  let stage = buildPaymentStages(split)[booking.status];
+  let stage = buildPaymentStages(split, booking.dropoff?.method)[booking.status];
   if (stage?.requiresFlag && !booking[stage.requiresFlag]) stage = undefined;
   const amountDue = stage ? stage.amountFn(booking) : 0;
 

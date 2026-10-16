@@ -47,11 +47,13 @@ import {
   CANCELLABLE_STATUSES,
   CANCELLATION_FEE_PERCENT,
   CANCELLATION_REASONS,
+  fetchTruckLocation,
   getBooking,
   getBookings,
   getChargeReceiptUrl,
   listAvailableBenefits,
   selectBookingBenefit,
+  statusLabel,
   submitBookingReview,
   updateBookingDocument,
 } from "../../services/b2c/lib/bookingStore";
@@ -88,18 +90,16 @@ const STATUS_BADGE_STYLES = {
   [BOOKING_STATUS.QUOTE_SENT]: "bg-blue-50 text-blue-700",
   [BOOKING_STATUS.ADVANCE_PAID]: "bg-violet-50 text-violet-700",
   [BOOKING_STATUS.CONFIRMED]: "bg-teal-50 text-teal-700",
+  [BOOKING_STATUS.CAR_ARRIVED_AT_YARD]: "bg-sky-50 text-sky-700",
   [BOOKING_STATUS.MIDWAY_PAID]: "bg-indigo-50 text-indigo-700",
   [BOOKING_STATUS.LOADED_ON_CARRIER]: "bg-cyan-50 text-cyan-700",
   [BOOKING_STATUS.IN_TRANSIT]: "bg-orange-50 text-orange-700",
+  [BOOKING_STATUS.RECEIVED_AT_DESTINATION_YARD]: "bg-fuchsia-50 text-fuchsia-700",
   [BOOKING_STATUS.OUT_FOR_DELIVERY]: "bg-pink-50 text-pink-700",
+  [BOOKING_STATUS.REACHED_DESTINATION_YARD]: "bg-fuchsia-50 text-fuchsia-700",
   [BOOKING_STATUS.DELIVERED]: "bg-green-50 text-green-700",
   [BOOKING_STATUS.CANCELLED]: "bg-slate-100 text-slate-500",
 };
-
-function statusLabel(status, split = PAYMENT_SPLIT) {
-  if (status === BOOKING_STATUS.CANCELLED) return "Cancelled";
-  return buildStatusSteps(split).find((s) => s.key === status)?.label ?? status;
-}
 
 function formatStepTime(iso) {
   if (!iso) return null;
@@ -125,6 +125,75 @@ function PocDetailsRow({ label, poc }) {
       <a href={`tel:${poc.phone}`} className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 hover:text-red-600">
         <Phone className="h-3 w-3 shrink-0" /> {poc.phone}
       </a>
+    </div>
+  );
+}
+
+// How often this card re-polls the live GPS feed while the page is open —
+// same interval and reasoning as carcoolie-admin's own truck-tracking cards.
+const TRUCK_POLL_MS = 20000;
+
+// Live location for the carrier vehicle on this booking — nested under the
+// In Transit step (see its render site in StatusStepper below), shown only
+// while that step is the booking's *current* one, so it disappears on its
+// own once the vehicle's reached the destination yard. Goes through
+// fetchTruckLocation()/api/truck-tracking, which looks the plate up
+// server-side from the verified booking rather than trusting one from the
+// client.
+function TruckLocationCard({ bookingId }) {
+  const [state, setState] = useState({ loading: true, error: "", truck: null });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // `background` refreshes (the poll below) keep whatever's already on
+    // screen if a request happens to fail, rather than flashing an error
+    // over live data that was working fine a moment ago.
+    function load({ background = false } = {}) {
+      fetchTruckLocation(bookingId)
+        .then((truck) => {
+          if (cancelled) return;
+          setState({ loading: false, error: "", truck });
+        })
+        .catch((error) => {
+          if (cancelled || background) return;
+          setState({ loading: false, error: error.message, truck: null });
+        });
+    }
+
+    load();
+    const id = setInterval(() => load({ background: true }), TRUCK_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [bookingId]);
+
+  if (state.loading) {
+    return (
+      <div className="mt-2 flex max-w-xs items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-400 ring-1 ring-slate-200">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your vehicle&apos;s live location&hellip;
+      </div>
+    );
+  }
+
+  // A real fetch failure gets a soft note; no live fix at all for this
+  // plate right now (common — GPS fixes land every 30s-2min in practice,
+  // not continuously) isn't an error, just nothing to show yet.
+  if (state.error) {
+    return (
+      <p className="mt-2 max-w-xs text-xs text-slate-400">Live location is temporarily unavailable — check back shortly.</p>
+    );
+  }
+  if (!state.truck) return null;
+
+  return (
+    <div className="mt-2 max-w-xs rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+      <p className="flex items-center gap-1 text-[11px] font-bold tracking-wide text-slate-500 uppercase">
+        <MapPin className="h-3 w-3 shrink-0 text-red-600" /> Your Vehicle&apos;s Current Location
+      </p>
+      <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{state.truck.location}</p>
+      {state.truck.gpsDateTime && <p className="mt-0.5 text-xs text-slate-400">Updated {state.truck.gpsDateTime}</p>}
     </div>
   );
 }
@@ -169,7 +238,7 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
     );
   }
 
-  const steps = buildStatusSteps(split);
+  const steps = buildStatusSteps({ split, pickupMethod: booking?.pickup?.method, dropoffMethod: booking?.dropoff?.method });
   const currentIndex = steps.findIndex((s) => s.key === status);
   // 0-based currentIndex over a 1-based step count — the docs_sent lead-in
   // step is always already "done" by the time a booking exists (see the
@@ -253,6 +322,9 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
               )}
               {step.key === BOOKING_STATUS.OUT_FOR_DELIVERY && booking?.dropoffPoc && (done || current) && (
                 <PocDetailsRow label="Drop-off Point of Contact" poc={booking.dropoffPoc} />
+              )}
+              {step.key === BOOKING_STATUS.IN_TRANSIT && current && booking?.carrierVehicleNumber && (
+                <TruckLocationCard bookingId={booking.id} />
               )}
             </div>
           </div>

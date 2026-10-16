@@ -50,6 +50,18 @@ alter type booking_status add value if not exists 'loaded_on_carrier' after 'mid
 -- `bookings` below and CANCELLATION_FEE_PERCENT in bookingStore.js.
 alter type booking_status add value if not exists 'cancelled' after 'delivered';
 
+-- Leg-method-dependent pipeline steps — see buildStatusSteps() in
+-- bookingStore.js (and its mirror in carcoolie-admin's lib/bookingStatus.js)
+-- for the full branching logic: 'car_arrived_at_yard' only appears when
+-- pickup is self (customer drops the car at CarCoolie's yard themselves);
+-- 'received_at_destination_yard' only appears when dropoff is driver
+-- (between in_transit and out_for_delivery); 'reached_destination_yard'
+-- only appears when dropoff is self, replacing out_for_delivery entirely
+-- since there's no driver-delivery leg to track.
+alter type booking_status add value if not exists 'car_arrived_at_yard' after 'confirmed';
+alter type booking_status add value if not exists 'received_at_destination_yard' after 'in_transit';
+alter type booking_status add value if not exists 'reached_destination_yard' after 'received_at_destination_yard';
+
 do $$ begin
   create type leg_method as enum ('self', 'driver'); -- self drop-off/pickup vs CarCoolie driver
 exception when duplicate_object then null; end $$;
@@ -247,6 +259,49 @@ create table if not exists saved_estimates (
   details jsonb not null,
   updated_at timestamptz not null default now()
 );
+
+-- Admin's own tracking layer for abandoned-cart outreach (carcoolie-admin's
+-- Abandoned Carts page), deliberately a separate table from saved_estimates
+-- rather than extra columns on it: that table is continuously overwritten
+-- by the customer's own live draft activity (every autosave is a fresh
+-- upsert), so an admin's category/notes would silently vanish the next time
+-- the customer so much as changes a selection. One row per customer, same
+-- "latest wins" shape as saved_estimates, but entirely admin-authored — a
+-- customer never writes to this table at all.
+create table if not exists abandonment_notes (
+  customer_id uuid primary key references customers (id) on delete cascade,
+  status text not null default 'new' check (status in ('new', 'contacted', 'closed')),
+  notes text,
+  updated_at timestamptz not null default now()
+);
+
+-- One row per carrier truck per snapshot-job poll (carcoolie-admin's Carriers
+-- page) — builds a breadcrumb trail over time from enmovil's live-only GPS
+-- feed (no history endpoint of their own, confirmed by testing), via
+-- /api/truck-tracking/snapshot. Only ever written for plates that actually
+-- appear as a bookings.carrier_vehicle_number (see fetchKnownCarrierPlates
+-- in lib/truckTracking.js) — not all ~6700 trucks on enmovil's platform,
+-- just the ones that are actually ours. gps_date_time is kept as the raw
+-- string enmovil returns ("2026-10-15 11:53:06", no timezone marker) rather
+-- than parsed into a timestamp — captured_at (server-generated) is what the
+-- path is actually ordered by.
+create table if not exists truck_location_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  plate_no text not null,
+  latitude double precision not null,
+  longitude double precision not null,
+  speed numeric,
+  ignition text,
+  location text,
+  area text,
+  transporter_name text,
+  distance numeric,
+  gps_date_time text,
+  captured_at timestamptz not null default now()
+);
+
+create index if not exists truck_location_snapshots_plate_no_captured_at_idx
+  on truck_location_snapshots (plate_no, captured_at desc);
 
 -- Backfill for accounts created before this trigger existed (e.g. the
 -- Google/magic-link accounts already used to test sign-in) — the trigger
@@ -1263,6 +1318,8 @@ alter table payments enable row level security;
 alter table booking_status_history enable row level security;
 alter table quote_requests enable row level security;
 alter table saved_estimates enable row level security;
+alter table abandonment_notes enable row level security;
+alter table truck_location_snapshots enable row level security;
 alter table service_area_leads enable row level security;
 
 create or replace function is_admin()
@@ -1324,6 +1381,16 @@ drop policy if exists "saved_estimates owner insert" on saved_estimates;
 create policy "saved_estimates owner insert" on saved_estimates for insert with check (customer_id = auth.uid());
 drop policy if exists "saved_estimates owner update" on saved_estimates;
 create policy "saved_estimates owner update" on saved_estimates for update using (customer_id = auth.uid());
+
+-- abandonment_notes: deliberately has NO policy at all, for any operation —
+-- same reasoning as benefit_codes: RLS defaults to deny, so even an
+-- authenticated customer can never read or write their own row here. Only
+-- carcoolie-admin's service_role-backed /api/abandoned-carts route ever
+-- touches this table.
+
+-- truck_location_snapshots: same reasoning again — no policy at all, admin
+-- (and the scheduled snapshot job) only, via service_role-backed
+-- /api/truck-tracking* routes.
 
 -- admin_users: only admins can read the admin roster
 drop policy if exists "admin_users admin only" on admin_users;
