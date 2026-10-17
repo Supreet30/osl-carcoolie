@@ -240,6 +240,12 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
 
   const steps = buildStatusSteps({ split, pickupMethod: booking?.pickup?.method, dropoffMethod: booking?.dropoff?.method });
   const currentIndex = steps.findIndex((s) => s.key === status);
+  // A self drop-off skips "Out for Delivery" entirely (see buildStatusSteps
+  // in bookingStore.js) — its equivalent final leg is "Car Has Reached the
+  // Destination Yard", so the Drop-off POC has to anchor to that step
+  // instead for those bookings, same as the midway/final payment banners above.
+  const finalLegStatus =
+    booking?.dropoff?.method === "self" ? BOOKING_STATUS.REACHED_DESTINATION_YARD : BOOKING_STATUS.OUT_FOR_DELIVERY;
   // 0-based currentIndex over a 1-based step count — the docs_sent lead-in
   // step is always already "done" by the time a booking exists (see the
   // comment on buildStatusSteps in bookingStore.js), so it never lowers this.
@@ -320,7 +326,7 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
               {step.key === BOOKING_STATUS.CONFIRMED && booking?.pickupPoc && (done || current) && (
                 <PocDetailsRow label="Pickup Point of Contact" poc={booking.pickupPoc} />
               )}
-              {step.key === BOOKING_STATUS.OUT_FOR_DELIVERY && booking?.dropoffPoc && (done || current) && (
+              {step.key === finalLegStatus && booking?.dropoffPoc && (done || current) && (
                 <PocDetailsRow label="Drop-off Point of Contact" poc={booking.dropoffPoc} />
               )}
               {step.key === BOOKING_STATUS.IN_TRANSIT && current && booking?.carrierVehicleNumber && (
