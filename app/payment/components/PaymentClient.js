@@ -15,13 +15,18 @@ import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/li
 // percentages come from the admin's payment_settings row (getPaymentSplit),
 // so this is a function of the live split rather than a static object.
 //
-// The final-payment stage's trigger status depends on the booking's own
-// dropoff method (see buildStatusSteps in bookingStore.js): a driver
-// drop-off still goes through "Out for Delivery", but a self drop-off skips
-// straight from "In Transit" to "Car Has Reached the Destination Yard" —
-// there's no driver-delivery leg to collect the final balance against, so
-// that's the equivalent final-leg status to key this stage off instead.
-function buildPaymentStages(split, dropoffMethod = "driver") {
+// The midway- and final-payment stages' trigger statuses depend on the
+// booking's own pickup/dropoff method (see buildStatusSteps in
+// bookingStore.js): a driver pickup still goes through "Confirmed", but a
+// self pickup inserts "Car Arrived at Yard" one step after Confirmed —
+// there's no driver-pickup leg to collect the midway checkpoint against
+// until the car has actually arrived, so that's the equivalent status to
+// key this stage off instead. Same reasoning for dropoff and the final leg:
+// a driver drop-off still goes through "Out for Delivery", but a self
+// drop-off skips straight from "In Transit" to "Car Has Reached the
+// Destination Yard".
+function buildPaymentStages(split, pickupMethod = "driver", dropoffMethod = "driver") {
+  const midwayCheckpointStatus = pickupMethod === "self" ? BOOKING_STATUS.CAR_ARRIVED_AT_YARD : BOOKING_STATUS.CONFIRMED;
   const finalLegStatus = dropoffMethod === "self" ? BOOKING_STATUS.REACHED_DESTINATION_YARD : BOOKING_STATUS.OUT_FOR_DELIVERY;
   return {
     [BOOKING_STATUS.QUOTE_SENT]: {
@@ -33,7 +38,7 @@ function buildPaymentStages(split, dropoffMethod = "driver") {
       paidField: "advancePaid",
       successHeading: "Advance Payment Received",
     },
-    [BOOKING_STATUS.CONFIRMED]: {
+    [midwayCheckpointStatus]: {
       amountFn: (booking) => Math.round(booking.finalQuote * (split.midwayPercent / 100)),
       heading: `${split.midwayPercent}% Payment`,
       subheading: `Pay the ${split.midwayPercent}% checkpoint to keep this booking moving. The remaining balance is settled on delivery.`,
@@ -137,7 +142,7 @@ export default function PaymentClient() {
     );
   }
 
-  let stage = buildPaymentStages(split, booking.dropoff?.method)[booking.status];
+  let stage = buildPaymentStages(split, booking.pickup?.method, booking.dropoff?.method)[booking.status];
   if (stage?.requiresFlag && !booking[stage.requiresFlag]) stage = undefined;
   const amountDue = stage ? stage.amountFn(booking) : 0;
 

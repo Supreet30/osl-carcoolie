@@ -1317,6 +1317,16 @@ function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) 
       : null;
   const [tab, setTab] = useState("status");
 
+  // Mirrors buildStatusSteps/BookingDetailClient.js (carcoolie-admin): for a
+  // self pickup, the midway checkpoint lands one step later than Confirmed,
+  // at "Car Arrived at Yard" — so the "Proceed to Payment" banner has to key
+  // off that status too, not just CONFIRMED, or a self-pickup customer never
+  // sees a way to pay once admin requests the midway payment. Same reasoning
+  // for a self dropoff and the final-payment banner at REACHED_DESTINATION_YARD
+  // instead of OUT_FOR_DELIVERY.
+  const midwayCheckpointStatus = pickup?.method === "self" ? BOOKING_STATUS.CAR_ARRIVED_AT_YARD : BOOKING_STATUS.CONFIRMED;
+  const finalLegStatus = dropoff?.method === "self" ? BOOKING_STATUS.REACHED_DESTINATION_YARD : BOOKING_STATUS.OUT_FOR_DELIVERY;
+
   // Re-uploading a rejected document — a fresh pick reaches
   // handleDocFileSelected via the same hidden-input trigger pattern
   // BookingForm.js uses for the original upload.
@@ -1451,7 +1461,7 @@ function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) 
         </div>
       )}
 
-      {booking.status === BOOKING_STATUS.CONFIRMED && booking.finalQuote && booking.midwayRequested && (
+      {booking.status === midwayCheckpointStatus && booking.finalQuote && booking.midwayRequested && (
         <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
           <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
           <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * (split.midwayPercent / 100))}</p>
@@ -1468,7 +1478,7 @@ function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) 
         </div>
       )}
 
-      {booking.status === BOOKING_STATUS.OUT_FOR_DELIVERY &&
+      {booking.status === finalLegStatus &&
         booking.finalQuote &&
         booking.finalRequested &&
         typeof booking.finalPaid !== "number" && (
