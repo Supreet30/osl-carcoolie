@@ -28,12 +28,20 @@ import {
   Wind,
   XCircle,
 } from "lucide-react";
-import { createBooking, saveFormDraft } from "../../lib/bookingStore";
-import { formatINR, getDocumentFormats, getYardsForCity } from "../../lib/pricing";
+import {
+  clearLocalFormDraft,
+  clearSavedEstimate,
+  createBooking,
+  saveFormDraft,
+  saveLocalFormDraft,
+} from "../../lib/bookingStore";
+import { driverLegCharge, formatINR, getDocumentFormats, getYardsForCity } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import Dropdown from "../../components/Dropdown";
 import MapPickerModal from "./MapPickerModal";
 import { locateCurrentPosition } from "../lib/geocode";
+import { clearDocuments, getAllDocuments, removeDocument, saveDocument } from "../lib/documentDraftStore";
+import { fetchDrivingDistanceKm } from "../lib/distance";
 
 // Driving License is dropped from this list — `license` stays defined in
 // the DB's document_type enum (Postgres can't drop an enum value once
@@ -321,7 +329,7 @@ function AddLocationPicker({ captured, onUseCurrentLocation, onOpenMap, locating
 // only ever appears after an explicit "No" — never on load.
 // `yards` are this city's configured hubs (see getYardsForCity in
 // pricing.js) — empty until they load, or when the city has none yet.
-function HubLocationCard({ city, showProximityCheck, withinHub, onWithinHubChange, name, yards, yard, onYardChange }) {
+function HubLocationCard({ city, showDistance, distanceState, yards, yard, onYardChange }) {
   const selected = yards.find((y) => y.name === yard?.name) ?? yards[0] ?? null;
 
   if (!selected) {
@@ -372,35 +380,48 @@ function HubLocationCard({ city, showProximityCheck, withinHub, onWithinHubChang
         </a>
       </div>
 
-      {showProximityCheck && (
+      {/* Replaces a self-declared "within 50km?" Yes/No question — the real
+          driving distance is calculated automatically (see
+          fetchDrivingDistanceKm in ../lib/distance.js) the moment both a
+          captured pickup/drop-off location and this yard are known, and the
+          slab charge (driverLegCharge in ../../lib/pricing.js) follows
+          directly from that instead of being asked at all. */}
+      {showDistance && (
         <div className="mt-4 border-t border-slate-200 pt-4">
-          <p className="text-xs font-semibold text-[#0b1e42]">Is your location within 50km of this hub?</p>
-          <div className="mt-2 flex gap-5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-              <input
-                type="radio"
-                name={name}
-                checked={withinHub === true}
-                onChange={() => onWithinHubChange(true)}
-                className="h-3.5 w-3.5 accent-red-600"
-              />
-              Yes
-            </label>
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-              <input
-                type="radio"
-                name={name}
-                checked={withinHub === false}
-                onChange={() => onWithinHubChange(false)}
-                className="h-3.5 w-3.5 accent-red-600"
-              />
-              No
-            </label>
-          </div>
-          {withinHub === false && (
-            <p className="mt-3 flex items-start gap-1.5 text-xs font-semibold text-amber-700">
+          {distanceState.loading ? (
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculating distance from this hub&hellip;
+            </p>
+          ) : distanceState.distanceKm != null ? (
+            distanceState.distanceKm <= 50 ? (
+              // The ₹1,000 base charge is already baked into the total
+              // shown back in the estimate — nothing extra to call out here,
+              // just confirm the location qualifies for it.
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                Your location is {distanceState.distanceKm.toFixed(1)} km from the selected hub/yard.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs font-semibold text-[#0b1e42]">
+                  Your location is <span className="font-extrabold">{distanceState.distanceKm.toFixed(1)} km</span>{" "}
+                  from the selected hub/yard.
+                </p>
+                <p className="mt-1.5 text-xs text-slate-500">
+                  {/* Only the delta beyond the ₹1,000 baseline already
+                      included in the estimate total — not the full
+                      driverLegCharge figure, which would double-count it. */}
+                  Additional CarCoolie pickup/drop-off charge:{" "}
+                  <span className="font-bold text-[#0b1e42]">{formatINR(distanceState.charge - 1000)}</span> (₹100 per
+                  10km beyond 50km)
+                </p>
+              </>
+            )
+          ) : (
+            <p className="flex items-start gap-1.5 text-xs font-semibold text-amber-700">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Additional charges may apply for locations beyond 50km from the hub.
+              We couldn&apos;t calculate the exact distance to this hub yet — a flat {formatINR(1000)} pickup/drop-off
+              charge applies for now.
             </p>
           )}
         </div>
@@ -469,12 +490,15 @@ function MethodPicker({ label, method, options, locked, onChange }) {
   );
 }
 
-export default function BookingForm({ estimate, estimateLoaded, initialFormValues, onSummaryChange }) {
+export default function BookingForm({ estimate, estimateLoaded, draftId, initialFormValues, onSummaryChange }) {
   const router = useRouter();
 
   // Nothing is uploaded until the customer actually picks a file — the
   // upload card only turns green in response to a real handleFileSelected
-  // call below, never pre-filled.
+  // call below, never pre-filled. Restored below from IndexedDB (see
+  // app/services/b2c/book/lib/documentDraftStore.js) once `draftId` is
+  // known, for whatever was already picked earlier in this same booking
+  // attempt (e.g. before clicking Back to edit the estimate and returning).
   const [uploads, setUploads] = useState({
     puc: { uploaded: false },
     noc: { uploaded: false },
@@ -484,6 +508,29 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
     authority_letter: { uploaded: false },
     pan: { uploaded: false },
   });
+
+  useEffect(() => {
+    if (!draftId) return;
+    let cancelled = false;
+    getAllDocuments(draftId).then((restored) => {
+      if (cancelled || Object.keys(restored).length === 0) return;
+      setUploads((prev) => {
+        const next = { ...prev };
+        for (const [key, doc] of Object.entries(restored)) {
+          next[key] = {
+            uploaded: true,
+            fileName: doc.fileName,
+            fileSize: `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`,
+            file: doc.file,
+          };
+        }
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId]);
 
   // Admin-uploaded "Download Format" links, keyed by doc_type — see
   // getDocumentFormats() in pricing.js. Empty until the fetch resolves, so
@@ -537,27 +584,73 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
   // Chosen in the "Get an Estimate" modal now, not here — see
   // handleBookNow in EstimateModal.js. Defaults to "self" so a booking
   // reached without a saved estimate (the amber notice above) still works.
-  // initialFormValues (a resumed "form" stage draft's in-progress values —
-  // see saveFormDraft below and BookingPageClient.js) takes priority over
-  // the estimate's own default when present.
-  const [pickupMethod, setPickupMethod] = useState(initialFormValues?.pickupMethod ?? estimate?.pickupMethod ?? "self");
+  // The estimate's own method always wins over initialFormValues (a resumed
+  // "form" stage draft's in-progress values — see saveFormDraft below and
+  // BookingPageClient.js), not the other way around: pickupMethodLocked
+  // below already treats the estimate as authoritative once it has a
+  // method, and a draft saved from an earlier attempt with a different
+  // method (e.g. clicking Back on the estimate and picking a different one
+  // the second time, both sharing the same draftId while it's still fresh —
+  // see getEstimateDraftId in bookingStore.js) must never override the
+  // current estimate's actual choice. initialFormValues is only a fallback
+  // for an estimate that predates this field entirely.
+  const [pickupMethod, setPickupMethod] = useState(estimate?.pickupMethod ?? initialFormValues?.pickupMethod ?? "self");
   const [pickupLocation, setPickupLocation] = useState(initialFormValues?.pickupLocation ?? null);
   const [pickupDate, setPickupDate] = useState(initialFormValues?.pickupDate ?? estimate?.date ?? "");
   // No default slot pre-selected — every slot starts disabled until a date
   // is actually picked, so nothing should already look chosen before then.
   const [timeSlot, setTimeSlot] = useState(initialFormValues?.timeSlot ?? null);
-  // Self-declared for now (see HubLocationCard) — null until the customer
-  // actually answers, true/false after. Not yet wired into pricing; just
-  // surfaces the "extra charges may apply" note when they say "No".
-  const [pickupWithinHub, setPickupWithinHub] = useState(initialFormValues?.pickupWithinHub ?? null);
+  // Real driving distance from the captured pickup location to the
+  // selected yard, and the slab charge it implies (driverLegCharge in
+  // ../../lib/pricing.js) — replaces a self-declared "within 50km?"
+  // Yes/No question entirely; see the effect below and HubLocationCard.
+  const [pickupDistance, setPickupDistance] = useState({ loading: false, distanceKm: null, charge: 1000 });
   const [pickupYards, setPickupYards] = useState([]);
   const [pickupYard, setPickupYard] = useState(null);
 
-  const [dropoffMethod, setDropoffMethod] = useState(initialFormValues?.dropoffMethod ?? estimate?.dropoffMethod ?? "self");
+  // Same estimate-wins priority as pickupMethod above.
+  const [dropoffMethod, setDropoffMethod] = useState(estimate?.dropoffMethod ?? initialFormValues?.dropoffMethod ?? "self");
   const [dropoffLocation, setDropoffLocation] = useState(initialFormValues?.dropoffLocation ?? null);
-  const [dropoffWithinHub, setDropoffWithinHub] = useState(initialFormValues?.dropoffWithinHub ?? null);
+  const [dropoffDistance, setDropoffDistance] = useState({ loading: false, distanceKm: null, charge: 1000 });
   const [dropoffYards, setDropoffYards] = useState([]);
   const [dropoffYard, setDropoffYard] = useState(null);
+
+  // Recomputes the pickup distance/charge whenever the captured location,
+  // the selected yard, or the method itself changes — the only three things
+  // it actually depends on. A yard with no resolved coordinates yet (see
+  // lib/yardCoordinates.js in carcoolie-admin) just can't produce a
+  // distance; the flat ₹1,000 default stands in until it's fixed.
+  useEffect(() => {
+    if (pickupMethod !== "driver" || !pickupLocation || !pickupYard?.latitude || !pickupYard?.longitude) {
+      setPickupDistance({ loading: false, distanceKm: null, charge: 1000 });
+      return undefined;
+    }
+    let cancelled = false;
+    setPickupDistance((prev) => ({ ...prev, loading: true }));
+    fetchDrivingDistanceKm(pickupLocation, { lat: pickupYard.latitude, lng: pickupYard.longitude }).then((km) => {
+      if (cancelled) return;
+      setPickupDistance({ loading: false, distanceKm: km, charge: driverLegCharge(km) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupMethod, pickupLocation, pickupYard]);
+
+  useEffect(() => {
+    if (dropoffMethod !== "driver" || !dropoffLocation || !dropoffYard?.latitude || !dropoffYard?.longitude) {
+      setDropoffDistance({ loading: false, distanceKm: null, charge: 1000 });
+      return undefined;
+    }
+    let cancelled = false;
+    setDropoffDistance((prev) => ({ ...prev, loading: true }));
+    fetchDrivingDistanceKm(dropoffLocation, { lat: dropoffYard.latitude, lng: dropoffYard.longitude }).then((km) => {
+      if (cancelled) return;
+      setDropoffDistance({ loading: false, distanceKm: km, charge: driverLegCharge(km) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dropoffMethod, dropoffLocation, dropoffYard]);
 
   // `estimate` loads from localStorage after mount (see BookingPageClient.js
   // — it's null on first render), so the useState defaults above miss it.
@@ -606,7 +699,16 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
   // from a real route. Drives the expected delivery date below rather than
   // gating a drop-off date picker — the customer no longer picks their own
   // drop-off date/slot, it's just pickup date + this many days.
-  const minTransitDays = estimate?.minDays ?? 1;
+  //
+  // On top of that base figure, a standing buffer per the Market Freight
+  // Table revision: +1 day across the board ("Standard Delivery"), +1 more
+  // if CarCoolie's own driver handles the pickup leg, and +1 more again if
+  // CarCoolie's own driver handles the drop-off leg — so a booking with
+  // both legs on CarCoolie drivers quotes 3 days later than the route's raw
+  // min_days, while a fully self pickup/drop booking only picks up the +1
+  // standard buffer.
+  const minTransitDays =
+    (estimate?.minDays ?? 1) + 1 + (pickupMethod === "driver" ? 1 : 0) + (dropoffMethod === "driver" ? 1 : 0);
   const expectedDeliveryISO = pickupDate ? addDaysISO(pickupDate, minTransitDays) : null;
 
   const [mapPickerTarget, setMapPickerTarget] = useState(null); // "pickup" | "dropoff" | null
@@ -693,9 +795,20 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
   // Bubbles the fields the booking summary sidebar displays up to the
   // shared parent, so it stays live as the customer fills in this form
   // instead of only reflecting the estimate from before this page loaded.
+  // pickupCharge/dropoffCharge are 0 for a self leg, the flat ₹1,000
+  // default while a driver leg's distance isn't known yet, or the real
+  // slab-priced figure once it is — BookingSummary.js uses these to show an
+  // adjusted total that accounts for the real distance surcharge.
   useEffect(() => {
-    onSummaryChange?.({ pickupMethod, dropoffMethod, date: pickupDate, timeSlot });
-  }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot]);
+    onSummaryChange?.({
+      pickupMethod,
+      dropoffMethod,
+      date: pickupDate,
+      timeSlot,
+      pickupCharge: pickupMethod === "driver" ? pickupDistance.charge : 0,
+      dropoffCharge: dropoffMethod === "driver" ? dropoffDistance.charge : 0,
+    });
+  }, [onSummaryChange, pickupMethod, dropoffMethod, pickupDate, timeSlot, pickupDistance, dropoffDistance]);
 
   // Form-stage draft autosave — see saveFormDraft in bookingStore.js. Most
   // of this form's fields are uncontrolled (plain name="..." inputs read
@@ -717,23 +830,31 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
         values[key] = value;
       }
       // Plus the handful of real-React-state fields that never show up in
-      // FormData at all — radios/checkboxes without a `name` (billingMode,
-      // hub-radius answers), custom button/dropdown pickers (methods, date,
-      // time slot, captured map/GPS locations, selected yard).
-      saveFormDraft(estimate, {
+      // FormData at all — radios/checkboxes without a `name` (billingMode),
+      // custom button/dropdown pickers (methods, date, time slot, captured
+      // map/GPS locations, selected yard). Distance/charge aren't stashed
+      // here — they're recomputed automatically from pickupLocation/
+      // pickupYard the moment this draft is resumed, not worth persisting
+      // stale.
+      const snapshot = {
         ...values,
         pickupMethod,
         dropoffMethod,
         pickupDate,
         timeSlot,
-        pickupWithinHub,
-        dropoffWithinHub,
         billingMode,
         pickupYardName: pickupYard?.name ?? null,
         dropoffYardName: dropoffYard?.name ?? null,
         pickupLocation,
         dropoffLocation,
-      });
+      };
+      // Supabase-backed (signed-in customers only — upsertSavedEstimateRow
+      // silently no-ops for guests) for cross-device "Continue Booking".
+      saveFormDraft(estimate, snapshot);
+      // localStorage-backed, works for every customer including guests —
+      // what actually makes typed fields survive a Back-to-estimate round
+      // trip, read back as initialFormValues by BookingPageClient.js.
+      if (draftId) saveLocalFormDraft(draftId, snapshot);
     }, 700);
   }
 
@@ -750,8 +871,6 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
     dropoffMethod,
     pickupDate,
     timeSlot,
-    pickupWithinHub,
-    dropoffWithinHub,
     billingMode,
     pickupYard,
     dropoffYard,
@@ -769,6 +888,7 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
   // them replace a file directly, this is just for removing one outright.
   function handleRemoveUpload(key) {
     setUploads((prev) => ({ ...prev, [key]: { uploaded: false } }));
+    if (draftId) removeDocument(draftId, key);
   }
 
   function handleFileSelected(event) {
@@ -783,6 +903,9 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
         // createBookingSupabase in bookingStore.js.
         [key]: { uploaded: true, fileName: file.name, fileSize: `${sizeMB} MB`, file },
       }));
+      // Fire-and-forget — see documentDraftStore.js. Lets this file survive
+      // a Back-to-estimate-and-return round trip without re-asking for it.
+      if (draftId) saveDocument(draftId, key, file);
     }
     event.target.value = "";
   }
@@ -847,8 +970,27 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
     // (pickup/destination/custom) the booking is billed to.
     const gstin = (formData.get("billing_gstin") || "").toString().trim().toUpperCase() || null;
 
+    // Replaces whatever flat provisional pickup/dropoff charge EstimateModal
+    // quoted (before a location/yard was even picked) with the real,
+    // distance-based figure now that it's known — see the
+    // pickupDistance/dropoffDistance effects above and driverLegCharge in
+    // ../../lib/pricing.js. 0 for a self pickup/drop-off leg, same as before.
+    const finalPickupCharge = pickupMethod === "driver" ? pickupDistance.charge : 0;
+    const finalDropoffCharge = dropoffMethod === "driver" ? dropoffDistance.charge : 0;
+    const finalEstimate = estimate && {
+      ...estimate,
+      pickupCharge: finalPickupCharge,
+      dropoffCharge: finalDropoffCharge,
+      total:
+        estimate.total -
+        (estimate.pickupCharge ?? 0) -
+        (estimate.dropoffCharge ?? 0) +
+        finalPickupCharge +
+        finalDropoffCharge,
+    };
+
     const booking = {
-      estimate,
+      estimate: finalEstimate,
       registrationNumber,
       pickup: {
         fullName: formData.get("pickup_fullName"),
@@ -860,7 +1002,8 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
         pin: formData.get("pickup_pin"),
         method: pickupMethod,
         capturedLocation: pickupLocation,
-        withinHubRadius: pickupWithinHub,
+        // Automatic now (see pickupDistance above) rather than self-declared.
+        withinHubRadius: pickupDistance.distanceKm != null ? pickupDistance.distanceKm <= 50 : null,
         hubName: pickupYard?.name ?? null,
         hubAddress: pickupYard?.address ?? null,
         date: formData.get("pickup_date"),
@@ -876,7 +1019,7 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
         pin: formData.get("dropoff_pin"),
         method: dropoffMethod,
         capturedLocation: dropoffLocation,
-        withinHubRadius: dropoffWithinHub,
+        withinHubRadius: dropoffDistance.distanceKm != null ? dropoffDistance.distanceKm <= 50 : null,
         hubName: dropoffYard?.name ?? null,
         hubAddress: dropoffYard?.address ?? null,
         // No longer customer-picked — expected delivery date is computed
@@ -928,6 +1071,13 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
 
     try {
       const created = await createBooking(booking);
+      // Point of no return — nothing left to resume back to. Bounds
+      // IndexedDB/localStorage to one in-progress draft's worth of data at
+      // a time, same as this session's established "clean up on success"
+      // pattern elsewhere in the codebase.
+      clearSavedEstimate();
+      clearLocalFormDraft(draftId);
+      clearDocuments(draftId);
       router.push(`/my-bookings?id=${created.id}`);
     } catch (err) {
       console.error("Failed to create booking:", err);
@@ -946,14 +1096,13 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
 
   // Rendered in two places depending on the method: for self drop-off/pickup
   // it IS the address section (which yard to go to); for a driver it stays
-  // down in the details as the reference point for the 50km question.
+  // down in the details as the reference point for the automatic distance
+  // surcharge (see the pickupDistance/dropoffDistance effects above).
   const pickupHubCard = (
   <HubLocationCard
     city={pickupCity}
-    showProximityCheck={pickupMethod === "driver"}
-    withinHub={pickupWithinHub}
-    onWithinHubChange={setPickupWithinHub}
-    name="pickup_within_hub_radius"
+    showDistance={pickupMethod === "driver"}
+    distanceState={pickupDistance}
     yards={pickupYards}
     yard={pickupYard}
     onYardChange={setPickupYard}
@@ -962,10 +1111,8 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
   const dropoffHubCard = (
   <HubLocationCard
     city={dropoffCity}
-    showProximityCheck={dropoffMethod === "driver"}
-    withinHub={dropoffWithinHub}
-    onWithinHubChange={setDropoffWithinHub}
-    name="dropoff_within_hub_radius"
+    showDistance={dropoffMethod === "driver"}
+    distanceState={dropoffDistance}
     yards={dropoffYards}
     yard={dropoffYard}
     onYardChange={setDropoffYard}
@@ -981,7 +1128,18 @@ export default function BookingForm({ estimate, estimateLoaded, initialFormValue
           <span className="font-semibold text-[#0b1e42]">
             {estimate.fromCity} &rarr; {estimate.toCity} &bull; {estimate.vehicleType}
           </span>
-          <span className="font-extrabold text-red-600">{formatINR(estimate.total)}</span>
+          {/* Same adjusted-total math as BookingSummary.js's sidebar — kept
+              in sync here too so this strip never shows a different figure
+              than the one the customer sees further down the page. */}
+          <span className="font-extrabold text-red-600">
+            {formatINR(
+              estimate.total -
+                (estimate.pickupCharge ?? 0) -
+                (estimate.dropoffCharge ?? 0) +
+                (pickupMethod === "driver" ? pickupDistance.charge : 0) +
+                (dropoffMethod === "driver" ? dropoffDistance.charge : 0)
+            )}
+          </span>
         </div>
       )}
 

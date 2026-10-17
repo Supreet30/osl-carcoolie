@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   ArrowRight,
   Calendar,
   Car,
@@ -31,7 +32,7 @@ import {
   getVehicleModels,
   validateCoupon,
 } from "../lib/pricing";
-import { markBookingIntent, saveEstimate, saveQuoteDraft } from "../lib/bookingStore";
+import { saveEstimate, saveQuoteDraft } from "../lib/bookingStore";
 import Dropdown from "./Dropdown";
 
 const YEARS = Array.from({ length: 15 }, (_, i) => `${new Date().getFullYear() - i}`);
@@ -176,7 +177,6 @@ function ResultView({
       discount,
       total,
     });
-    markBookingIntent();
     onClose();
     router.push("/services/b2c/book");
   }
@@ -614,6 +614,15 @@ export default function EstimateModal({
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-8 py-6">
           <div>
+            {isResult && (
+              <button
+                type="button"
+                onClick={() => setStep("form")}
+                className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-red-600"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.5} /> Back
+              </button>
+            )}
             <h2 className="text-2xl font-extrabold text-[#0b1e42] sm:text-3xl">
               {isResult ? (
                 <>

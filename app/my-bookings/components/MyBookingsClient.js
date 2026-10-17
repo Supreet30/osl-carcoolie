@@ -64,7 +64,7 @@ import AuthModal from "../../components/AuthModal";
 // Same number the site-wide WhatsApp CTA (app/components/Whatsapp.jsx) uses
 // — kept as its own constant here since an enquiry from a booking's detail
 // page carries a booking-specific pre-filled message, not the generic one.
-const ENQUIRY_PHONE = "911234567890";
+const ENQUIRY_PHONE = "918447990088";
 
 // Mirrors DOCUMENT_TYPES in book/components/BookingForm.js — kept as its
 // own list here since this is a read-only summary of what was uploaded,

@@ -10,10 +10,10 @@ const CONTACT_INFO = [
   {
     icon: MapPin,
     label: "Address",
-    value: "Car Coolie Logistics Pvt Ltd, B-124 Industrial Area, Block B, Prem Puri, Phase 2, Gurugram, Haryana 122011, India.",
+    value: "Car Coolie Logistics Pvt Ltd, Marble Arch, 236B AJC Bose Road, Kolkata 700020, India.",
   },
-  { icon: Phone, label: "Phone", value: "+1234567890" },
-  { icon: Mail, label: "Email", value: "support@carcoolie.com" },
+  { icon: Phone, label: "Phone", value: "+91 84479 90088" },
+  { icon: Mail, label: "Email", value: "carcooliesupport@oslgroup.co.in" },
   { icon: Clock3, label: "Working Hours", value: "Mon to Sat, 10:00 AM to 6:30 PM" },
 ];
 

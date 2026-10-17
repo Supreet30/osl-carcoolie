@@ -642,10 +642,25 @@ create table if not exists yards (
   name text not null,
   address text not null,
   maps_url text,
+  -- Resolved automatically from maps_url (see carcoolie-admin's
+  -- /api/yards/resolve-coordinates and lib/queries.js's upsertYard) whenever
+  -- an admin sets/changes it — not meant to be hand-typed. Null until
+  -- resolved (e.g. no maps_url yet, or it couldn't be parsed). Drives the
+  -- automatic CarCoolie-pickup/drop-off distance surcharge on the customer
+  -- booking form (see app/services/b2c/book/components/BookingForm.js).
+  latitude double precision,
+  longitude double precision,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   unique (city_id, name)
 );
+
+-- Added after yards already existed in production — a fresh install's
+-- create table above already has these, this just backfills an
+-- already-applied database. See the column comments above for what these
+-- are for.
+alter table yards add column if not exists latitude double precision;
+alter table yards add column if not exists longitude double precision;
 
 -- ---------------------------------------------------------------------
 -- Vehicle models — the "Get an Estimate" modal's Make/Model fields are

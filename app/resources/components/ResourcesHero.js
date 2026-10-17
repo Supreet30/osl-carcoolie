@@ -44,7 +44,7 @@ export default function ResourcesHero() {
               Book Vehicle
             </a>
             <a
-              href="tel:+919876543210"
+              href="tel:+918447990088"
               className="inline-flex items-center justify-center rounded-full border-2 border-[#0b1e42] px-8 py-3 text-sm font-bold text-[#0b1e42] transition-colors hover:bg-[#0b1e42] hover:text-white"
             >
               Talk to Expert

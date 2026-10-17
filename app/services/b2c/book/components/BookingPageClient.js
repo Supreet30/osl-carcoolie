@@ -1,57 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import BookingForm from "./BookingForm";
 import BookingSummary from "./BookingSummary";
 import AuthModal from "../../../../components/AuthModal";
 import { isSupabaseConfigured, supabase } from "../../../../../lib/supabaseClient";
-import { consumeBookingIntent, consumeFormValuesForResume, getEstimate } from "../../lib/bookingStore";
+import { getEstimate, getEstimateDraftId, getLocalFormDraft, markReturnToEstimate } from "../../lib/bookingStore";
 
 // Single source of truth for the estimate — loaded once here and handed to
 // both the form and the summary sidebar, instead of each independently
 // reading localStorage. `details` is the live-updating subset of the form
 // (pickup/drop-off method, date, time slot) the summary card also shows.
 export default function BookingPageClient() {
-  // undefined = not checked yet — avoids flashing the wrong gate before
-  // both the session and the one-time booking-intent token (see below)
-  // have actually been read.
+  const router = useRouter();
+  // undefined = not checked yet — avoids flashing the wrong gate before the
+  // session has actually been read.
   const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
-  const [estimateState, setEstimateState] = useState({ loaded: false, data: null, formValues: null });
+  const [estimateState, setEstimateState] = useState({ loaded: false, data: null, draftId: null, formValues: null });
   const [details, setDetails] = useState({ pickupMethod: "driver", dropoffMethod: "driver", date: "", timeSlot: "" });
   const [authModalOpen, setAuthModalOpen] = useState(true);
-  // Guards the one-time token consumption below against React Strict
-  // Mode's dev-only double-invoke of effects (mount -> cleanup -> mount,
-  // synchronously, on the same fiber/refs). Without this, the first
-  // invocation correctly consumes the token and reads the estimate, then
-  // the second invocation immediately "consumes" again, finds the
-  // sessionStorage key already removed, and overwrites the correct state
-  // with "no estimate" — this is why resuming (from Book Now OR from the
-  // draft toast) intermittently landed on the empty-state gate in dev.
-  // Production (no Strict Mode double-invoke) never hit this.
-  const consumedRef = useRef(false);
 
   useEffect(() => {
-    if (consumedRef.current) return;
-    consumedRef.current = true;
-    // The intent token set by EstimateModal's "Book Now" is consumed
-    // (removed) the instant this mounts — a direct visit, a refresh, or
-    // revisiting this URL later in the same tab session must all land on
-    // the "no estimate" gate below, even though the estimate itself is
-    // still sitting in localStorage. See markBookingIntent/
-    // consumeBookingIntent in bookingStore.js.
-    const hasIntent = consumeBookingIntent();
-    // Consumed unconditionally (same one-time-token reasoning as the intent
-    // above) so a stale value from an earlier "Continue Booking" never
-    // lingers into a later, unrelated visit — but only actually used when
-    // hasIntent is true, i.e. this really is a legitimate resume.
-    const formValues = consumeFormValuesForResume();
-    setEstimateState({
-      loaded: true,
-      data: hasIntent ? getEstimate() : null,
-      formValues: hasIntent ? formValues : null,
-    });
+    // getEstimate() is a plain, non-destructive read (see bookingStore.js —
+    // it's gated by a time-boxed envelope, not a one-time token), so this
+    // page only ever makes sense within that window: right after "Book Now"
+    // (EstimateModal.js), returning via the page-level Back button below, or
+    // a direct revisit/refresh within the same window. A stale/bookmarked
+    // visit well after the fact still correctly finds nothing and falls
+    // through to the "no estimate" gate below. In an effect (not a lazy
+    // useState initializer) because this still has to run client-only —
+    // localStorage doesn't exist during this client component's SSR pass.
+    function loadEstimate() {
+      const data = getEstimate();
+      const draftId = getEstimateDraftId();
+      setEstimateState({ loaded: true, data, draftId, formValues: draftId ? getLocalFormDraft(draftId) : null });
+    }
+    loadEstimate();
   }, []);
 
   useEffect(() => {
@@ -118,15 +105,30 @@ export default function BookingPageClient() {
     );
   }
 
+  function handleBack() {
+    markReturnToEstimate();
+    router.push("/services/b2c");
+  }
+
   return (
-    <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-start">
-      <BookingForm
-        estimate={estimateState.data}
-        estimateLoaded={estimateState.loaded}
-        initialFormValues={estimateState.formValues}
-        onSummaryChange={handleSummaryChange}
-      />
-      <BookingSummary estimate={estimateState.data} details={details} />
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={handleBack}
+        className="mt-8 mb-6 flex items-center gap-1.5 text-sm font-bold text-slate-500 transition-colors hover:text-red-600"
+      >
+        <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back
+      </button>
+      <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:items-start">
+        <BookingForm
+          estimate={estimateState.data}
+          estimateLoaded={estimateState.loaded}
+          draftId={estimateState.draftId}
+          initialFormValues={estimateState.formValues}
+          onSummaryChange={handleSummaryChange}
+        />
+        <BookingSummary estimate={estimateState.data} details={details} />
+      </div>
+    </>
   );
 }

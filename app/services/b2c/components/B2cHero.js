@@ -9,7 +9,15 @@ import EstimateModal from "./EstimateModal";
 import AuthModal from "../../../components/AuthModal";
 import { isSupabaseConfigured, supabase } from "../../../../lib/supabaseClient";
 import { getRoute, formatINR } from "../lib/pricing";
-import { getDraft, markBookingIntent, saveEstimate, stashFormValuesForResume } from "../lib/bookingStore";
+import {
+  consumeReturnToEstimate,
+  estimateToQuoteDraft,
+  getDraft,
+  getEstimate,
+  getEstimateDraftId,
+  saveEstimate,
+  saveLocalFormDraft,
+} from "../lib/bookingStore";
 
 const PIN_REGEX = /^\d{6}$/;
 
@@ -286,12 +294,28 @@ export default function B2cHero() {
     // "form" stage (or a legacy draft getDraft() normalized to this same
     // shape) — restore the estimate and resume straight on /book, same as
     // before this feature existed, plus whatever in-progress form values
-    // were captured.
+    // were captured. saveEstimate's localStorage write happens synchronously
+    // (before its own fire-and-forget Supabase upsert), so the envelope —
+    // and therefore its draftId — is already in place by the time
+    // getEstimateDraftId() reads it back on the very next line.
     saveEstimate(savedDraft.estimate);
-    stashFormValuesForResume(savedDraft.formValues);
-    markBookingIntent();
+    saveLocalFormDraft(getEstimateDraftId(), savedDraft.formValues);
     router.push("/services/b2c/book");
   }
+
+  // If the customer just clicked Back on the booking form, reopen this
+  // estimate pre-filled instead of landing on a blank hero — see
+  // markReturnToEstimate/consumeReturnToEstimate in bookingStore.js.
+  useEffect(() => {
+    function restoreFromBack() {
+      if (!consumeReturnToEstimate()) return;
+      const quoteDraft = estimateToQuoteDraft(getEstimate());
+      if (!quoteDraft) return;
+      setContinueQuoteDraft(quoteDraft);
+      setShowEstimate(true);
+    }
+    restoreFromBack();
+  }, []);
 
   // While the route-exists check (getRoute) is in flight, after the PIN
   // checks above already passed — brief, but worth a disabled/labeled

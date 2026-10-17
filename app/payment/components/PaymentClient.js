@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, CheckCircle2, CreditCard, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, CreditCard, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { BOOKING_STATUS, getBooking, updateBooking } from "../../services/b2c/lib/bookingStore";
 import { formatINR, getPaymentSplit, PAYMENT_SPLIT } from "../../services/b2c/lib/pricing";
 
@@ -207,6 +207,12 @@ export default function PaymentClient() {
 
   return (
     <div>
+      <Link
+        href={`/my-bookings?id=${booking.id}`}
+        className="mb-4 flex w-fit items-center gap-1.5 text-sm font-bold text-slate-500 transition-colors hover:text-red-600"
+      >
+        <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back to Booking
+      </Link>
       <h1 className="text-3xl font-extrabold text-[#0b1e42]">{stage.heading}</h1>
       <p className="mt-2 text-sm leading-relaxed text-slate-500">{stage.subheading}</p>
 

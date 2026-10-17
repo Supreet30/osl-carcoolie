@@ -121,7 +121,7 @@ export default function FAQ() {
                 and any other booking questions.
               </p>
               <a
-                href="mailto:support@carcoolie.com"
+                href="mailto:carcooliesupport@oslgroup.co.in"
                 className="mt-7 block w-full rounded-xl bg-red-600 px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-red-700"
               >
                 Shoot a Direct Mail

@@ -102,8 +102,27 @@ export const PAYMENT_SPLIT = { advancePercent: 10, midwayPercent: 50 };
 // self drop-off/pickup) on either leg — covers the driver making a special
 // trip to the customer's location rather than the hub. Each leg is
 // independent: choosing a driver for both pickup and drop-off adds both.
+// This is only the *provisional* figure EstimateModal quotes before a
+// specific pickup/drop-off location (and therefore a real distance) is even
+// known — matches driverLegCharge(null) below, i.e. the "up to 50km" tier.
+// BookingForm.js replaces it with the real, distance-based charge (see
+// driverLegCharge) the moment the customer's captured location and the
+// selected yard are both known.
 export const DRIVER_PICKUP_CHARGE = 1000;
 export const DRIVER_DROPOFF_CHARGE = 1000;
+
+// Distance-based surcharge slab for a CarCoolie driver pickup/drop-off —
+// ₹1,000 covers up to 50km from the selected yard, then +₹100 per
+// additional 10km beyond that (rounded up: 51-60km is one block, 61-70km is
+// two, etc.). `distanceKm` is the real driving distance BookingForm.js gets
+// from Google's Routes API between the customer's captured location and the
+// yard; null (distance not known yet) falls back to the same flat baseline
+// DRIVER_PICKUP_CHARGE/DRIVER_DROPOFF_CHARGE already quote.
+export function driverLegCharge(distanceKm) {
+  if (distanceKm == null) return 1000;
+  if (distanceKm <= 50) return 1000;
+  return 1000 + Math.ceil((distanceKm - 50) / 10) * 100;
+}
 
 // Vehicle type changes the price via a multiplier on the route's base
 // transportation price, not a flat rupee amount — so the surcharge scales
@@ -178,12 +197,22 @@ export async function getYardsForCity(cityName) {
   if (!isSupabaseConfigured || !cityName) return [];
   const { data, error } = await supabase
     .from("yards")
-    .select("name, address, maps_url, cities!inner(name)")
+    .select("name, address, maps_url, latitude, longitude, cities!inner(name)")
     .eq("cities.name", cityName)
     .eq("is_active", true)
     .order("name");
   if (error) return [];
-  return data.map((y) => ({ name: y.name, address: y.address, mapsUrl: y.maps_url || null }));
+  return data.map((y) => ({
+    name: y.name,
+    address: y.address,
+    mapsUrl: y.maps_url || null,
+    // Resolved automatically by carcoolie-admin from the yard's maps_url
+    // (see lib/yardCoordinates.js there) — null until that's happened, in
+    // which case BookingForm.js's distance surcharge just can't be
+    // calculated for this yard yet.
+    latitude: y.latitude,
+    longitude: y.longitude,
+  }));
 }
 
 // Admin-uploaded blank format files for the booking form's document cards

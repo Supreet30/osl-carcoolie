@@ -186,15 +186,80 @@ async function upsertSavedEstimateRow(details) {
 // "Book Now" time, before the booking form exists to have any in-progress
 // values yet. getDraft() recognizes this shape (no `stage`) as legacy and
 // treats it the same as a "form" stage draft with no formValues.
+//
+// localStorage wraps the estimate in an envelope — { estimate, savedAt,
+// draftId } — rather than storing it bare. `savedAt` backs a TTL
+// (ESTIMATE_VALID_MS below) that replaces the old one-time
+// markBookingIntent/consumeBookingIntent token: that token broke a
+// legitimate Back-then-Forward round trip between the estimate and the
+// booking form (it was consumed, destructively, the instant the booking
+// form first mounted), while still meaning to block a stale/bookmarked cold
+// visit reusing week-old pricing. A time window does the same job
+// non-destructively — any mount within it sees the same data, any number of
+// times. `draftId` is a stable id for this one in-progress booking attempt,
+// reused across saves while the envelope is still fresh (so Back → edit →
+// Book Now again keeps the same identity) and only reminted once the
+// previous envelope has actually gone stale — it's what scopes the
+// IndexedDB document drafts (see app/services/b2c/book/lib/documentDraftStore.js)
+// and the local form-field draft (see saveLocalFormDraft below) to one
+// booking attempt at a time.
+const ESTIMATE_VALID_MS = 24 * 60 * 60 * 1000;
+
+function readEstimateEnvelope() {
+  if (!isBrowser()) return null;
+  const envelope = safeParse(window.localStorage.getItem(ESTIMATE_KEY), null);
+  if (!envelope || Date.now() - envelope.savedAt > ESTIMATE_VALID_MS) return null;
+  return envelope;
+}
+
 export async function saveEstimate(estimate) {
   if (!isBrowser()) return;
-  window.localStorage.setItem(ESTIMATE_KEY, JSON.stringify(estimate));
+  const existing = readEstimateEnvelope();
+  const draftId = existing?.draftId ?? crypto.randomUUID();
+  window.localStorage.setItem(ESTIMATE_KEY, JSON.stringify({ estimate, savedAt: Date.now(), draftId }));
   await upsertSavedEstimateRow(estimate);
 }
 
 export function getEstimate() {
-  if (!isBrowser()) return null;
-  return safeParse(window.localStorage.getItem(ESTIMATE_KEY), null);
+  return readEstimateEnvelope()?.estimate ?? null;
+}
+
+// Scopes the IndexedDB document drafts and local form-field draft to one
+// in-progress booking attempt — see the comment on saveEstimate above.
+export function getEstimateDraftId() {
+  return readEstimateEnvelope()?.draftId ?? null;
+}
+
+// Called once a booking actually submits (BookingForm.js's handleSubmit,
+// after createBooking succeeds) — there's nothing left to resume back to.
+export function clearSavedEstimate() {
+  if (isBrowser()) window.localStorage.removeItem(ESTIMATE_KEY);
+}
+
+// Maps a saved estimate's full field set (the shape built in EstimateModal's
+// handleBookNow) down to the smaller "quote draft" shape EstimateModal's
+// initial* props expect — used by B2cHero.js when reopening the modal from
+// a Back-navigation (see markReturnToEstimate/consumeReturnToEstimate
+// below). pickupPinStatus/destinationPinStatus aren't part of the saved
+// estimate itself, so they're synthesized as already-matched — the estimate
+// couldn't exist otherwise.
+export function estimateToQuoteDraft(estimate) {
+  if (!estimate) return null;
+  return {
+    fromCity: estimate.fromCity,
+    toCity: estimate.toCity,
+    pickupPin: estimate.pickupPin,
+    destinationPin: estimate.destinationPin,
+    pickupPinStatus: { status: "matched", city: estimate.fromCity, pin: estimate.pickupPin },
+    destinationPinStatus: { status: "matched", city: estimate.toCity, pin: estimate.destinationPin },
+    vehicleType: estimate.vehicleType,
+    make: estimate.make,
+    model: estimate.model,
+    pickupMethod: estimate.pickupMethod,
+    dropoffMethod: estimate.dropoffMethod,
+    selectedAddOns: estimate.selectedAddOns,
+    coupon: estimate.coupon,
+  };
 }
 
 // Quote-stage draft — fired by EstimateModal whenever a price is actually
@@ -246,48 +311,50 @@ export async function getDraft(userId) {
   return details;
 }
 
-// A one-time-use marker, separate from the saved estimate itself — the
-// estimate in localStorage can linger indefinitely, but /book should only
-// ever be usable right after actually clicking "Book Now" from the
-// estimate, not from a direct visit/refresh/bookmark that happens to find
-// old data still sitting there. sessionStorage (not localStorage) so a new
-// tab never inherits it, and it's consumed (removed) on first read so even
-// a second direct visit in the same tab, later in the same session, is
-// blocked same as a cold one — see BookingPageClient.js.
-const BOOK_INTENT_KEY = "carcoolie_b2c_book_intent";
+// One-shot signal for "the customer just clicked Back on the booking form,
+// reopen the estimate modal pre-filled" — set right before navigating to
+// /services/b2c, consumed the instant B2cHero mounts after. Safe to consume
+// destructively (unlike the old booking-intent token this replaces): the
+// producer (the Back button click) and the consumer (the very next mount)
+// are paired by one direct user action every time, with no round-trip to
+// survive — the underlying data it points at (getEstimate()) stays
+// non-destructively readable regardless, so even a missed/duplicate
+// consumption just means the modal doesn't auto-reopen a second time, not
+// that any data is lost.
+const RETURN_TO_ESTIMATE_KEY = "carcoolie_b2c_return_to_estimate";
 
-export function markBookingIntent() {
-  if (!isBrowser()) return;
-  window.sessionStorage.setItem(BOOK_INTENT_KEY, "1");
+export function markReturnToEstimate() {
+  if (isBrowser()) window.sessionStorage.setItem(RETURN_TO_ESTIMATE_KEY, "1");
 }
 
-export function consumeBookingIntent() {
+export function consumeReturnToEstimate() {
   if (!isBrowser()) return false;
-  const present = window.sessionStorage.getItem(BOOK_INTENT_KEY) === "1";
-  window.sessionStorage.removeItem(BOOK_INTENT_KEY);
+  const present = window.sessionStorage.getItem(RETURN_TO_ESTIMATE_KEY) === "1";
+  window.sessionStorage.removeItem(RETURN_TO_ESTIMATE_KEY);
   return present;
 }
 
-// One-time handoff of a "form" stage draft's in-progress formValues from
-// B2cHero's "Continue Booking" to BookingPageClient — mirrors
-// markBookingIntent/consumeBookingIntent's pattern (sessionStorage, consumed
-// on first read) since it's only ever meaningful paired with that same
-// booking-intent token: uncontrolled inputs need this as a prop before
-// BookingForm's first render (see initialFormValues there), so it can't be
-// patched in after the fact the way the rest of the estimate already is via
-// getEstimate().
-const FORM_DRAFT_KEY = "carcoolie_b2c_form_draft";
+// Guest-safe, non-destructive local draft of the booking form's typed
+// fields (addresses, names, GSTIN, etc.) — scoped by draftId (see
+// getEstimateDraftId above) so a different booking attempt never inherits
+// stale values. Supabase-backed saveFormDraft below only ever works for
+// signed-in customers (upsertSavedEstimateRow silently no-ops for guests);
+// this is what makes "preserve what I typed" work for everyone, read back
+// as BookingForm's initialFormValues on mount.
+const FORM_DRAFT_KEY_PREFIX = "carcoolie_b2c_form_draft_";
 
-export function stashFormValuesForResume(formValues) {
-  if (!isBrowser() || !formValues) return;
-  window.sessionStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(formValues));
+export function saveLocalFormDraft(draftId, formValues) {
+  if (!isBrowser() || !draftId) return;
+  window.localStorage.setItem(FORM_DRAFT_KEY_PREFIX + draftId, JSON.stringify(formValues));
 }
 
-export function consumeFormValuesForResume() {
-  if (!isBrowser()) return null;
-  const values = safeParse(window.sessionStorage.getItem(FORM_DRAFT_KEY), null);
-  window.sessionStorage.removeItem(FORM_DRAFT_KEY);
-  return values;
+export function getLocalFormDraft(draftId) {
+  if (!isBrowser() || !draftId) return null;
+  return safeParse(window.localStorage.getItem(FORM_DRAFT_KEY_PREFIX + draftId), null);
+}
+
+export function clearLocalFormDraft(draftId) {
+  if (isBrowser() && draftId) window.localStorage.removeItem(FORM_DRAFT_KEY_PREFIX + draftId);
 }
 
 // ---- localStorage fallback (original implementation) ----

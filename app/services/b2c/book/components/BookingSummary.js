@@ -24,6 +24,21 @@ export default function BookingSummary({ estimate, details }) {
   const inclusive = estimate
     ? inclusiveBreakdown({ ...estimate, gst: estimate.gst ?? 0, addOnBreakdown: estimate.addOnBreakdown ?? [] })
     : null;
+
+  // estimate.total already includes a flat, provisional pickup/dropoff
+  // charge from before any location/yard was picked (see EstimateModal.js);
+  // once BookingForm.js knows the real driving distance, details.pickupCharge/
+  // dropoffCharge carry the actual slab-priced figure (see driverLegCharge in
+  // ../../lib/pricing.js) — this is the delta between the two, shown as its
+  // own line only once it's actually nonzero (a location within 50km of its
+  // yard never changes the total at all).
+  const distanceSurcharge = estimate
+    ? (details?.pickupCharge ?? estimate.pickupCharge ?? 0) +
+      (details?.dropoffCharge ?? estimate.dropoffCharge ?? 0) -
+      (estimate.pickupCharge ?? 0) -
+      (estimate.dropoffCharge ?? 0)
+    : 0;
+  const adjustedTotal = estimate ? estimate.total + distanceSurcharge : 0;
   return (
     <aside className="flex flex-col gap-5 lg:sticky lg:top-28">
       <div className="rounded-3xl bg-[#0b1220] p-6 text-white">
@@ -115,10 +130,17 @@ export default function BookingSummary({ estimate, details }) {
               </div>
             )}
 
+            {distanceSurcharge > 0 && (
+              <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5 text-sm text-amber-300">
+                <span>Distance Surcharge (beyond 50km)</span>
+                <span className="font-semibold">+{formatINR(distanceSurcharge)}</span>
+              </div>
+            )}
+
             <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5">
               <p className="text-base font-extrabold text-white">Estimated Total</p>
               <div className="text-right">
-                <p className="text-2xl font-extrabold text-white">{formatINR(estimate.total)}</p>
+                <p className="text-2xl font-extrabold text-white">{formatINR(adjustedTotal)}</p>
                 <p className="text-[11px] text-slate-400">Incl. of all taxes</p>
               </div>
             </div>
