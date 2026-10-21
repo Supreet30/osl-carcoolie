@@ -34,6 +34,7 @@ const NAV_LINKS = [
   { label: "Services", href: "/services", chevron: true, dropdown: "services" },
   { label: "Resources", href: "/resources", chevron: true, dropdown: "resources" },
   { label: "About Us", href: "/about-us" },
+  { label: "Careers", href: "/careers" },
 ];
 
 const SERVICES_HEADING = {

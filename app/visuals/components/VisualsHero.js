@@ -50,8 +50,8 @@ export default function VisualsHero() {
         <div className="relative mx-auto w-full py-4 pl-10 sm:pl-12">
           <div className="relative h-80 w-full overflow-hidden rounded-[28px] shadow-xl sm:h-96 lg:h-105">
             <Image
-              src="/servicehero.png"
-              alt="CarCoolie carrier truck transporting vehicles on the highway"
+              src="/visuals/002.jpg"
+              alt="OSL Car Coolie carrier fleet lined up at the yard"
               fill
               priority
               sizes="(max-width: 1023px) 100vw, 48vw"
@@ -59,17 +59,22 @@ export default function VisualsHero() {
             />
           </div>
 
+          {/* Real yard/loading/driver photos from public/visuals, not crops
+              of the single main image above — each gets its own gentle zoom
+              (not the old 120-160% crop-to-fake-variety trick, unnecessary
+              now that these are already distinct shots) just to avoid an
+              awkward edge-of-frame crop in a 1:1 thumbnail. */}
           {[
-            { position: "top-0", zoom: "120%" },
-            { position: "top-1/2 -translate-y-1/2", zoom: "160%" },
-            { position: "bottom-0", zoom: "140%" },
-          ].map(({ position, zoom }, i) => (
+            { src: "/visuals/004.jpg", position: "top-0", zoom: "110%" },
+            { src: "/visuals/006.jpg", position: "top-1/2 -translate-y-1/2", zoom: "100%" },
+            { src: "/visuals/009.jpg", position: "bottom-0", zoom: "110%" },
+          ].map(({ src, position, zoom }) => (
             <div
-              key={i}
+              key={src}
               className={`absolute -left-2 h-16 w-16 overflow-hidden rounded-2xl shadow-xl sm:-left-3 sm:h-20 sm:w-20 ${position}`}
             >
               <Image
-                src="/servicehero.png"
+                src={src}
                 alt=""
                 fill
                 sizes="80px"

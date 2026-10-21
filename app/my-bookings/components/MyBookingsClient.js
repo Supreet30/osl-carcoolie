@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Clock,
   CreditCard,
+  Download,
   FileCheck,
   FileSignature,
   FileText,
@@ -47,6 +48,7 @@ import {
   CANCELLABLE_STATUSES,
   CANCELLATION_FEE_PERCENT,
   CANCELLATION_REASONS,
+  downloadInvoice,
   fetchTruckLocation,
   getBooking,
   getBookings,
@@ -129,35 +131,69 @@ function PocDetailsRow({ label, poc }) {
   );
 }
 
-// How often this card re-polls the live GPS feed while the page is open —
-// same interval and reasoning as carcoolie-admin's own truck-tracking cards.
-const TRUCK_POLL_MS = 20000;
+// How often this card re-checks for a new daily update while the page is
+// open — the underlying data only ever changes once a day (see
+// app/api/truck-tracking/route.js), so this is just "don't miss today's
+// update landing while the tab happens to be open," not a live-tracking
+// poll. A slow interval is plenty.
+const TRUCK_POLL_MS = 5 * 60 * 1000;
 
-// Live location for the carrier vehicle on this booking — nested under the
-// In Transit step (see its render site in StatusStepper below), shown only
-// while that step is the booking's *current* one, so it disappears on its
-// own once the vehicle's reached the destination yard. Goes through
-// fetchTruckLocation()/api/truck-tracking, which looks the plate up
-// server-side from the verified booking rather than trusting one from the
-// client.
+// Today's IST calendar date, as "YYYY-MM-DD" — same fixed +5:30 offset
+// calculation as carcoolie-admin's daily-update job, so "is this update from
+// today" agrees with whatever date that job actually stamped the row with.
+function todayIst() {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+// The customer-facing "Updated at" time is always this update's 11:00 AM IST
+// refresh time — never the underlying geotag's own, earlier timestamp (the
+// daily-update job picks whichever fix was latest *before* 11:00 AM, which
+// could be from 5 AM, 9 AM, whenever — see carcoolie-admin's
+// /api/truck-tracking/daily-update). The position shown is genuinely that
+// fix's position; only the displayed time is normalized to the cutoff, so
+// the customer sees "updated at 11:00 AM" consistently rather than a
+// different, earlier clock time each day. Explicit Asia/Kolkata timeZone so
+// this reads correctly regardless of the viewer's own device timezone.
+function formatDailyUpdateTime(updateDate) {
+  if (!updateDate) return null;
+  const cutoff = new Date(`${updateDate}T05:30:00.000Z`);
+  if (Number.isNaN(cutoff.getTime())) return null;
+  return cutoff.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+// Once-a-day tracking update for the carrier vehicle on this booking —
+// nested under the In Transit step (see its render site in StatusStepper
+// below), shown only while that step is the booking's *current* one, so it
+// disappears on its own once the vehicle's reached the destination yard.
+// Goes through fetchTruckLocation()/api/truck-tracking, which reads
+// carcoolie-admin's truck_daily_updates table (refreshed once a day at
+// 11:00 AM IST, see that route's own comment) rather than polling live GPS.
 function TruckLocationCard({ bookingId }) {
-  const [state, setState] = useState({ loading: true, error: "", truck: null });
+  const [state, setState] = useState({ loading: true, error: "", update: null });
 
   useEffect(() => {
     let cancelled = false;
 
     // `background` refreshes (the poll below) keep whatever's already on
     // screen if a request happens to fail, rather than flashing an error
-    // over live data that was working fine a moment ago.
+    // over an update that was working fine a moment ago.
     function load({ background = false } = {}) {
       fetchTruckLocation(bookingId)
-        .then((truck) => {
+        .then((update) => {
           if (cancelled) return;
-          setState({ loading: false, error: "", truck });
+          setState({ loading: false, error: "", update });
         })
         .catch((error) => {
           if (cancelled || background) return;
-          setState({ loading: false, error: error.message, truck: null });
+          setState({ loading: false, error: error.message, update: null });
         });
     }
 
@@ -172,28 +208,35 @@ function TruckLocationCard({ bookingId }) {
   if (state.loading) {
     return (
       <div className="mt-2 flex max-w-xs items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-400 ring-1 ring-slate-200">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your vehicle&apos;s live location&hellip;
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking today&apos;s tracking update&hellip;
       </div>
     );
   }
 
-  // A real fetch failure gets a soft note; no live fix at all for this
-  // plate right now (common — GPS fixes land every 30s-2min in practice,
-  // not continuously) isn't an error, just nothing to show yet.
+  // A real fetch failure gets a soft note; no daily update on file yet for
+  // this plate (common right after transit starts, before the next 11 AM
+  // run) isn't an error, just nothing to show yet.
   if (state.error) {
     return (
-      <p className="mt-2 max-w-xs text-xs text-slate-400">Live location is temporarily unavailable — check back shortly.</p>
+      <p className="mt-2 max-w-xs text-xs text-slate-400">The tracking update is temporarily unavailable — check back shortly.</p>
     );
   }
-  if (!state.truck) return null;
+  if (!state.update) return null;
+
+  const isToday = state.update.updateDate === todayIst();
 
   return (
     <div className="mt-2 max-w-xs rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
       <p className="flex items-center gap-1 text-[11px] font-bold tracking-wide text-slate-500 uppercase">
-        <MapPin className="h-3 w-3 shrink-0 text-red-600" /> Your Vehicle&apos;s Current Location
+        <MapPin className="h-3 w-3 shrink-0 text-red-600" /> {isToday ? "Today's Tracking Update" : "Latest Tracking Update"}
       </p>
-      <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{state.truck.location}</p>
-      {state.truck.gpsDateTime && <p className="mt-0.5 text-xs text-slate-400">Updated {state.truck.gpsDateTime}</p>}
+      <p className="mt-1 text-sm font-semibold text-[#0b1e42]">{state.update.location}</p>
+      {formatDailyUpdateTime(state.update.updateDate) && (
+        <p className="mt-0.5 text-xs text-slate-400">Updated {formatDailyUpdateTime(state.update.updateDate)}</p>
+      )}
+      {!isToday && (
+        <p className="mt-0.5 text-xs text-amber-600">Today&apos;s update hasn&apos;t landed yet — showing the most recent one on file.</p>
+      )}
     </div>
   );
 }
@@ -547,10 +590,11 @@ function ReviewCard({ booking, onBookingChange }) {
     <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 sm:p-8">
       <p className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide text-[#0b1e42] uppercase">
         <Star className="h-3.5 w-3.5 text-red-600" />
-        Rate Your Experience
+        Rate Us &amp; Get a Reward
       </p>
       <p className="mt-1 text-sm text-slate-500">
-        Your car&apos;s been delivered — let us know how it went. You won&apos;t be able to change this once submitted.
+        Your car&apos;s been delivered — share a quick rating and pick a thank-you gift on us. You won&apos;t be able to
+        change this once submitted.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-5">
@@ -1045,6 +1089,25 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
   const finalDone = typeof finalPaid === "number";
   const charges = chargesTotal ?? 0;
 
+  const [invoiceBusy, setInvoiceBusy] = useState(null);
+  const [invoiceError, setInvoiceError] = useState("");
+
+  // milestone matches the `type` app/api/invoices/route.js groups payments
+  // rows by — "charges" rides along with "balance" on the same invoice (see
+  // MILESTONE_META there), so the Additional Charges/Credits card below
+  // never gets its own download button, only advance/midway/final do.
+  async function handleDownloadInvoice(milestone) {
+    setInvoiceError("");
+    setInvoiceBusy(milestone);
+    try {
+      await downloadInvoice(booking.id, milestone);
+    } catch (error) {
+      setInvoiceError(error.message);
+    } finally {
+      setInvoiceBusy(null);
+    }
+  }
+
   const slabs = [
     {
       key: "advance",
@@ -1052,6 +1115,7 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
       percent: `${split.advancePercent}%`,
       amount: advanceDone ? advancePaid : finalQuote * (split.advancePercent / 100),
       status: advanceDone ? "paid" : "due",
+      milestone: "advance",
     },
     {
       key: "midway",
@@ -1059,6 +1123,7 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
       percent: `${split.midwayPercent}%`,
       amount: midwayDone ? midwayPaid : finalQuote * (split.midwayPercent / 100),
       status: midwayDone ? "paid" : advanceDone ? "due" : "upcoming",
+      milestone: "midway",
     },
     {
       key: "final",
@@ -1069,6 +1134,7 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
       // bookingStore.js splits it back apart when logging the payment row.
       amount: finalDone ? finalPaid - charges : (remainingBalance ?? finalQuote * (split.balancePercent / 100)) - charges,
       status: finalDone ? "paid" : midwayDone ? "due" : "upcoming",
+      milestone: "balance",
     },
   ];
 
@@ -1118,10 +1184,26 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
               <p className={`mt-2 text-xl font-extrabold ${negative ? "text-green-600" : "text-[#0b1e42]"}`}>
                 {negative ? `-${formatINR(Math.abs(slab.amount))}` : formatINR(slab.amount)}
               </p>
+              {slab.status === "paid" && slab.milestone && (
+                <button
+                  type="button"
+                  disabled={invoiceBusy === slab.milestone}
+                  onClick={() => handleDownloadInvoice(slab.milestone)}
+                  className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-700 uppercase transition-colors hover:text-green-800 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {invoiceBusy === slab.milestone ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Download className="h-3 w-3" />
+                  )}
+                  {invoiceBusy === slab.milestone ? "Preparing…" : "Download Invoice"}
+                </button>
+              )}
             </div>
           );
         })}
       </div>
+      {invoiceError && <p className="mt-3 text-xs font-semibold text-red-600">{invoiceError}</p>}
     </div>
   );
 }

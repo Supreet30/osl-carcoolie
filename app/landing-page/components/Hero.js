@@ -1,27 +1,22 @@
 import Link from "next/link";
 import { ArrowRight, Phone } from "lucide-react";
+import HeroVideoBackground from "./HeroVideoBackground";
 
+// Stays a plain (non-async) component so /landing-page still prerenders
+// statically at build time — only the background itself is admin-editable
+// (see HeroVideoBackground.js for why that part fetches client-side instead).
 export default function Hero() {
   return (
     <section
       id="home"
       className="relative isolate flex min-h-screen items-center overflow-hidden bg-slate-900"
     >
-      {/*
-        Placeholder for the background video. Swap this gradient layer for:
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          poster="/hero-poster.jpg"
-          className="absolute inset-0 -z-10 h-full w-full object-cover"
-        >
-          <source src="/hero.mp4" type="video/mp4" />
-        </video>
-        once the footage is ready.
-      */}
-      <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_30%,#c2410c_70%,#f59e0b_100%)]" />
+      <HeroVideoBackground />
+      {/* Flat dark tint, separate from the directional gradient below —
+          real video footage can run much brighter/busier than the designed
+          gradient placeholder ever did, so this keeps the white text
+          readable across the whole hero, not just near the bottom. */}
+      <div className="absolute inset-0 -z-10 bg-black/30" />
       <div className="absolute inset-0 -z-10 bg-linear-to-t from-black/80 via-black/40 to-black/10" />
 
       <div className="mx-auto w-full max-w-5xl px-6 pt-30 text-center sm:pt-36">

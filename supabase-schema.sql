@@ -303,6 +303,38 @@ create table if not exists truck_location_snapshots (
 create index if not exists truck_location_snapshots_plate_no_captured_at_idx
   on truck_location_snapshots (plate_no, captured_at desc);
 
+-- One row per carrier plate per IST calendar day — the customer-facing "In
+-- Transit" tracking card's actual data source (see osl-carcoolie's
+-- /api/truck-tracking/route.js). Written once a day by carcoolie-admin's
+-- /api/truck-tracking/daily-update (cron-triggered, same
+-- TRUCK_TRACKING_CRON_SECRET pattern as /api/truck-tracking/snapshot): it
+-- picks whichever truck_location_snapshots row is the latest one captured
+-- before that day's 11:00 AM IST cutoff and copies it here, so the customer
+-- page always reads a single, already-decided "today's update" row instead
+-- of live GPS or the full breadcrumb trail. update_date is the IST calendar
+-- date this row represents (not the DB write date), so the unique
+-- constraint makes re-running the job the same day idempotent.
+create table if not exists truck_daily_updates (
+  id uuid primary key default gen_random_uuid(),
+  plate_no text not null,
+  update_date date not null,
+  latitude double precision not null,
+  longitude double precision not null,
+  speed numeric,
+  ignition text,
+  location text,
+  area text,
+  transporter_name text,
+  distance numeric,
+  gps_date_time text,
+  source_captured_at timestamptz not null,
+  captured_at timestamptz not null default now(),
+  unique (plate_no, update_date)
+);
+
+create index if not exists truck_daily_updates_plate_no_update_date_idx
+  on truck_daily_updates (plate_no, update_date desc);
+
 -- Backfill for accounts created before this trigger existed (e.g. the
 -- Google/magic-link accounts already used to test sign-in) — the trigger
 -- above only fires on new auth.users inserts going forward.
@@ -846,6 +878,12 @@ create table if not exists bookings (
   -- Carrier stage) — never selected into the customer's rowToBooking() in
   -- osl-carcoolie's bookingStore.js, so it never reaches My Bookings.
   carrier_vehicle_number text,
+  -- Set once the admin verifies the delivery OTP with the customer, at the
+  -- Final Vehicle Delivery step (carcoolie-admin's DeliveryOtpSection) —
+  -- persisted server-side (rather than just component state) so a page
+  -- reload can't silently lose it, since it gates the "Handover Vehicle
+  -- Keys" action that moves the booking to Delivered.
+  delivery_otp_verified_at timestamptz,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -876,6 +914,7 @@ alter table bookings add column if not exists cancellation_fee numeric(10, 2);
 alter table bookings add column if not exists refund_amount numeric(10, 2);
 alter table bookings add column if not exists cancellation_reason text;
 alter table bookings add column if not exists refund_method text;
+alter table bookings add column if not exists delivery_otp_verified_at timestamptz;
 alter table bookings add column if not exists refund_coupon_code text references coupons (code);
 alter table bookings add column if not exists pickup_poc_name text;
 alter table bookings add column if not exists pickup_poc_phone text;
@@ -894,6 +933,40 @@ alter table bookings add constraint bookings_vehicle_type_id_fkey
 
 create index if not exists bookings_customer_id_idx on bookings (customer_id);
 create index if not exists bookings_status_idx on bookings (status);
+
+-- Operational tickets for a carrier that's sat at (roughly) the same spot
+-- for 24+ hours mid-transit — raised by carcoolie-admin's
+-- /api/truck-tracking/stationary-check (cron-triggered, reads the
+-- truck_location_snapshots breadcrumb trail to detect the standstill) and
+-- worked the same way as abandonment_notes' cart/form tickets (new ->
+-- contacted -> closed, with a free-text notes field), just on its own
+-- table since this is a booking-level event, not a customer-level one — see
+-- the admin's Vehicle Alerts page. The partial unique index below is the
+-- dedupe: only one OPEN ticket per booking at a time, so the detection job
+-- can run repeatedly while a truck is still parked without spamming a new
+-- ticket every run; a closed ticket doesn't block a later, genuinely new
+-- stationary episode on the same booking from raising its own ticket.
+create table if not exists vehicle_stationary_alerts (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references bookings (id) on delete cascade,
+  plate_no text not null,
+  latitude double precision,
+  longitude double precision,
+  location text,
+  area text,
+  stationary_since timestamptz not null,
+  hours_stationary numeric not null,
+  status text not null default 'new' check (status in ('new', 'contacted', 'closed')),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists vehicle_stationary_alerts_booking_id_idx
+  on vehicle_stationary_alerts (booking_id);
+
+create unique index if not exists vehicle_stationary_alerts_one_open_per_booking
+  on vehicle_stationary_alerts (booking_id) where status <> 'closed';
 
 -- Add-ons actually selected on a given booking, priced at time of
 -- booking (so later admin price edits don't rewrite past bookings).
@@ -952,10 +1025,15 @@ alter table booking_addresses add column if not exists hub_address text;
 
 -- Vehicle documents (section 3). One row per document type per booking;
 -- `status` is what the admin panel's "docs verification" screen edits.
+-- doc_type is plain text, not the document_type enum — see document_types
+-- below for why (admin-editable list, which an enum can't support without a
+-- schema change per edit). The enum type itself is left in place (Postgres
+-- can't drop it cleanly while old code/casts might reference it) but no
+-- longer used by any column.
 create table if not exists booking_documents (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references bookings (id) on delete cascade,
-  doc_type document_type not null,
+  doc_type text not null,
   file_name text,
   file_size_mb numeric(6, 2),
   file_url text, -- Supabase Storage object path once real uploads are wired up
@@ -967,6 +1045,8 @@ create table if not exists booking_documents (
   unique (booking_id, doc_type)
 );
 
+alter table booking_documents alter column doc_type type text using doc_type::text;
+
 -- Snapshot of whatever was in a booking_documents row right before a
 -- re-upload replaced it (see updateBookingDocumentSupabase in
 -- bookingStore.js) — booking_documents itself stays one row per doc_type
@@ -977,7 +1057,7 @@ create table if not exists booking_documents (
 create table if not exists booking_document_versions (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references bookings (id) on delete cascade,
-  doc_type document_type not null,
+  doc_type text not null,
   file_name text,
   file_size_mb numeric(6, 2),
   file_url text,
@@ -985,6 +1065,8 @@ create table if not exists booking_document_versions (
   rejection_reason text,
   replaced_at timestamptz not null default now()
 );
+
+alter table booking_document_versions alter column doc_type type text using doc_type::text;
 
 create index if not exists booking_document_versions_booking_id_idx on booking_document_versions (booking_id);
 
@@ -1015,19 +1097,46 @@ create index if not exists booking_charges_booking_id_idx on booking_charges (bo
 alter table booking_charges add column if not exists receipt_url text;
 alter table booking_charges add column if not exists note text;
 
--- Inspection reports the admin uploads at two points in the pipeline —
--- 'confirmed' (Booking Confirmed) and 'out_for_delivery' — as PDFs or
--- images. Visible to the customer on their booking's status timeline. Files
--- live in the booking-documents bucket (file_url is the object path).
+-- Inspection reports the admin uploads at various points in the pipeline —
+-- originally just 'confirmed' and 'out_for_delivery', but buildStatusSteps
+-- (lib/bookingStatus.js) has since grown self-pickup/self-dropoff variants
+-- of those checkpoints (car_arrived_at_yard, received_at_destination_yard,
+-- reached_destination_yard — see BookingDetailClient.js's
+-- INSPECTION_STAGE_LABELS), so the stage check below now has to allow all
+-- five, or an upload at any of those three newer stages fails outright.
+-- Stored as PDFs or images. Visible to the customer on their booking's
+-- status timeline. Files live in the booking-documents bucket (file_url is
+-- the object path).
+--
+-- status/verified_by/verified_at/rejection_reason mirror booking_documents'
+-- own verify/reject columns (same document_status enum) — added so the
+-- Final Vehicle Delivery step's inspection review is "verify or reject
+-- what's already on file", not "upload yet another copy", for the photos
+-- that matter most (the ones taken right as the vehicle changes hands).
 create table if not exists booking_inspections (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references bookings (id) on delete cascade,
-  stage text not null check (stage in ('confirmed', 'out_for_delivery')),
+  stage text not null check (
+    stage in ('confirmed', 'car_arrived_at_yard', 'received_at_destination_yard', 'out_for_delivery', 'reached_destination_yard')
+  ),
   file_name text not null,
   file_url text not null,
   file_type text,
+  status document_status not null default 'uploaded',
+  verified_by uuid references admin_users (id),
+  verified_at timestamptz,
+  rejection_reason text,
   created_at timestamptz not null default now()
 );
+
+alter table booking_inspections drop constraint if exists booking_inspections_stage_check;
+alter table booking_inspections add constraint booking_inspections_stage_check
+  check (stage in ('confirmed', 'car_arrived_at_yard', 'received_at_destination_yard', 'out_for_delivery', 'reached_destination_yard'));
+
+alter table booking_inspections add column if not exists status document_status not null default 'uploaded';
+alter table booking_inspections add column if not exists verified_by uuid references admin_users (id);
+alter table booking_inspections add column if not exists verified_at timestamptz;
+alter table booking_inspections add column if not exists rejection_reason text;
 
 create index if not exists booking_inspections_booking_id_idx on booking_inspections (booking_id);
 
@@ -1312,8 +1421,12 @@ alter table vehicle_types enable row level security;
 alter table luxury_makes enable row level security;
 alter table luxury_settings enable row level security;
 alter table legal_pages enable row level security;
+alter table document_types enable row level security;
 alter table document_formats enable row level security;
 alter table tax_settings enable row level security;
+alter table landing_page_settings enable row level security;
+alter table job_openings enable row level security;
+alter table job_applications enable row level security;
 alter table payment_settings enable row level security;
 alter table yards enable row level security;
 alter table vehicle_models enable row level security;
@@ -1335,6 +1448,8 @@ alter table quote_requests enable row level security;
 alter table saved_estimates enable row level security;
 alter table abandonment_notes enable row level security;
 alter table truck_location_snapshots enable row level security;
+alter table truck_daily_updates enable row level security;
+alter table vehicle_stationary_alerts enable row level security;
 alter table service_area_leads enable row level security;
 
 create or replace function is_admin()
@@ -1403,9 +1518,10 @@ create policy "saved_estimates owner update" on saved_estimates for update using
 -- carcoolie-admin's service_role-backed /api/abandoned-carts route ever
 -- touches this table.
 
--- truck_location_snapshots: same reasoning again — no policy at all, admin
--- (and the scheduled snapshot job) only, via service_role-backed
--- /api/truck-tracking* routes.
+-- truck_location_snapshots / truck_daily_updates / vehicle_stationary_alerts:
+-- same reasoning again — no policy at all, admin (and the scheduled
+-- snapshot/daily-update/stationary-check jobs) only, via service_role-backed
+-- /api/truck-tracking* and /api/vehicle-alerts* routes.
 
 -- admin_users: only admins can read the admin roster
 drop policy if exists "admin_users admin only" on admin_users;
@@ -1440,6 +1556,10 @@ drop policy if exists "legal_pages readable" on legal_pages;
 create policy "legal_pages readable" on legal_pages for select using (true);
 drop policy if exists "legal_pages admin write" on legal_pages;
 create policy "legal_pages admin write" on legal_pages for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "document_types readable" on document_types;
+create policy "document_types readable" on document_types for select using (true);
+drop policy if exists "document_types admin write" on document_types;
+create policy "document_types admin write" on document_types for all using (is_admin_or_anon()) with check (is_admin_or_anon());
 drop policy if exists "document_formats readable" on document_formats;
 create policy "document_formats readable" on document_formats for select using (true);
 drop policy if exists "document_formats admin write" on document_formats;
@@ -1448,6 +1568,26 @@ drop policy if exists "tax_settings readable" on tax_settings;
 create policy "tax_settings readable" on tax_settings for select using (true);
 drop policy if exists "tax_settings admin write" on tax_settings;
 create policy "tax_settings admin write" on tax_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "landing_page_settings readable" on landing_page_settings;
+create policy "landing_page_settings readable" on landing_page_settings for select using (true);
+drop policy if exists "landing_page_settings admin write" on landing_page_settings;
+create policy "landing_page_settings admin write" on landing_page_settings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+drop policy if exists "job_openings readable" on job_openings;
+create policy "job_openings readable" on job_openings for select using (true);
+drop policy if exists "job_openings admin write" on job_openings;
+create policy "job_openings admin write" on job_openings for all using (is_admin_or_anon()) with check (is_admin_or_anon());
+
+-- job_applications: anyone can submit (the /careers Apply Now modal has no
+-- sign-in to check against — same reasoning as booking_documents owner
+-- insert), but only admin (in practice, is_admin_or_anon() — see its own
+-- comment) can read or update one, since an application holds a real
+-- person's contact details and resume.
+drop policy if exists "job_applications anon insert" on job_applications;
+create policy "job_applications anon insert" on job_applications for insert with check (true);
+drop policy if exists "job_applications admin read" on job_applications;
+create policy "job_applications admin read" on job_applications for select using (is_admin_or_anon());
+drop policy if exists "job_applications admin update" on job_applications;
+create policy "job_applications admin update" on job_applications for update using (is_admin_or_anon());
 
 drop policy if exists "payment_settings readable" on payment_settings;
 create policy "payment_settings readable" on payment_settings for select using (true);
@@ -1547,6 +1687,8 @@ drop policy if exists "booking_inspections admin insert" on booking_inspections;
 create policy "booking_inspections admin insert" on booking_inspections for insert with check (is_admin_or_anon());
 drop policy if exists "booking_inspections admin delete" on booking_inspections;
 create policy "booking_inspections admin delete" on booking_inspections for delete using (is_admin_or_anon());
+drop policy if exists "booking_inspections admin verify" on booking_inspections;
+create policy "booking_inspections admin verify" on booking_inspections for update using (is_admin_or_anon());
 
 -- booking_reviews: same ownership pattern for both read and insert — the
 -- booking's own customer (real account now that customer auth exists, or
@@ -1603,20 +1745,147 @@ drop policy if exists "booking_status_history admin insert" on booking_status_hi
 create policy "booking_status_history admin insert" on booking_status_history for insert with check (is_admin());
 
 -- ---------------------------------------------------------------------
+-- The admin-editable catalog of document types offered on the booking
+-- form's "3. Vehicle Documents" section (osl-carcoolie's BookingForm.js) —
+-- which ones exist, their label/category/description/icon/required flag,
+-- and display order. Previously a hardcoded 7-entry array duplicated in
+-- BookingForm.js *and* the admin's Document Formats page; now a single
+-- source of truth either side reads live (getDocumentTypes() in pricing.js,
+-- fetchDocumentTypes() in carcoolie-admin's lib/queries.js).
+--
+-- `key` is free text, not the document_type enum — same reasoning as
+-- booking_documents.doc_type above: an enum needs a schema migration to add
+-- a value and can never drop one, which defeats the point of this being
+-- admin-editable. No FK from booking_documents/document_formats to this
+-- table's key on purpose: a key the admin later deactivates (or, in
+-- principle, removes) must never break an existing booking_documents row
+-- that already used it — same precedent as the old document_type enum's own
+-- `license` value, kept forever even once dropped from the offered set.
+-- is_active is how a type is "removed" from the customer-facing form
+-- without touching history; there's no hard delete exposed.
+create table if not exists document_types (
+  key text primary key,
+  label text not null,
+  category text not null check (category in ('vehicle', 'kyc', 'legal')),
+  description text,
+  -- One of the lucide-react icon names ICON_MAP (BookingForm.js) /
+  -- ICON_OPTIONS (the admin page) know how to render — not an arbitrary
+  -- string, enforced client-side by only offering a fixed picklist.
+  icon text not null default 'FileText',
+  required boolean not null default true,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists document_types_active_sort_idx on document_types (is_active, sort_order);
+
+-- Seeds the 7 types this table replaces (see the comment above) so existing
+-- behavior is unchanged the moment this migration runs — a no-op once these
+-- rows already exist, so safe to re-run.
+insert into document_types (key, label, category, description, icon, sort_order) values
+  ('rc', 'RC Card', 'vehicle', 'Registration Certificate — proves vehicle ownership and registration details.', 'FileText', 1),
+  ('puc', 'PUC', 'vehicle', 'Pollution Under Control certificate — proves your vehicle meets emission standards.', 'Wind', 2),
+  ('insurance', 'Insurance', 'vehicle', 'Valid vehicle insurance policy covering the transit period.', 'Shield', 3),
+  ('aadhaar', 'Aadhaar', 'kyc', 'Government-issued identity proof of the vehicle owner.', 'Fingerprint', 4),
+  ('pan', 'PAN Card', 'kyc', 'Permanent Account Number card — identity/tax proof of the vehicle owner.', 'IdCard', 5),
+  ('noc', 'NOC', 'legal', 'No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport.', 'FileCheck', 6),
+  ('authority_letter', 'Customer Authority Letter', 'legal', 'A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle.', 'FileSignature', 7)
+on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------------
 -- Blank format/template files ("Download Format" on the booking form's
 -- NOC / Customer Authority Letter cards, and any other document type an
 -- admin later attaches one to) — admin-uploaded from the "Document
 -- Formats" panel, so replacing a format is an upload, not a code deploy.
--- One row per document_type; re-uploading overwrites the row (and the old
--- storage object is removed by the app, not by a DB trigger).
+-- One row per document type (see document_types.key above — same "no FK"
+-- reasoning: a format for a since-deactivated type stays harmlessly
+-- orphaned rather than needing cleanup); re-uploading overwrites the row
+-- (and the old storage object is removed by the app, not by a DB trigger).
 -- ---------------------------------------------------------------------
 
 create table if not exists document_formats (
-  doc_type document_type primary key,
+  doc_type text primary key,
   file_name text not null,
   file_path text not null, -- object path in the public document-formats bucket
   updated_at timestamptz not null default now()
 );
+
+alter table document_formats alter column doc_type type text using doc_type::text;
+
+-- ---------------------------------------------------------------------
+-- Single-row settings for osl-carcoolie's landing page — right now just the
+-- hero background video, admin-uploaded (carcoolie-admin's Landing Page
+-- panel) so swapping the footage is an upload, not a code deploy. Same
+-- singleton pattern as tax_settings/payment_settings above. Hero.js shows
+-- its gradient placeholder when hero_video_path is null (no video uploaded
+-- yet), the real <video> once one exists.
+-- ---------------------------------------------------------------------
+
+create table if not exists landing_page_settings (
+  id boolean primary key default true,
+  hero_video_path text, -- object path in the public landing-media bucket
+  hero_video_file_name text,
+  updated_at timestamptz not null default now(),
+  constraint landing_page_settings_singleton check (id)
+);
+
+insert into landing_page_settings (id) values (true)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------
+-- Admin-managed job listings for osl-carcoolie's /careers page (see
+-- carcoolie-admin's Careers panel) — add/edit/retire a position without a
+-- code deploy, same pattern as document_types above. is_active is how a
+-- listing is "closed" without deleting it outright.
+-- ---------------------------------------------------------------------
+
+create table if not exists job_openings (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  department text not null,
+  location text not null,
+  employment_type text not null default 'full_time' check (
+    employment_type in ('full_time', 'part_time', 'contract', 'internship')
+  ),
+  description text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists job_openings_active_sort_idx on job_openings (is_active, sort_order);
+
+-- Submissions from the "Apply Now" modal on /careers (see job_id below) —
+-- surfaced on carcoolie-admin's Job Applications page. job_title/job_department
+-- are snapshotted at submission time (same reasoning as bookings.vehicle_type_label
+-- snapshotting a vehicle type's name) so an application still reads sensibly
+-- even after the listing it was for is edited or closed; job_id itself is
+-- ON DELETE SET NULL rather than CASCADE for the same reason — deleting a
+-- listing shouldn't delete the people who applied to it. Same new ->
+-- contacted -> closed + notes workflow as abandonment_notes/
+-- vehicle_stationary_alerts above.
+create table if not exists job_applications (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references job_openings (id) on delete set null,
+  job_title text not null,
+  job_department text not null,
+  full_name text not null,
+  email text not null,
+  phone text not null,
+  message text,
+  resume_file_name text,
+  resume_path text, -- object path in the private job-applications bucket
+  status text not null default 'new' check (status in ('new', 'contacted', 'closed')),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists job_applications_job_id_idx on job_applications (job_id);
+create index if not exists job_applications_status_idx on job_applications (status);
 
 -- ---------------------------------------------------------------------
 -- Storage — actual uploaded document files (booking_documents.file_url
@@ -1649,6 +1918,21 @@ drop policy if exists "booking-documents anon read" on storage.objects;
 create policy "booking-documents anon read" on storage.objects for select
   using (bucket_id = 'booking-documents');
 
+-- Resumes from the /careers "Apply Now" modal — private, same "no real
+-- auth yet" reasoning and anon upload/read pattern as booking-documents
+-- above (the admin app reads via signed URLs, same as that bucket).
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('job-applications', 'job-applications', false, 10485760)
+on conflict (id) do nothing;
+
+drop policy if exists "job-applications anon upload" on storage.objects;
+create policy "job-applications anon upload" on storage.objects for insert
+  with check (bucket_id = 'job-applications');
+
+drop policy if exists "job-applications anon read" on storage.objects;
+create policy "job-applications anon read" on storage.objects for select
+  using (bucket_id = 'job-applications');
+
 -- Public (unlike booking-documents above) — these are blank templates, not
 -- customer data, so the "Download Format" link on the booking form can
 -- point straight at the public URL rather than minting a signed one.
@@ -1664,6 +1948,25 @@ drop policy if exists "document-formats admin write" on storage.objects;
 create policy "document-formats admin write" on storage.objects for all
   using (bucket_id = 'document-formats')
   with check (bucket_id = 'document-formats');
+
+-- Public, same reasoning as document-formats above — marketing footage, not
+-- customer data. file_size_limit is generous (200MB) since video is the
+-- whole point of this bucket; re-encode before uploading regardless (see
+-- the admin Landing Page panel's own note) rather than relying on this cap
+-- alone — it exists to stop a wildly wrong upload, not to bless any size
+-- under it as a good idea.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('landing-media', 'landing-media', true, 209715200, array['video/mp4', 'video/webm', 'video/quicktime'])
+on conflict (id) do nothing;
+
+drop policy if exists "landing-media anon read" on storage.objects;
+create policy "landing-media anon read" on storage.objects for select
+  using (bucket_id = 'landing-media');
+
+drop policy if exists "landing-media admin write" on storage.objects;
+create policy "landing-media admin write" on storage.objects for all
+  using (bucket_id = 'landing-media')
+  with check (bucket_id = 'landing-media');
 
 -- =====================================================================
 -- End of schema.

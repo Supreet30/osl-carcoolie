@@ -97,7 +97,12 @@ function allStatusLabels(split) {
     [BOOKING_STATUS.QUOTE_SENT]: "Final Quote Generated",
     [BOOKING_STATUS.ADVANCE_PAID]: `Advance Paid (${split.advancePercent}%)`,
     [BOOKING_STATUS.CONFIRMED]: "Booking Confirmed",
-    [BOOKING_STATUS.CAR_ARRIVED_AT_YARD]: "Car Arrived at Yard",
+    // Customer-facing label only — the underlying status value stays
+    // "car_arrived_at_yard" (see BOOKING_STATUS above), so this is a pure
+    // display rename with no effect on any status-keyed logic (gating,
+    // payment banners, admin panel, etc. all compare the enum value, never
+    // this string).
+    [BOOKING_STATUS.CAR_ARRIVED_AT_YARD]: "Received in Yard",
     [BOOKING_STATUS.MIDWAY_PAID]: `${split.midwayPercent}% Payment Received`,
     [BOOKING_STATUS.LOADED_ON_CARRIER]: "Loaded on Carrier",
     [BOOKING_STATUS.IN_TRANSIT]: "In Transit",
@@ -1149,14 +1154,14 @@ export async function submitBookingReview(bookingCode, { rating, selectedComment
   };
 }
 
-// Live GPS lookup for the carrier truck on this booking — the In Transit
-// step's location card (TruckLocationCard in MyBookingsClient.js). Goes
-// through /api/truck-tracking (server-side proxy + ownership check) rather
-// than a direct Supabase call, same reasoning as selectBookingBenefit below:
-// the plate itself never leaves the server, only the live position for
+// Once-a-day tracking lookup for the carrier truck on this booking — the In
+// Transit step's location card (TruckLocationCard in MyBookingsClient.js).
+// Goes through /api/truck-tracking (server-side proxy + ownership check)
+// rather than a direct Supabase call, same reasoning as selectBookingBenefit
+// below: the plate itself never leaves the server, only the daily update for
 // whichever plate the verified booking actually has.
 export async function fetchTruckLocation(bookingCode) {
-  if (!isSupabaseConfigured) throw new Error("Live tracking isn't available yet — try again shortly.");
+  if (!isSupabaseConfigured) throw new Error("Tracking isn't available yet — try again shortly.");
 
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token ?? null;
@@ -1167,8 +1172,8 @@ export async function fetchTruckLocation(bookingCode) {
     body: JSON.stringify({ bookingCode, accessToken }),
   });
   const body = await res.json();
-  if (!res.ok) throw new Error(body.error || "Couldn't load live location — try again.");
-  return body.truck;
+  if (!res.ok) throw new Error(body.error || "Couldn't load today's tracking update — try again.");
+  return body.update;
 }
 
 // Lists what "Choose Your Benefit" can offer right now (active, unexpired,
@@ -1222,4 +1227,42 @@ export async function selectBookingBenefit(bookingCode, benefitId) {
     benefitType: body.data.benefit_type,
     benefitReference: body.data.benefit_reference,
   };
+}
+
+// Downloadable payment-milestone invoice — generated on demand from the
+// real payments rows (see app/api/invoices/route.js), not stored anywhere,
+// so a later charge can't make a previously-downloaded invoice stale.
+// `milestone` is "advance" | "midway" | "balance", matching PaymentMilestones'
+// slab keys in MyBookingsClient.js. Same access-token ownership pattern as
+// selectBookingBenefit above; triggers the browser's own download prompt
+// rather than returning a URL, since the route has no public read policy to
+// link to directly.
+export async function downloadInvoice(bookingCode, milestone) {
+  if (!isSupabaseConfigured) throw new Error("Invoices aren't available yet — try again shortly.");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token ?? null;
+
+  const res = await fetch("/api/invoices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookingCode, milestone, accessToken }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Couldn't generate the invoice — try again.");
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || `Invoice-${bookingCode}.pdf`;
+
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
 }

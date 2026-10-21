@@ -35,7 +35,7 @@ import {
   saveFormDraft,
   saveLocalFormDraft,
 } from "../../lib/bookingStore";
-import { driverLegCharge, formatINR, getDocumentFormats, getYardsForCity } from "../../lib/pricing";
+import { driverLegCharge, formatINR, getDocumentFormats, getDocumentTypes, getYardsForCity } from "../../lib/pricing";
 import DatePicker from "./DatePicker";
 import Dropdown from "../../components/Dropdown";
 import MapPickerModal from "./MapPickerModal";
@@ -43,75 +43,25 @@ import { locateCurrentPosition } from "../lib/geocode";
 import { clearDocuments, getAllDocuments, removeDocument, saveDocument } from "../lib/documentDraftStore";
 import { fetchDrivingDistanceKm } from "../lib/distance";
 
-// Driving License is dropped from this list — `license` stays defined in
-// the DB's document_type enum (Postgres can't drop an enum value once
-// added), it's just never offered here anymore. A "Download Format" link
-// (blank, fillable copy of that document to print/sign/scan and re-upload)
-// isn't listed statically here anymore — it's whichever doc_types the
-// admin has actually uploaded a format for (see documentFormats state
-// below, fetched from getDocumentFormats()), so the download link can
-// appear on any document type, not just NOC/Customer Authority Letter.
-// `description` drives the info icon's hover tooltip on each card.
-// Grouped for display — each card still keys/uploads/validates exactly the
-// same as before, this only adds which of the three category sections a
-// document renders under.
+// Grouped for display — each card still keys/uploads/validates the same
+// way regardless of which of the three category sections it renders under.
 const DOCUMENT_CATEGORIES = [
   { key: "vehicle", label: "Vehicle Documents" },
   { key: "kyc", label: "KYC" },
   { key: "legal", label: "Legal Documents" },
 ];
 
-const DOCUMENT_TYPES = [
-  {
-    key: "rc",
-    label: "RC Card",
-    category: "vehicle",
-    icon: FileText,
-    description: "Registration Certificate — proves vehicle ownership and registration details.",
-  },
-  {
-    key: "puc",
-    label: "PUC",
-    category: "vehicle",
-    icon: Wind,
-    description: "Pollution Under Control certificate — proves your vehicle meets emission standards.",
-  },
-  {
-    key: "insurance",
-    label: "Insurance",
-    category: "vehicle",
-    icon: Shield,
-    description: "Valid vehicle insurance policy covering the transit period.",
-  },
-  {
-    key: "aadhaar",
-    label: "Aadhaar",
-    category: "kyc",
-    icon: Fingerprint,
-    description: "Government-issued identity proof of the vehicle owner.",
-  },
-  {
-    key: "pan",
-    label: "PAN Card",
-    category: "kyc",
-    icon: IdCard,
-    description: "Permanent Account Number card — identity/tax proof of the vehicle owner.",
-  },
-  {
-    key: "noc",
-    label: "NOC",
-    category: "legal",
-    icon: FileCheck,
-    description: "No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport.",
-  },
-  {
-    key: "authority_letter",
-    label: "Customer Authority Letter",
-    category: "legal",
-    icon: FileSignature,
-    description: "A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle.",
-  },
-];
+// The actual list of document types (which ones, labels, required flag,
+// icon, tooltip description) is admin-editable — see document_types in
+// supabase-schema.sql and getDocumentTypes() in pricing.js, fetched into
+// `documentTypes` state below. This is just the string-icon-name ->
+// component lookup for rendering whatever the admin's list says; a name
+// the admin picks that isn't in here (shouldn't happen — the admin page
+// only offers these same names) falls back to a generic document icon.
+const ICON_MAP = { FileText, Wind, Shield, Fingerprint, IdCard, FileCheck, FileSignature };
+function resolveDocIcon(name) {
+  return ICON_MAP[name] ?? FileText;
+}
 
 const PICKUP_METHODS = [
   { key: "self", label: "Self Drop-off", subtitle: "Drop the car at our hub", icon: MapPin },
@@ -202,7 +152,7 @@ function SectionCard({ icon: Icon, title, badge, children }) {
 // download/upload behavior for every document, just rendered per category
 // group instead of one flat grid.
 function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl }) {
-  const { key, label, icon: Icon, description } = doc;
+  const { key, label, icon: Icon, description, required } = doc;
   return (
     <div
       className={`relative flex w-full items-center gap-4 rounded-2xl border p-4 transition-colors ${
@@ -213,7 +163,7 @@ function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl }) {
         <Icon className={`h-5 w-5 shrink-0 ${state.uploaded ? "text-green-600" : "text-slate-400"}`} strokeWidth={2} />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-bold text-[#0b1e42]">
-            {label} <span className="text-red-600">*</span>
+            {label} {required && <span className="text-red-600">*</span>}
           </span>
           {state.uploaded ? (
             <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -538,6 +488,13 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
   // just never shows a download link, same as always.
   const [documentFormats, setDocumentFormats] = useState({});
 
+  // Which document types to actually render in section 3 — admin-editable,
+  // see getDocumentTypes() in pricing.js. Starts empty (not the offline
+  // fallback) so the section doesn't flash the fallback list then swap to
+  // the real one a moment later; getDocumentTypes() itself falls back only
+  // when Supabase genuinely isn't configured.
+  const [documentTypes, setDocumentTypes] = useState([]);
+
   // Each leg's yards come from its own city: pickup from the estimate's
   // origin, drop-off from its destination. The first yard is pre-selected
   // once the list lands, so the form always has a concrete hub to submit.
@@ -575,6 +532,16 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     let cancelled = false;
     getDocumentFormats().then((formats) => {
       if (!cancelled) setDocumentFormats(formats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDocumentTypes().then((types) => {
+      if (!cancelled) setDocumentTypes(types);
     });
     return () => {
       cancelled = true;
@@ -952,7 +919,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
 
     // Checked here (on the actual submit attempt), not proactively the
     // whole time the form is open — see docsSubmitAttempted above.
-    if (DOCUMENT_TYPES.some(({ key }) => !uploads[key]?.uploaded)) {
+    if (documentTypes.some(({ key, required }) => required && !uploads[key]?.uploaded)) {
       setDocsSubmitAttempted(true);
       documentsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
@@ -1086,11 +1053,12 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     }
   }
 
-  // Every document in section 3 is mandatory — enforced in handleSubmit
-  // rather than pre-disabling the button, so the "Still required" message
-  // only shows up once the customer actually tries to submit with
-  // something missing (and then tracks live as they fix it).
-  const missingDocs = DOCUMENT_TYPES.filter(({ key }) => !uploads[key]?.uploaded);
+  // Which of the admin's required document types are still missing —
+  // enforced in handleSubmit rather than pre-disabling the button, so the
+  // "Still required" message only shows up once the customer actually
+  // tries to submit with something missing (and then tracks live as they
+  // fix it).
+  const missingDocs = documentTypes.filter(({ key, required }) => required && !uploads[key]?.uploaded);
   const showDocsError = docsSubmitAttempted && missingDocs.length > 0;
   const canSubmit = confirmedDocs && agreedTerms && !submitting;
 
@@ -1403,7 +1371,8 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
       <div ref={documentsSectionRef}>
         <SectionCard icon={ShieldCheck} title="3. Vehicle Documents">
           <p className="-mt-2 mb-5 text-xs text-slate-400">
-            All documents below are required — the booking can&apos;t be submitted until every one is uploaded.
+            Documents marked <span className="text-red-600">*</span> are required — the booking can&apos;t be
+            submitted until every required one is uploaded.
           </p>
 
           <TextField
@@ -1417,7 +1386,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
 
           <div className="mt-5 flex flex-col gap-6">
             {DOCUMENT_CATEGORIES.map(({ key: categoryKey, label: categoryLabel }) => {
-              const docs = DOCUMENT_TYPES.filter((d) => d.category === categoryKey);
+              const docs = documentTypes.filter((d) => d.category === categoryKey);
               if (docs.length === 0) return null;
               return (
                 <div key={categoryKey}>
@@ -1432,8 +1401,8 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                     {docs.map((doc) => (
                       <DocumentCard
                         key={doc.key}
-                        doc={doc}
-                        state={uploads[doc.key]}
+                        doc={{ ...doc, icon: resolveDocIcon(doc.icon) }}
+                        state={uploads[doc.key] ?? { uploaded: false }}
                         onUpload={triggerUpload}
                         onRemove={handleRemoveUpload}
                         downloadUrl={documentFormats[doc.key]}

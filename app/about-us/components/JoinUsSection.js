@@ -50,7 +50,7 @@ export default function JoinUsSection() {
                 our team.
               </p>
               <a
-                href="#openings"
+                href="/careers#openings"
                 className="mt-6 inline-flex w-fit items-center rounded-full bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
               >
                 View Openings

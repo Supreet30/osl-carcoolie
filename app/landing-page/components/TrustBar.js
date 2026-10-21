@@ -6,7 +6,7 @@ import { Calendar, Car, MapPin, ShieldCheck, Truck } from "lucide-react";
 
 const TRUST_STATS = [
   { icon: Calendar, target: 22, decimals: 0, prefix: "", suffix: "+", label: "Years Experience" },
-  { icon: Car, target: 35, decimals: 0, prefix: "", suffix: "L+", label: "Vehicles" },
+  { icon: Car, target: 35, decimals: 0, prefix: "", suffix: "L+", label: "Vehicles Transported" },
   { icon: MapPin, target: 27, decimals: 0, prefix: "", suffix: "+", label: "States" },
   { icon: Truck, target: 850, decimals: 0, prefix: "", suffix: "+", label: "Fleet" },
   { icon: ShieldCheck, target: 0.01, decimals: 2, prefix: "<", suffix: "%", label: "Damage Ratio" },

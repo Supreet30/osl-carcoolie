@@ -232,6 +232,37 @@ export async function getDocumentFormats() {
   return {};
 }
 
+// Offline/Supabase-not-configured fallback — the same 7 types this table
+// replaced as a hardcoded array in BookingForm.js, so the booking form still
+// works (just not admin-editable) when Supabase isn't reachable. `icon` is
+// a string name here (resolved to an actual lucide-react component by
+// BookingForm.js's ICON_MAP), not a component — this file has no JSX.
+const DOCUMENT_TYPES_FALLBACK = [
+  { key: "rc", label: "RC Card", category: "vehicle", icon: "FileText", required: true, description: "Registration Certificate — proves vehicle ownership and registration details." },
+  { key: "puc", label: "PUC", category: "vehicle", icon: "Wind", required: true, description: "Pollution Under Control certificate — proves your vehicle meets emission standards." },
+  { key: "insurance", label: "Insurance", category: "vehicle", icon: "Shield", required: true, description: "Valid vehicle insurance policy covering the transit period." },
+  { key: "aadhaar", label: "Aadhaar", category: "kyc", icon: "Fingerprint", required: true, description: "Government-issued identity proof of the vehicle owner." },
+  { key: "pan", label: "PAN Card", category: "kyc", icon: "IdCard", required: true, description: "Permanent Account Number card — identity/tax proof of the vehicle owner." },
+  { key: "noc", label: "NOC", category: "legal", icon: "FileCheck", required: true, description: "No Objection Certificate — from your financier (if the vehicle is under loan) or a self-declaration confirming no objection to transport." },
+  { key: "authority_letter", label: "Customer Authority Letter", category: "legal", icon: "FileSignature", required: true, description: "A signed letter authorizing OSL Car Coolie to collect, transport and deliver your vehicle." },
+];
+
+// Admin-editable list of document types offered on the booking form's
+// "3. Vehicle Documents" section — see document_types in supabase-schema.sql
+// for why this replaced a hardcoded array (so an admin can add/rename/retire
+// a document type without a code deploy). Ordered for direct rendering.
+export async function getDocumentTypes() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from("document_types")
+      .select("key, label, category, description, icon, required")
+      .eq("is_active", true)
+      .order("sort_order");
+    if (!error && data && data.length > 0) return data;
+  }
+  return DOCUMENT_TYPES_FALLBACK;
+}
+
 export async function getAddOnServices() {
   if (isSupabaseConfigured) {
     const { data, error } = await supabase
