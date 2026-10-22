@@ -44,11 +44,11 @@ const SERVICES_HEADING = {
 
 // Sourced straight from the /services page's own data (serviceTabs.js) so
 // this dropdown can never drift out of sync with what that page actually
-// offers — every link points at /services since that page has no per-service
-// deep link yet.
+// offers — each link points at that service's own dedicated page
+// (/services/[slug], see app/services/[slug]/page.js).
 const SERVICES_GROUPS = TABS.map((tab) => ({
   heading: tab.label,
-  links: tab.services.map((service) => ({ label: service.title, href: "/services" })),
+  links: tab.services.map((service) => ({ label: service.title, href: `/services/${service.slug}` })),
 }));
 
 const RESOURCES_HEADING = {
