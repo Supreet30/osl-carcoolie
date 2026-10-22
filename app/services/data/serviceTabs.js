@@ -12,6 +12,7 @@ export const TABS = [
     icon: Users,
     services: [
       {
+        slug: "door-to-door-mobility",
         title: "Door To Door Mobility",
         image: "/finalimages/homepage/ourservices1.png",
         description:
@@ -28,6 +29,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "express-delivery",
         title: "Express Delivery",
         image: "/finalimages/services/b2c3.jpeg",
         description:
@@ -44,6 +46,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "multiple-cars",
         title: "Multiple Cars",
         image: "/finalimages/services/b2c2.JPG",
         description:
@@ -59,6 +62,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "luxury-car-transport",
         title: "Luxury Car Transport",
         image: "/luxury.png",
         description:
@@ -82,6 +86,7 @@ export const TABS = [
     icon: Building2,
     services: [
       {
+        slug: "oem-to-dealer-pan-india",
         title: "OEM to Dealer PAN India",
         image: "/b2b1.png",
         description:
@@ -98,6 +103,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "used-pre-owned-cars",
         title: "Used / Pre-Owned Cars",
         image: "/finalimages/homepage/ourservices2.JPG",
         description:
@@ -114,6 +120,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "vehicle-stockyard-solutions",
         title: "Vehicle Stockyard Solutions",
         image: "/finalimages/homepage/ourservices3.png",
         description:
@@ -130,6 +137,7 @@ export const TABS = [
         ],
       },
       {
+        slug: "automotive-parts-warehousing",
         title: "Automotive Parts Warehousing",
         image: "/finalimages/homepage/ourservices4.png",
         description:

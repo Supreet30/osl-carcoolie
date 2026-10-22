@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { TABS } from "../data/serviceTabs";
 import { useServiceSelection } from "../context/ServiceSelectionContext";
 
@@ -10,7 +11,7 @@ export default function ServicesShowcase() {
   const services = tab.services;
 
   return (
-    <section className="relative overflow-hidden bg-white px-6 py-20 sm:py-24">
+    <section id="what-we-provide" className="relative scroll-mt-32 overflow-hidden bg-white px-6 py-20 sm:py-24">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-60 bg-[linear-gradient(#f1f5f9_1px,transparent_1px),linear-gradient(90deg,#f1f5f9_1px,transparent_1px)] bg-size-[40px_40px]"
@@ -92,19 +93,13 @@ export default function ServicesShowcase() {
                     <p className="mt-2 max-w-md text-md leading-relaxed text-slate-200">
                       {service.description}
                     </p>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectService(i);
-                        document
-                          .getElementById("explore-services")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }}
+                    <Link
+                      href={`/services/${service.slug}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="mt-4 inline-flex items-center rounded-full border border-white px-6 py-3 text-md font-semibold transition-colors hover:bg-white hover:text-[#0b1e42]"
                     >
                       Learn More
-                    </button>
+                    </Link>
                   </div>
 
                   <div

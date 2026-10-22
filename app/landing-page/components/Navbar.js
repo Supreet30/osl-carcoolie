@@ -87,6 +87,18 @@ const RESOURCE_ITEMS = [
       </>
     ),
   },
+  {
+    label: "FAQs",
+    description: "Answers for B2C customers & B2B partners",
+    href: "/faq",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M9.5 9.75a2.5 2.5 0 0 1 4.85.85c0 1.67-2.1 1.9-2.35 3.15" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 17v.01" strokeLinecap="round" />
+      </>
+    ),
+  },
 ];
 
 function ChevronDown({ className }) {

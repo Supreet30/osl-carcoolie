@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Footer from "../landing-page/components/Footer";
 import Testimonials from "../landing-page/components/Testimonials";
 import FAQ from "../landing-page/components/FAQ";
@@ -6,6 +7,7 @@ import ExploreServices from "./components/ExploreServices";
 import ServicesHero from "./components/ServicesHero";
 import ServicesShowcase from "./components/ServicesShowcase";
 import StatsSection from "./components/StatsSection";
+import TabFromQuery from "./components/TabFromQuery";
 import { ServiceSelectionProvider } from "./context/ServiceSelectionContext";
 
 export const metadata = {
@@ -19,6 +21,9 @@ export default function ServicesPage() {
     <main className="relative">
         <ServicesHero />
         <ServiceSelectionProvider>
+          <Suspense fallback={null}>
+            <TabFromQuery />
+          </Suspense>
           <ServicesShowcase />
           <StatsSection />
           <ExploreServices />

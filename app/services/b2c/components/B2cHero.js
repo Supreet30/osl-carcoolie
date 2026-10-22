@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Truck, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, PhoneCall, Truck, X } from "lucide-react";
 import Navbar from "../../../landing-page/components/Navbar";
 import EstimateModal from "./EstimateModal";
 import AuthModal from "../../../components/AuthModal";
@@ -70,27 +70,35 @@ function PincodeStatus({ status }) {
 
 // Shown after Get Estimated Quote on a route that can't be quoted — either
 // PIN didn't resolve to a serviced city, or both did but no route exists
-// between them yet. onConfirm (its Okay button) is what actually logs the
-// service_area_leads row tied to the signed-in account — nothing is saved
-// just from the PIN check above, only once the customer's seen and
-// acknowledged this.
-function ServiceGapModal({ onConfirm }) {
+// between them yet. Framed as a positive next step (not an error) — onClose
+// just dismisses, onRequestCallback is what actually logs the
+// service_area_leads row tied to the signed-in account; nothing is saved
+// just from the PIN check above, or from dismissing without requesting one.
+function ServiceGapModal({ onClose, onRequestCallback }) {
   return (
     <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-2xl">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
-          <AlertCircle className="h-7 w-7" strokeWidth={2} />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 text-slate-400 transition-colors hover:text-slate-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <PhoneCall className="h-6 w-6" strokeWidth={2} />
         </span>
-        <h3 className="mt-4 text-lg font-extrabold text-[#0b1e42]">We Don&apos;t Service This Route Yet</h3>
+        <h3 className="mt-4 text-lg font-extrabold text-[#0b1e42]">Our Team Will Get Back to You</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          Our team will contact you about it soon.
+          We don&apos;t service this exact route yet. Request a callback and our team will reach out to help.
         </p>
         <button
           type="button"
-          onClick={onConfirm}
+          onClick={onRequestCallback}
           className="mt-6 w-full rounded-full bg-red-600 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
         >
-          Okay
+          Request Callback from our Team
         </button>
       </div>
     </div>
@@ -204,11 +212,14 @@ export default function B2cHero() {
   }
 
   // Logs a service_area_leads row so carcoolie-admin's Service Leads page
-  // can follow up — no form, no name/phone typed here, since that page
-  // looks the account's own saved contact info up live via customer_id
-  // (see /api/service-leads). Called from ServiceGapModal's Okay button
-  // below, never automatically — a transient failure here just means one
-  // fewer admin-visible lead, not a blocked customer.
+  // (and the Callback Requests section on Abandoned Carts) can follow up —
+  // no form, no name/phone typed here, since those pages look the account's
+  // own saved contact info up live via customer_id (see
+  // /api/service-leads). Called the moment the gap is actually surfaced to
+  // the customer (both paths that open ServiceGapModal below), not gated
+  // behind them clicking "Request Callback from our Team" — the point is
+  // for admin to see every customer who hit an unserviced route, whether or
+  // not they explicitly asked to be called back.
   async function logServiceGapLead(userId, pickupPinValue, destinationPinValue) {
     const { error } = await supabase
       .from("service_area_leads")
@@ -229,9 +240,10 @@ export default function B2cHero() {
         if (action === "quote") {
           generateQuote(nextSession.user.id, pendingPickupPin, pendingDestinationPin);
         } else {
-          // Don't log yet — ServiceGapModal's Okay button is what actually
-          // saves the lead, same as the already-signed-in path in
-          // handleSubmit below.
+          // Logged the moment the modal is shown, same as the
+          // already-signed-in path in handleSubmit below — see
+          // logServiceGapLead's comment above.
+          logServiceGapLead(nextSession.user.id, pendingPickupPin, pendingDestinationPin);
           setShowServiceGapModal(true);
         }
       }
@@ -415,10 +427,11 @@ export default function B2cHero() {
     event.preventDefault();
 
     // Surfaces the route as a service gap — ServiceGapModal if already
-    // signed in (its own Okay button is what actually logs the lead), or
-    // the same sign-in gate generateQuote uses below otherwise, so there's
-    // always an account for carcoolie-admin's Service Leads page to pull
-    // contact info from instead of asking the customer to type it in again.
+    // signed in (logged the instant the modal is shown, not gated behind
+    // its button — see logServiceGapLead's comment above), or the same
+    // sign-in gate generateQuote uses below otherwise, so there's always an
+    // account for carcoolie-admin to pull contact info from instead of
+    // asking the customer to type it in again.
     function flagServiceGap() {
       setCityError("");
       pendingPinsRef.current = { pickupPin, destinationPin };
@@ -427,6 +440,7 @@ export default function B2cHero() {
         setAuthModalOpen(true);
         return;
       }
+      if (session) logServiceGapLead(session.user.id, pickupPin, destinationPin);
       setShowServiceGapModal(true);
     }
 
@@ -661,18 +675,13 @@ export default function B2cHero() {
         }
       />
 
+      {/* The lead is already logged the instant this modal opens (see
+          logServiceGapLead's comment above) — both of its buttons just
+          close it, "Request Callback" is purely reassurance copy. */}
       {showServiceGapModal && (
         <ServiceGapModal
-          onConfirm={async () => {
-            setShowServiceGapModal(false);
-            if (session) {
-              await logServiceGapLead(
-                session.user.id,
-                pendingPinsRef.current.pickupPin,
-                pendingPinsRef.current.destinationPin
-              );
-            }
-          }}
+          onClose={() => setShowServiceGapModal(false)}
+          onRequestCallback={() => setShowServiceGapModal(false)}
         />
       )}
 

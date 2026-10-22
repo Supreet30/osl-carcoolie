@@ -75,6 +75,18 @@ const DROPOFF_METHODS = [
 
 const TIME_SLOTS = ["09:00 - 11:00", "11:00 - 01:00", "01:00 - 03:00", "03:00 - 05:00"];
 
+// Applied per document on upload (see handleFileSelected below) — a file
+// over this is rejected client-side before it ever touches Storage/draft
+// state, rather than failing later at submit time.
+const MAX_DOCUMENT_SIZE_MB = 2;
+const MAX_DOCUMENT_SIZE_BYTES = MAX_DOCUMENT_SIZE_MB * 1024 * 1024;
+
+// Indian mobile numbers: 10 digits, first digit 6-9.
+const PHONE_PATTERN = "[6-9][0-9]{9}";
+const PHONE_TITLE = "Enter a valid 10-digit mobile number";
+const PIN_PATTERN = "[0-9]{6}";
+const PIN_TITLE = "Enter a 6-digit PIN code";
+
 // The labels drop AM/PM (they're always a daytime business-hours slot), so
 // this is the only unambiguous place "01:00" means 1pm, not 1am — used to
 // tell whether a given slot has already started/passed today.
@@ -151,12 +163,13 @@ function SectionCard({ icon: Icon, title, badge, children }) {
 // One upload card inside the "3. Vehicle Documents" section — same tooltip/
 // download/upload behavior for every document, just rendered per category
 // group instead of one flat grid.
-function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl }) {
+function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl, error }) {
   const { key, label, icon: Icon, description, required } = doc;
   return (
+    <div className="flex flex-col gap-1.5">
     <div
       className={`relative flex w-full items-center gap-4 rounded-2xl border p-4 transition-colors ${
-        state.uploaded ? "border-green-200 bg-green-50" : "border-slate-200 bg-white hover:border-red-200"
+        error ? "border-red-300 bg-red-50" : state.uploaded ? "border-green-200 bg-green-50" : "border-slate-200 bg-white hover:border-red-200"
       }`}
     >
       <button type="button" onClick={() => onUpload(key)} className="flex min-w-0 flex-1 items-center gap-4 text-left">
@@ -219,17 +232,24 @@ function DocumentCard({ doc, state, onUpload, onRemove, downloadUrl }) {
         )}
       </div>
     </div>
+    {error && <p className="px-1 text-xs font-semibold text-red-600">{error}</p>}
+    </div>
   );
 }
 
-function TextField({ label, ...props }) {
+function TextField({ label, error, required, ...props }) {
   return (
     <label className="block text-sm font-semibold text-[#0b1e42]">
-      {label}
+      {label} {required && <span className="text-red-600">*</span>}
       <input
         {...props}
-        className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500 focus:ring-2 focus:ring-red-500"
+        required={required}
+        aria-invalid={error ? "true" : undefined}
+        className={`mt-2 w-full rounded-xl px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500 focus:ring-2 focus:ring-red-500 ${
+          error ? "bg-red-50 ring-2 ring-red-400" : "bg-slate-50"
+        }`}
       />
+      {error && <span className="mt-1.5 block text-xs font-semibold text-red-600">{error}</span>}
     </label>
   );
 }
@@ -458,6 +478,17 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     authority_letter: { uploaded: false },
     pan: { uploaded: false },
   });
+
+  // Per-document "file too large" message (see MAX_DOCUMENT_SIZE_BYTES),
+  // keyed by doc key — separate from `uploads` since a rejected file never
+  // actually gets stored there.
+  const [uploadErrors, setUploadErrors] = useState({});
+
+  // At most one entry at a time — validateAndFocusFirstError (below) stops
+  // at the first problem it finds, so this only ever holds that one field's
+  // message, shown inline next to it and cleared as soon as the form or
+  // that specific control changes.
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!draftId) return;
@@ -758,6 +789,13 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
   const documentsSectionRef = useRef(null);
   const formRef = useRef(null);
   const formDraftTimerRef = useRef(null);
+  // Pickup date and time slot aren't real form fields (DatePicker only
+  // exposes a hidden input, and the time slot buttons have no input at
+  // all), so they can't be picked up by formRef.current.elements like
+  // everything else validateAndFocusFirstError checks — these two refs are
+  // what it scrolls to for those instead.
+  const pickupDateRef = useRef(null);
+  const timeSlotRef = useRef(null);
 
   // Bubbles the fields the booking summary sidebar displays up to the
   // shared parent, so it stays live as the customer fills in this form
@@ -855,6 +893,12 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
   // them replace a file directly, this is just for removing one outright.
   function handleRemoveUpload(key) {
     setUploads((prev) => ({ ...prev, [key]: { uploaded: false } }));
+    setUploadErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     if (draftId) removeDocument(draftId, key);
   }
 
@@ -862,6 +906,21 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     const file = event.target.files?.[0];
     const key = pendingUploadKey.current;
     if (file && key) {
+      if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        setUploadErrors((prev) => ({
+          ...prev,
+          [key]: `This file is ${sizeMB}MB — each document must be ${MAX_DOCUMENT_SIZE_MB}MB or smaller.`,
+        }));
+        event.target.value = "";
+        return;
+      }
+      setUploadErrors((prev) => {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       setUploads((prev) => ({
         ...prev,
@@ -914,16 +973,99 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     setMapPickerTarget(null);
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  function clearFieldError(name) {
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  }
 
-    // Checked here (on the actual submit attempt), not proactively the
-    // whole time the form is open — see docsSubmitAttempted above.
+  // Friendlier than the browser's own validationMessage, and consistent
+  // with the red error text every other field on this form shows — falls
+  // back to the field's own `title` for a pattern mismatch (already set to
+  // a human description for phone/pin/GSTIN/registration above) rather than
+  // the native "Please match the requested format." wording.
+  function describeValidity(el) {
+    const v = el.validity;
+    if (v.valueMissing) return "This field is required.";
+    if (v.patternMismatch) return el.title || "This value isn't in a valid format.";
+    if (v.tooShort) return `Enter at least ${el.minLength} characters.`;
+    if (v.tooLong) return `Enter no more than ${el.maxLength} characters.`;
+    return el.validationMessage || "This value isn't valid.";
+  }
+
+  function scrollToElement(el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Focusing right away can fight the smooth scroll in some browsers
+    // (jumping straight there instead); giving the scroll a moment first
+    // avoids that.
+    window.setTimeout(() => el.focus({ preventScroll: true }), 300);
+  }
+
+  // Walks the form in the same top-to-bottom order a customer fills it in,
+  // stopping at the very first problem — a missing/invalid real field, the
+  // pickup date/time slot (not real form fields — see the refs above), or a
+  // missing required document — rather than collecting every error at once.
+  // Each entry here matches a field that's actually rendered right now (the
+  // `pickupMethod === "driver"` etc. conditions mirror the JSX below), so a
+  // conditionally-hidden field is never checked while it's hidden.
+  function validateAndFocusFirstError() {
+    setFieldErrors({});
+
+    if (!pickupDate) {
+      setFieldErrors({ pickup_date: "Select a pickup date." });
+      pickupDateRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return false;
+    }
+    if (!timeSlot) {
+      setFieldErrors({ time_slot: "Select a pickup time slot." });
+      timeSlotRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return false;
+    }
+
+    const fieldOrder = [
+      "pickup_fullName",
+      "pickup_phone",
+      ...(pickupMethod === "driver" ? ["pickup_house", "pickup_street", "pickup_city", "pickup_pin"] : []),
+      "dropoff_fullName",
+      "dropoff_phone",
+      ...(dropoffMethod === "driver" ? ["dropoff_house", "dropoff_street", "dropoff_city", "dropoff_pin"] : []),
+      "registration_number",
+      "billing_gstin",
+      ...(billingMode === "custom"
+        ? ["billing_fullName", "billing_phone", "billing_house", "billing_street", "billing_city", "billing_pin"]
+        : []),
+    ];
+
+    if (formRef.current) {
+      for (const name of fieldOrder) {
+        const el = formRef.current.elements.namedItem(name);
+        if (!el) continue; // shouldn't happen — fieldOrder mirrors the JSX below
+        if (!el.checkValidity()) {
+          setFieldErrors({ [name]: describeValidity(el) });
+          scrollToElement(el);
+          return false;
+        }
+      }
+    }
+
+    // Checked after every real field, not proactively the whole time the
+    // form is open — see docsSubmitAttempted above.
     if (documentTypes.some(({ key, required }) => required && !uploads[key]?.uploaded)) {
       setDocsSubmitAttempted(true);
       documentsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!validateAndFocusFirstError()) return;
 
     const formData = new FormData(event.currentTarget);
     setSubmitting(true);
@@ -1088,7 +1230,18 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
   );
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} onChange={scheduleFormDraftSave} className="flex flex-col gap-6">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      onChange={() => {
+        scheduleFormDraftSave();
+        // Only ever one entry at a time (see validateAndFocusFirstError) —
+        // clearing all of it on any edit is enough to dismiss it as soon as
+        // the customer starts fixing whatever was flagged.
+        if (Object.keys(fieldErrors).length > 0) setFieldErrors({});
+      }}
+      className="flex flex-col gap-6"
+    >
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
 
       {estimate && (
@@ -1123,13 +1276,23 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             type="text"
             defaultValue={initialFormValues?.pickup_fullName ?? ""}
             placeholder="e.g. Rahul Sharma"
+            required
+            minLength={2}
+            maxLength={80}
+            error={fieldErrors.pickup_fullName}
           />
           <TextField
             label="Phone Number"
             name="pickup_phone"
             type="tel"
+            inputMode="numeric"
             defaultValue={initialFormValues?.pickup_phone ?? ""}
-            placeholder="+91 98765 43210"
+            placeholder="98765 43210"
+            required
+            pattern={PHONE_PATTERN}
+            maxLength={10}
+            title={PHONE_TITLE}
+            error={fieldErrors.pickup_phone}
           />
         </div>
         {pickupMethod === "driver" ? (
@@ -1141,6 +1304,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.pickup_house ?? ""}
                 placeholder="B-24, 2nd Floor"
+                required
+                maxLength={120}
+                error={fieldErrors.pickup_house}
               />
               <TextField
                 label="Street / Area Name"
@@ -1148,6 +1314,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.pickup_street ?? ""}
                 placeholder="Connaught Place"
+                required
+                maxLength={150}
+                error={fieldErrors.pickup_street}
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -1157,6 +1326,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.pickup_landmark ?? ""}
                 placeholder="Near Metro Pillar 12"
+                maxLength={120}
               />
               <TextField
                 label="City"
@@ -1164,6 +1334,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.pickup_city ?? estimate?.fromCity ?? ""}
                 placeholder="New Delhi"
+                required
+                maxLength={60}
+                error={fieldErrors.pickup_city}
               />
               <TextField
                 label="PIN Code"
@@ -1173,7 +1346,11 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.pickup_pin ?? estimate?.pickupPin ?? ""}
                 placeholder="110001"
                 readOnly={Boolean(estimate?.pickupPin)}
-                title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : undefined}
+                required
+                pattern={PIN_PATTERN}
+                maxLength={6}
+                title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE}
+                error={fieldErrors.pickup_pin}
               />
             </div>
           </>
@@ -1211,15 +1388,28 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
           {pickupMethod === "driver" && pickupHubCard}
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <label className="block text-sm font-semibold text-[#0b1e42]">
-              Select Date
+            <label ref={pickupDateRef} className="block text-sm font-semibold text-[#0b1e42]">
+              Select Date <span className="text-red-600">*</span>
               <span className="mt-2 block">
-                <DatePicker name="pickup_date" value={pickupDate} onChange={setPickupDate} min={earliestPickupISO} />
+                <DatePicker
+                  name="pickup_date"
+                  value={pickupDate}
+                  onChange={(value) => {
+                    setPickupDate(value);
+                    clearFieldError("pickup_date");
+                  }}
+                  min={earliestPickupISO}
+                />
               </span>
+              {fieldErrors.pickup_date && (
+                <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors.pickup_date}</span>
+              )}
             </label>
 
-            <div>
-              <p className="text-sm font-semibold text-[#0b1e42]">Time Slot</p>
+            <div ref={timeSlotRef}>
+              <p className="text-sm font-semibold text-[#0b1e42]">
+                Time Slot <span className="text-red-600">*</span>
+              </p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {TIME_SLOTS.map((slot) => {
                   const selected = timeSlot === slot;
@@ -1229,7 +1419,10 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                       key={slot}
                       type="button"
                       disabled={past}
-                      onClick={() => setTimeSlot(slot)}
+                      onClick={() => {
+                        setTimeSlot(slot);
+                        clearFieldError("time_slot");
+                      }}
                       title={past ? (pickupDate ? "This time slot has already passed today" : "Select a date first") : undefined}
                       className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${
                         selected
@@ -1244,6 +1437,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                   );
                 })}
               </div>
+              {fieldErrors.time_slot && (
+                <p className="mt-1.5 text-xs font-semibold text-red-600">{fieldErrors.time_slot}</p>
+              )}
             </div>
           </div>
         </div>
@@ -1261,13 +1457,23 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             type="text"
             defaultValue={initialFormValues?.dropoff_fullName ?? ""}
             placeholder="Recipient Name"
+            required
+            minLength={2}
+            maxLength={80}
+            error={fieldErrors.dropoff_fullName}
           />
           <TextField
             label="Phone Number"
             name="dropoff_phone"
             type="tel"
+            inputMode="numeric"
             defaultValue={initialFormValues?.dropoff_phone ?? ""}
-            placeholder="+91 98765 43210"
+            placeholder="98765 43210"
+            required
+            pattern={PHONE_PATTERN}
+            maxLength={10}
+            title={PHONE_TITLE}
+            error={fieldErrors.dropoff_phone}
           />
         </div>
         {dropoffMethod === "driver" ? (
@@ -1279,6 +1485,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.dropoff_house ?? ""}
                 placeholder="A-12, 5th Floor"
+                required
+                maxLength={120}
+                error={fieldErrors.dropoff_house}
               />
               <TextField
                 label="Street / Area Name"
@@ -1286,6 +1495,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.dropoff_street ?? ""}
                 placeholder="Bandra West"
+                required
+                maxLength={150}
+                error={fieldErrors.dropoff_street}
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -1295,6 +1507,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.dropoff_landmark ?? ""}
                 placeholder="Near Linking Road"
+                maxLength={120}
               />
               <TextField
                 label="City"
@@ -1302,6 +1515,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.dropoff_city ?? estimate?.toCity ?? ""}
                 placeholder="Mumbai"
+                required
+                maxLength={60}
+                error={fieldErrors.dropoff_city}
               />
               <TextField
                 label="PIN Code"
@@ -1311,9 +1527,13 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.dropoff_pin ?? estimate?.destinationPin ?? ""}
                 placeholder="400001"
                 readOnly={Boolean(estimate?.destinationPin)}
+                required
+                pattern={PIN_PATTERN}
+                maxLength={6}
                 title={
-                  estimate?.destinationPin ? "Set from your estimate — get a new estimate to change it" : undefined
+                  estimate?.destinationPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE
                 }
+                error={fieldErrors.dropoff_pin}
               />
             </div>
           </>
@@ -1372,7 +1592,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
         <SectionCard icon={ShieldCheck} title="3. Vehicle Documents">
           <p className="-mt-2 mb-5 text-xs text-slate-400">
             Documents marked <span className="text-red-600">*</span> are required — the booking can&apos;t be
-            submitted until every required one is uploaded.
+            submitted until every required one is uploaded. Each file must be {MAX_DOCUMENT_SIZE_MB}MB or smaller.
           </p>
 
           <TextField
@@ -1382,6 +1602,12 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             defaultValue={initialFormValues?.registration_number ?? ""}
             placeholder="e.g. DL01AB1234"
             style={{ textTransform: "uppercase" }}
+            required
+            minLength={4}
+            maxLength={13}
+            pattern="[A-Za-z0-9\- ]{4,13}"
+            title="Enter a valid vehicle registration number"
+            error={fieldErrors.registration_number}
           />
 
           <div className="mt-5 flex flex-col gap-6">
@@ -1406,6 +1632,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                         onUpload={triggerUpload}
                         onRemove={handleRemoveUpload}
                         downloadUrl={documentFormats[doc.key]}
+                        error={uploadErrors[doc.key]}
                       />
                     ))}
                   </div>
@@ -1481,7 +1708,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                   setGstStatus("idle");
                   setGstCompanyName(null);
                 }}
-                className="min-w-0 flex-1 rounded-xl bg-slate-50 px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500"
+                className={`min-w-0 flex-1 rounded-xl px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500 ${
+                  fieldErrors.billing_gstin ? "bg-red-50 ring-2 ring-red-400" : "bg-slate-50"
+                }`}
               />
               <button
                 type="button"
@@ -1513,6 +1742,9 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
               <AlertTriangle className="h-3.5 w-3.5" /> Couldn&apos;t verify right now — you can still continue.
             </p>
           )}
+          {fieldErrors.billing_gstin && (
+            <p className="mt-1.5 text-xs font-semibold text-red-600">{fieldErrors.billing_gstin}</p>
+          )}
         </div>
 
         {billingMode === "custom" && (
@@ -1531,14 +1763,22 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.billing_fullName ?? ""}
                 placeholder="e.g. Rahul Sharma"
                 required
+                minLength={2}
+                maxLength={80}
+                error={fieldErrors.billing_fullName}
               />
               <TextField
                 label="Phone Number"
                 name="billing_phone"
                 type="tel"
+                inputMode="numeric"
                 defaultValue={initialFormValues?.billing_phone ?? ""}
-                placeholder="+91 98765 43210"
+                placeholder="98765 43210"
                 required
+                pattern={PHONE_PATTERN}
+                maxLength={10}
+                title={PHONE_TITLE}
+                error={fieldErrors.billing_phone}
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -1549,6 +1789,8 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.billing_house ?? ""}
                 placeholder="B-24, 2nd Floor"
                 required
+                maxLength={120}
+                error={fieldErrors.billing_house}
               />
               <TextField
                 label="Street / Area Name"
@@ -1557,6 +1799,8 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.billing_street ?? ""}
                 placeholder="Connaught Place"
                 required
+                maxLength={150}
+                error={fieldErrors.billing_street}
               />
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -1566,6 +1810,7 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 type="text"
                 defaultValue={initialFormValues?.billing_landmark ?? ""}
                 placeholder="Near Metro Pillar 12"
+                maxLength={120}
               />
               <TextField
                 label="City"
@@ -1574,6 +1819,8 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 defaultValue={initialFormValues?.billing_city ?? ""}
                 placeholder="New Delhi"
                 required
+                maxLength={60}
+                error={fieldErrors.billing_city}
               />
               <TextField
                 label="PIN Code"
@@ -1582,10 +1829,11 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
                 inputMode="numeric"
                 defaultValue={initialFormValues?.billing_pin ?? ""}
                 placeholder="110001"
-                pattern="[0-9]{6}"
+                pattern={PIN_PATTERN}
                 maxLength={6}
-                title="Enter a 6-digit PIN code"
+                title={PIN_TITLE}
                 required
+                error={fieldErrors.billing_pin}
               />
             </div>
           </div>
@@ -1612,14 +1860,14 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
           />
           I agree to CarCoolie&apos;s{" "}
           <a
-            href="/terms-of-service"
+            href="/terms-and-conditions"
             target="_blank"
             rel="noopener noreferrer"
             className="font-semibold text-red-600 hover:text-red-700"
           >
-            Terms of Service
-          </a>
-          ,{" "}
+            Terms and Conditions
+          </a>{" "}
+          and{" "}
           <a
             href="/privacy-policy"
             target="_blank"
@@ -1627,15 +1875,6 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             className="font-semibold text-red-600 hover:text-red-700"
           >
             Privacy Policy
-          </a>{" "}
-          and{" "}
-          <a
-            href="/cancellation-policy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-red-600 hover:text-red-700"
-          >
-            Cancellation Policy
           </a>
           .
         </label>

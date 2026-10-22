@@ -5,8 +5,9 @@ import ServiceStepsWheel from "./ServiceStepsWheel";
 import { useServiceSelection } from "../context/ServiceSelectionContext";
 
 export default function ExploreServices() {
-  const { service } = useServiceSelection();
+  const { tab, service } = useServiceSelection();
   const [taglineStart, taglineEnd] = service.tagline;
+  const bookHref = tab.id === "b2c" ? "/services/b2c" : "/contact";
 
   return (
     <section
@@ -50,7 +51,7 @@ export default function ExploreServices() {
             </ul>
 
             <a
-              href="#contact-form"
+              href={bookHref}
               className="mt-8 inline-flex items-center gap-2 rounded-full bg-red-600 px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-red-700"
             >
               Book This Service

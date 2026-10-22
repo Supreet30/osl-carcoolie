@@ -1,12 +1,15 @@
 import { Fragment } from "react";
 
-// Small markdown renderer for the admin-authored legal pages: headings,
-// paragraphs, bullet/numbered lists, blockquotes, horizontal rules, and
-// **bold** / *italic* / `code` / [links](url) inline. Everything renders as
-// React text nodes (never raw HTML), and link targets are limited to
+// Shared markdown renderer for admin-authored content — originally just the
+// legal pages (app/legal/LegalDocument.js), now also job descriptions on
+// /careers (see JobOpeningsSection.js), hence living here instead of under
+// app/legal/. Headings, paragraphs, bullet/numbered lists, blockquotes,
+// horizontal rules, and **bold** / *italic* / __underline__ / `code` /
+// [links](url) inline. Everything renders as React text nodes (never raw
+// HTML via dangerouslySetInnerHTML), and link targets are limited to
 // http(s), mailto and site-relative URLs.
 
-const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
 
 function safeHref(href) {
   const url = href.trim();
@@ -17,6 +20,7 @@ function renderInline(text) {
   return text.split(INLINE).map((part, i) => {
     if (!part) return null;
     if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("__") && part.endsWith("__")) return <u key={i}>{part.slice(2, -2)}</u>;
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
         <code key={i} className="rounded bg-slate-100 px-1.5 py-0.5 text-[0.9em]">
@@ -98,7 +102,7 @@ const HEADING_CLASSES = {
 };
 
 function plainText(text) {
-  return text.replace(/[*`]/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, (_, label) => label);
+  return text.replace(/[*_`]/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, (_, label) => label);
 }
 
 // Same id sequence for the rendered headings and the page's contents list —

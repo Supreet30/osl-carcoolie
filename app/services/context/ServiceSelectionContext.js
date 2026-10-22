@@ -9,8 +9,12 @@ const ServiceSelectionContext = createContext(null);
 // service card is currently focused (ServicesShowcase sets it, ExploreServices
 // reads it) — they can sit anywhere in the tree as long as they're both
 // inside this provider, no prop drilling required.
+export function tabIndexById(id) {
+  return Math.max(0, TABS.findIndex((tab) => tab.id === id));
+}
+
 export function ServiceSelectionProvider({ children }) {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => tabIndexById("b2c"));
   const [activeIndex, setActiveIndex] = useState(0);
 
   const value = useMemo(

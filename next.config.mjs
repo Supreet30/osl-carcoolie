@@ -9,6 +9,11 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      { source: "/terms-of-service", destination: "/terms-and-conditions", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

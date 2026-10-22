@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Briefcase, Loader2, MapPin, Send } from "lucide-react";
+import Markdown from "../../components/Markdown";
 import { getJobOpenings } from "../lib/jobs";
 import ApplyModal from "./ApplyModal";
 
@@ -39,7 +40,11 @@ function JobCard({ job, onApply }) {
               {job.location}
             </span>
           </div>
-          {job.description && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">{job.description}</p>}
+          {job.description && (
+            <div className="mt-3 max-w-2xl [&_p]:my-0 [&_ol]:my-1 [&_ul]:my-1">
+              <Markdown source={job.description} />
+            </div>
+          )}
         </div>
 
         <button

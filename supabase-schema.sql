@@ -229,6 +229,9 @@ create index if not exists quote_requests_customer_id_created_at_idx on quote_re
 -- page via that service_role-backed route.
 create table if not exists service_area_leads (
   id uuid primary key default gen_random_uuid(),
+  -- Human-friendly id like bookings' `CC-XXXXXXXX`, surfaced in the admin
+  -- Service Leads page so it can be searched/quoted without pasting a uuid.
+  ticket_number text not null unique default ('SL-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))),
   customer_id uuid not null references customers (id) on delete cascade,
   pickup_pin text,
   destination_pin text,
@@ -247,6 +250,19 @@ alter table service_area_leads drop column if exists name;
 alter table service_area_leads drop column if exists phone;
 alter table service_area_leads drop column if exists email;
 alter table service_area_leads alter column customer_id set not null;
+
+-- Idempotent add for a project whose service_area_leads predates
+-- ticket_number above — `create table if not exists` alone doesn't add a
+-- new column to a table that already exists. Backfill before the not-null/
+-- unique constraints so existing rows (which have no default applied
+-- retroactively) all get a ticket number first.
+alter table service_area_leads add column if not exists ticket_number text;
+update service_area_leads set ticket_number = 'SL-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))
+  where ticket_number is null;
+alter table service_area_leads alter column ticket_number set default ('SL-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8)));
+alter table service_area_leads alter column ticket_number set not null;
+alter table service_area_leads drop constraint if exists service_area_leads_ticket_number_key;
+alter table service_area_leads add constraint service_area_leads_ticket_number_key unique (ticket_number);
 
 create index if not exists service_area_leads_created_at_idx on service_area_leads (created_at desc);
 
@@ -400,9 +416,9 @@ insert into cities (name, state, pincode_prefixes) values
   ('Bangalore', 'Karnataka', '{56}')
 on conflict (name) do update set state = excluded.state;
 
--- Terms of Service / Privacy Policy / Cancellation Policy — markdown written
+-- Terms and Conditions / Privacy Policy / Cancellation Policy — markdown written
 -- in the admin panel ("Legal Pages") and rendered on the customer site at
--- /terms-of-service, /privacy-policy and /cancellation-policy. One row per
+-- /terms-and-conditions, /privacy-policy and /cancellation-policy. One row per
 -- page; the seed below is dummy copy.
 create table if not exists legal_pages (
   slug text primary key check (slug in ('terms', 'privacy', 'cancellation')),

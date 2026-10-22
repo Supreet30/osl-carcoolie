@@ -19,9 +19,9 @@ const LINK_GROUPS = [
   {
     title: "Company",
     links: [
-      { label: "About Us", href: "/landing-page#about" },
+      { label: "About Us", href: "/about-us" },
       { label: "Careers", href: "/careers" },
-      { label: "Blog", href: "/landing-page#blogs" },
+      { label: "Blog", href: "/blog" },
       { label: "Contact", href: "/contact" },
     ],
   },
@@ -29,10 +29,9 @@ const LINK_GROUPS = [
     title: "Support",
     links: [
       { label: "Live Tracking", href: "#" },
-      { label: "FAQs", href: "#" },
+      { label: "FAQs", href: "/faq" },
       { label: "Privacy Policy", href: "/privacy-policy" },
-      { label: "Terms of Service", href: "/terms-of-service" },
-      { label: "Cancellation Policy", href: "/cancellation-policy" },
+      { label: "Terms and Conditions", href: "/terms-and-conditions" },
     ],
   },
 ];

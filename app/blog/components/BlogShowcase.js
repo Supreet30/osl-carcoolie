@@ -54,7 +54,7 @@ const HIGHLIGHTS = [
     tag: "Company",
     title: "Customer Stories",
     description: "Real wins and lessons from dealers, manufacturers, and owners who've moved with CarCoolie.",
-    image: "/finalimages/company-numbers/happy-cust.JPG",
+    image: "/visuals/081.jpg",
   },
 ];
 

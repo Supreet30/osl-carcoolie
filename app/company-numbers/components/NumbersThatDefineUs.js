@@ -63,7 +63,7 @@ export default function NumbersThatDefineUs() {
         <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr]">
           {/* Happy Customers — large image card */}
           <div className="relative min-h-100 overflow-hidden rounded-3xl">
-            <Image src="/finalimages/company-numbers/happy-cust.JPG" alt="" fill className="object-cover" />
+            <Image src="/visuals/059.jpg" alt="" fill className="object-cover" />
             <div className="absolute inset-0 bg-linear-to-t from-[#0b1220]/95 via-[#0b1220]/70 to-[#0b1220]/20" />
             <div className="absolute inset-0 flex flex-col justify-between p-6">
               <p className="text-xs font-bold tracking-wide text-red-400 uppercase">

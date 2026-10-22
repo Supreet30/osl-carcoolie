@@ -293,7 +293,7 @@ export const MORE_CASE_STUDIES = [
     title: "Auto Parts Manufacturer",
     description: "Just-in-time component and vehicle transfers between plants.",
     icon: Factory,
-    image: "/finalimages/company-numbers/happy-cust.JPG",
+    image: "/visuals/004.jpg",
     stats: [
       { value: "97%", label: "JIT Accuracy", icon: ShieldCheck },
       { value: "5", label: "Plants Connected", icon: MapPin },

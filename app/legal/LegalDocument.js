@@ -1,13 +1,17 @@
-import { ArrowRight, ChevronRight, Clock, FileText, Mail, ShieldCheck, XCircle } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, FileText, Mail, ShieldCheck } from "lucide-react";
 import Navbar from "../landing-page/components/Navbar";
 import Footer from "../landing-page/components/Footer";
 import { getLegalPage } from "../../lib/legal";
-import Markdown, { outlineMarkdown } from "./Markdown";
+import Markdown, { outlineMarkdown } from "../components/Markdown";
 
+// Cancellation Policy dropped from this switcher (and the booking form's
+// agreement checkbox) — its content already lives inside the Terms page
+// itself ("Vehicle Relocation Terms and Conditions plus Cancellation
+// Policy"). The route/content at /cancellation-policy is untouched and
+// still reachable directly, just not offered as a tab here anymore.
 const LEGAL_PAGES = [
-  { slug: "terms", label: "Terms of Service", shortLabel: "Terms", href: "/terms-of-service", icon: FileText },
+  { slug: "terms", label: "Terms and Conditions", shortLabel: "Terms and Conditions", href: "/terms-and-conditions", icon: FileText },
   { slug: "privacy", label: "Privacy Policy", shortLabel: "Privacy", href: "/privacy-policy", icon: ShieldCheck },
-  { slug: "cancellation", label: "Cancellation Policy", shortLabel: "Cancellation", href: "/cancellation-policy", icon: XCircle },
 ];
 
 function Title({ text }) {
