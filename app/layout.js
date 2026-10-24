@@ -1,4 +1,4 @@
-import { Geist, Geist_Mono, Outfit } from "next/font/google";
+import { Exo_2, Geist, Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 import FloatingActions from "@/app/components/FloatingActions"
 
@@ -20,16 +20,27 @@ const outfit = Outfit({
   subsets: ["latin"],
 });
 
+// The "Car Coolie" wordmark style (see app/components/BrandMark.js) used
+// for prominent headings/hero taglines/footer brand line across the site —
+// bold italic, matching the actual logo. Only that one weight+style is ever
+// used for it, so no need to load the rest of Exo 2's range.
+const exo2 = Exo_2({
+  variable: "--font-exo2",
+  subsets: ["latin"],
+  weight: "700",
+  style: "italic",
+});
+
 export const metadata = {
-  title: "OSL Car Coolie | Website Coming Soon",
-  description: "OSL Car Coolie - Car Carrying Solutions. Our website is coming soon, stay tuned!",
+  title: "Car Coolie | Website Coming Soon",
+  description: "Car Coolie - Car Carrying Solutions. Our website is coming soon, stay tuned!",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} ${exo2.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}
         <FloatingActions />

@@ -22,6 +22,7 @@ import {
   Map,
   MapPin,
   Navigation,
+  Receipt,
   Shield,
   ShieldCheck,
   User,
@@ -718,13 +719,11 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
   // "pickup" | "destination" | "custom" — the two "Same as ___" checkboxes
   // are mutually exclusive (checking one clears the other), and the custom
   // fields below only appear once neither is checked. Defaults to the
-  // common case (billed at the pickup address).
+  // common case (billed at the pickup address). Both legs always collect a
+  // real address now regardless of method (see sections 1/2 above), so
+  // there's no "address unavailable" case to gate either checkbox on
+  // anymore — "custom" stays purely an opt-in for a third billing address.
   const [billingMode, setBillingMode] = useState(initialFormValues?.billingMode ?? "pickup");
-  // A "Same as ___" checkbox only makes sense when that leg actually has an
-  // address on file — Self methods don't collect one at all (see section
-  // 1/2 above), so there's nothing to copy.
-  const pickupAddressAvailable = pickupMethod === "driver";
-  const dropoffAddressAvailable = dropoffMethod === "driver";
 
   // GSTIN field stays name="billing_gstin" (read via FormData on submit,
   // like every other field in this form) but is also mirrored into state
@@ -758,19 +757,6 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
     } catch {
       setGstStatus("error");
     }
-  }
-  // Neither source exists — the manual fields are the only option, so they
-  // stop being optional.
-  const billingCustomRequired = !pickupAddressAvailable && !dropoffAddressAvailable;
-
-  // Adjusting state during render (same pattern as lastEarliestPickupISO
-  // above): if the leg billingMode currently points at just stopped
-  // collecting an address (its method switched to Self), fall back to the
-  // manual fields instead of silently staying on a source that's gone.
-  if (billingMode === "pickup" && !pickupAddressAvailable) {
-    setBillingMode("custom");
-  } else if (billingMode === "destination" && !dropoffAddressAvailable) {
-    setBillingMode("custom");
   }
   const [confirmedDocs, setConfirmedDocs] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
@@ -1025,18 +1011,30 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
       return false;
     }
 
+    // House/street/city/pin are now collected for both Self and Driver
+    // legs (see the address sections above), so both are always in this
+    // list — only the billing block below still depends on billingMode,
+    // since it's the one section that's genuinely not rendered otherwise.
     const fieldOrder = [
       "pickup_fullName",
       "pickup_phone",
-      ...(pickupMethod === "driver" ? ["pickup_house", "pickup_street", "pickup_city", "pickup_pin"] : []),
+      "pickup_house",
+      "pickup_street",
+      "pickup_city",
+      "pickup_pin",
       "dropoff_fullName",
       "dropoff_phone",
-      ...(dropoffMethod === "driver" ? ["dropoff_house", "dropoff_street", "dropoff_city", "dropoff_pin"] : []),
+      "dropoff_house",
+      "dropoff_street",
+      "dropoff_city",
+      "dropoff_pin",
       "registration_number",
-      "billing_gstin",
       ...(billingMode === "custom"
         ? ["billing_fullName", "billing_phone", "billing_house", "billing_street", "billing_city", "billing_pin"]
         : []),
+      // GSTIN Verification is its own section now, after Billing Address
+      // (see the JSX below) — checked last to match that visual order.
+      "billing_gstin",
     ];
 
     if (formRef.current) {
@@ -1295,70 +1293,71 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             error={fieldErrors.pickup_phone}
           />
         </div>
-        {pickupMethod === "driver" ? (
+        {/* Collected regardless of method now — a driver needs it to find
+            the customer, and a Self Drop-off customer still gets asked for
+            it (e.g. for records/contact purposes) alongside picking a yard
+            below. */}
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <TextField
+            label="House / Plot / Flat No."
+            name="pickup_house"
+            type="text"
+            defaultValue={initialFormValues?.pickup_house ?? ""}
+            placeholder="B-24, 2nd Floor"
+            required
+            maxLength={120}
+            error={fieldErrors.pickup_house}
+          />
+          <TextField
+            label="Street / Area Name"
+            name="pickup_street"
+            type="text"
+            defaultValue={initialFormValues?.pickup_street ?? ""}
+            placeholder="Connaught Place"
+            required
+            maxLength={150}
+            error={fieldErrors.pickup_street}
+          />
+        </div>
+        <div className="mt-5 grid gap-5 sm:grid-cols-3">
+          <TextField
+            label="Landmark (Optional)"
+            name="pickup_landmark"
+            type="text"
+            defaultValue={initialFormValues?.pickup_landmark ?? ""}
+            placeholder="Near Metro Pillar 12"
+            maxLength={120}
+          />
+          <TextField
+            label="City"
+            name="pickup_city"
+            type="text"
+            defaultValue={initialFormValues?.pickup_city ?? estimate?.fromCity ?? ""}
+            placeholder="New Delhi"
+            required
+            maxLength={60}
+            error={fieldErrors.pickup_city}
+          />
+          <TextField
+            label="PIN Code"
+            name="pickup_pin"
+            type="text"
+            inputMode="numeric"
+            defaultValue={initialFormValues?.pickup_pin ?? estimate?.pickupPin ?? ""}
+            placeholder="110001"
+            readOnly={Boolean(estimate?.pickupPin)}
+            required
+            pattern={PIN_PATTERN}
+            maxLength={6}
+            title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE}
+            error={fieldErrors.pickup_pin}
+          />
+        </div>
+        {pickupMethod === "self" && (
           <>
-            <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <TextField
-                label="House / Plot / Flat No."
-                name="pickup_house"
-                type="text"
-                defaultValue={initialFormValues?.pickup_house ?? ""}
-                placeholder="B-24, 2nd Floor"
-                required
-                maxLength={120}
-                error={fieldErrors.pickup_house}
-              />
-              <TextField
-                label="Street / Area Name"
-                name="pickup_street"
-                type="text"
-                defaultValue={initialFormValues?.pickup_street ?? ""}
-                placeholder="Connaught Place"
-                required
-                maxLength={150}
-                error={fieldErrors.pickup_street}
-              />
-            </div>
-            <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              <TextField
-                label="Landmark (Optional)"
-                name="pickup_landmark"
-                type="text"
-                defaultValue={initialFormValues?.pickup_landmark ?? ""}
-                placeholder="Near Metro Pillar 12"
-                maxLength={120}
-              />
-              <TextField
-                label="City"
-                name="pickup_city"
-                type="text"
-                defaultValue={initialFormValues?.pickup_city ?? estimate?.fromCity ?? ""}
-                placeholder="New Delhi"
-                required
-                maxLength={60}
-                error={fieldErrors.pickup_city}
-              />
-              <TextField
-                label="PIN Code"
-                name="pickup_pin"
-                type="text"
-                inputMode="numeric"
-                defaultValue={initialFormValues?.pickup_pin ?? estimate?.pickupPin ?? ""}
-                placeholder="110001"
-                readOnly={Boolean(estimate?.pickupPin)}
-                required
-                pattern={PIN_PATTERN}
-                maxLength={6}
-                title={estimate?.pickupPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE}
-                error={fieldErrors.pickup_pin}
-              />
-            </div>
-          </>
-        ) : (
-          // Self Drop-off — no address for a driver to find; the customer
-          // just picks which yard they'll bring the car to.
-          <>
-            <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll drop the car off at one of our yards.</p>
+            <p className="mt-5 text-xs text-slate-400">
+              You&apos;ll drop the car off at one of our yards — pick your preferred yard below.
+            </p>
             {pickupHubCard}
           </>
         )}
@@ -1476,72 +1475,71 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
             error={fieldErrors.dropoff_phone}
           />
         </div>
-        {dropoffMethod === "driver" ? (
+        {/* Collected regardless of method now — a driver needs it to
+            deliver the car, and a Self Pickup customer still gets asked for
+            it (e.g. for records/contact purposes) alongside picking a yard
+            below. */}
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <TextField
+            label="House / Plot / Flat No."
+            name="dropoff_house"
+            type="text"
+            defaultValue={initialFormValues?.dropoff_house ?? ""}
+            placeholder="A-12, 5th Floor"
+            required
+            maxLength={120}
+            error={fieldErrors.dropoff_house}
+          />
+          <TextField
+            label="Street / Area Name"
+            name="dropoff_street"
+            type="text"
+            defaultValue={initialFormValues?.dropoff_street ?? ""}
+            placeholder="Bandra West"
+            required
+            maxLength={150}
+            error={fieldErrors.dropoff_street}
+          />
+        </div>
+        <div className="mt-5 grid gap-5 sm:grid-cols-3">
+          <TextField
+            label="Landmark (Optional)"
+            name="dropoff_landmark"
+            type="text"
+            defaultValue={initialFormValues?.dropoff_landmark ?? ""}
+            placeholder="Near Linking Road"
+            maxLength={120}
+          />
+          <TextField
+            label="City"
+            name="dropoff_city"
+            type="text"
+            defaultValue={initialFormValues?.dropoff_city ?? estimate?.toCity ?? ""}
+            placeholder="Mumbai"
+            required
+            maxLength={60}
+            error={fieldErrors.dropoff_city}
+          />
+          <TextField
+            label="PIN Code"
+            name="dropoff_pin"
+            type="text"
+            inputMode="numeric"
+            defaultValue={initialFormValues?.dropoff_pin ?? estimate?.destinationPin ?? ""}
+            placeholder="400001"
+            readOnly={Boolean(estimate?.destinationPin)}
+            required
+            pattern={PIN_PATTERN}
+            maxLength={6}
+            title={estimate?.destinationPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE}
+            error={fieldErrors.dropoff_pin}
+          />
+        </div>
+        {dropoffMethod === "self" && (
           <>
-            <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <TextField
-                label="House / Plot / Flat No."
-                name="dropoff_house"
-                type="text"
-                defaultValue={initialFormValues?.dropoff_house ?? ""}
-                placeholder="A-12, 5th Floor"
-                required
-                maxLength={120}
-                error={fieldErrors.dropoff_house}
-              />
-              <TextField
-                label="Street / Area Name"
-                name="dropoff_street"
-                type="text"
-                defaultValue={initialFormValues?.dropoff_street ?? ""}
-                placeholder="Bandra West"
-                required
-                maxLength={150}
-                error={fieldErrors.dropoff_street}
-              />
-            </div>
-            <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              <TextField
-                label="Landmark (Optional)"
-                name="dropoff_landmark"
-                type="text"
-                defaultValue={initialFormValues?.dropoff_landmark ?? ""}
-                placeholder="Near Linking Road"
-                maxLength={120}
-              />
-              <TextField
-                label="City"
-                name="dropoff_city"
-                type="text"
-                defaultValue={initialFormValues?.dropoff_city ?? estimate?.toCity ?? ""}
-                placeholder="Mumbai"
-                required
-                maxLength={60}
-                error={fieldErrors.dropoff_city}
-              />
-              <TextField
-                label="PIN Code"
-                name="dropoff_pin"
-                type="text"
-                inputMode="numeric"
-                defaultValue={initialFormValues?.dropoff_pin ?? estimate?.destinationPin ?? ""}
-                placeholder="400001"
-                readOnly={Boolean(estimate?.destinationPin)}
-                required
-                pattern={PIN_PATTERN}
-                maxLength={6}
-                title={
-                  estimate?.destinationPin ? "Set from your estimate — get a new estimate to change it" : PIN_TITLE
-                }
-                error={fieldErrors.dropoff_pin}
-              />
-            </div>
-          </>
-        ) : (
-          // Self Pickup — no address for a driver to deliver to; the customer
-          // just picks which yard they'll collect the car from.
-          <>
-            <p className="mt-5 text-xs text-slate-400">No address needed — you&apos;ll collect the car from one of our yards.</p>
+            <p className="mt-5 text-xs text-slate-400">
+              You&apos;ll collect the car from one of our yards — pick your preferred yard below.
+            </p>
             {dropoffHubCard}
           </>
         )}
@@ -1651,110 +1649,28 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
       </div>
 
       <SectionCard icon={CreditCard} title="4. Billing Address">
-        <label
-          className={`flex items-center gap-3 text-sm font-semibold ${
-            pickupAddressAvailable ? "text-[#0b1e42]" : "cursor-not-allowed text-slate-300"
-          }`}
-        >
+        <label className="flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
           <input
             type="checkbox"
             checked={billingMode === "pickup"}
-            disabled={!pickupAddressAvailable}
             onChange={(event) => setBillingMode(event.target.checked ? "pickup" : "custom")}
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
           />
           Same as Pickup Address
         </label>
-        {!pickupAddressAvailable && (
-          <p className="mt-1 pl-7 text-xs text-slate-400">No pickup address was collected (Self Drop-off).</p>
-        )}
 
-        <label
-          className={`mt-3 flex items-center gap-3 text-sm font-semibold ${
-            dropoffAddressAvailable ? "text-[#0b1e42]" : "cursor-not-allowed text-slate-300"
-          }`}
-        >
+        <label className="mt-3 flex items-center gap-3 text-sm font-semibold text-[#0b1e42]">
           <input
             type="checkbox"
             checked={billingMode === "destination"}
-            disabled={!dropoffAddressAvailable}
             onChange={(event) => setBillingMode(event.target.checked ? "destination" : "custom")}
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500 disabled:cursor-not-allowed"
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-red-600 focus:ring-red-500"
           />
           Same as Destination Address
         </label>
-        {!dropoffAddressAvailable && (
-          <p className="mt-1 pl-7 text-xs text-slate-400">No destination address was collected (Self Pickup).</p>
-        )}
-
-        {/* Independent of which address gets billed above — a GST-registered
-            customer's GSTIN doesn't have to match the pickup/drop-off/custom
-            address, so this stays visible (and optional) in every mode. */}
-        <div className="mt-5">
-          <label className="block text-sm font-semibold text-[#0b1e42]">
-            GSTIN (Optional - for a GST invoice)
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                name="billing_gstin"
-                type="text"
-                placeholder="e.g. 07AAAAA0000A1Z5"
-                pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}"
-                maxLength={15}
-                title="Enter a valid 15-character GSTIN"
-                style={{ textTransform: "uppercase" }}
-                value={gstin}
-                onChange={(event) => {
-                  setGstin(event.target.value.toUpperCase());
-                  setGstStatus("idle");
-                  setGstCompanyName(null);
-                }}
-                className={`min-w-0 flex-1 rounded-xl px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500 ${
-                  fieldErrors.billing_gstin ? "bg-red-50 ring-2 ring-red-400" : "bg-slate-50"
-                }`}
-              />
-              <button
-                type="button"
-                disabled={!GSTIN_RE.test(gstin) || gstStatus === "checking"}
-                onClick={handleVerifyGstin}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[#0b1e42] px-4 py-3 text-xs font-bold text-white transition-colors hover:bg-[#0b1e42]/90 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-              >
-                {gstStatus === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-              </button>
-            </div>
-          </label>
-          {gstStatus === "checking" && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…
-            </p>
-          )}
-          {gstStatus === "verified" && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
-              <CheckCircle2 className="h-3.5 w-3.5" /> {gstCompanyName}
-            </p>
-          )}
-          {gstStatus === "not_found" && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-600">
-              <AlertTriangle className="h-3.5 w-3.5" /> GSTIN not found — double-check for a typo.
-            </p>
-          )}
-          {gstStatus === "error" && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
-              <AlertTriangle className="h-3.5 w-3.5" /> Couldn&apos;t verify right now — you can still continue.
-            </p>
-          )}
-          {fieldErrors.billing_gstin && (
-            <p className="mt-1.5 text-xs font-semibold text-red-600">{fieldErrors.billing_gstin}</p>
-          )}
-        </div>
 
         {billingMode === "custom" && (
           <div className="mt-5">
-            {billingCustomRequired && (
-              <p className="mb-4 flex items-start gap-1.5 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                No pickup or drop-off address was collected for this booking — a billing address is required below.
-              </p>
-            )}
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
                 label="Full Name"
@@ -1837,6 +1753,67 @@ export default function BookingForm({ estimate, estimateLoaded, draftId, initial
               />
             </div>
           </div>
+        )}
+      </SectionCard>
+
+      {/* Split out from Billing Address — a GST-registered customer's
+          GSTIN doesn't have to match the pickup/drop-off/custom billing
+          address, so it never belonged under that heading, and it's
+          optional either way (see GSTIN_RE/handleVerifyGstin above). */}
+      <SectionCard icon={Receipt} title="5. GSTIN Verification (Optional)">
+        <label className="block text-sm font-semibold text-[#0b1e42]">
+          GSTIN (Optional - for a GST invoice)
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              name="billing_gstin"
+              type="text"
+              placeholder="e.g. 07AAAAA0000A1Z5"
+              pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}"
+              maxLength={15}
+              title="Enter a valid 15-character GSTIN"
+              style={{ textTransform: "uppercase" }}
+              value={gstin}
+              onChange={(event) => {
+                setGstin(event.target.value.toUpperCase());
+                setGstStatus("idle");
+                setGstCompanyName(null);
+              }}
+              className={`min-w-0 flex-1 rounded-xl px-4 py-3 text-sm font-normal text-[#0b1e42] outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500 ${
+                fieldErrors.billing_gstin ? "bg-red-50 ring-2 ring-red-400" : "bg-slate-50"
+              }`}
+            />
+            <button
+              type="button"
+              disabled={!GSTIN_RE.test(gstin) || gstStatus === "checking"}
+              onClick={handleVerifyGstin}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[#0b1e42] px-4 py-3 text-xs font-bold text-white transition-colors hover:bg-[#0b1e42]/90 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              {gstStatus === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+            </button>
+          </div>
+        </label>
+        {gstStatus === "checking" && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…
+          </p>
+        )}
+        {gstStatus === "verified" && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-green-600">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {gstCompanyName}
+          </p>
+        )}
+        {gstStatus === "not_found" && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+            <AlertTriangle className="h-3.5 w-3.5" /> GSTIN not found — double-check for a typo.
+          </p>
+        )}
+        {gstStatus === "error" && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <AlertTriangle className="h-3.5 w-3.5" /> Couldn&apos;t verify right now — you can still continue.
+          </p>
+        )}
+        {fieldErrors.billing_gstin && (
+          <p className="mt-1.5 text-xs font-semibold text-red-600">{fieldErrors.billing_gstin}</p>
         )}
       </SectionCard>
 

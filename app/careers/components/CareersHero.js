@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Navbar from "../../landing-page/components/Navbar";
+import BrandMark from "../../components/BrandMark";
 
 export default function CareersHero() {
   return (
@@ -13,7 +14,9 @@ export default function CareersHero() {
 
         <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
           <div className="max-w-lg">
-            <p className="text-sm font-semibold text-red-600">Careers at Car Coolie</p>
+            <p className="text-sm font-semibold text-red-600">
+              Careers at <BrandMark />
+            </p>
             <h1 className="mt-3 text-4xl font-extrabold leading-[1.2] tracking-tight sm:text-5xl">
               <span className="text-[#0b1e42]">Build Your Career In </span>
               <span className="text-red-600">Vehicle Logistics</span>

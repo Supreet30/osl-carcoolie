@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Clock, Headphones, Receipt, SlidersHorizontal } from "lucide-react";
+import BrandMark from "../../components/BrandMark";
 
 const ROWS = [
   { icon: Clock, feature: "Turnaround Time", market: "Slow / Generic", ours: "Fast / Custom" },
@@ -23,9 +24,13 @@ export default function MarketComparison() {
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-bold text-red-600">The CarCoolie Difference</p>
+            <p className="text-sm font-bold text-red-600">
+              The <BrandMark spaced={false} /> Difference
+            </p>
             <h2 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-              <span className="block text-[#0b1e42]">See How CarCoolie</span>
+              <span className="block text-[#0b1e42]">
+                See How <BrandMark spaced={false} />
+              </span>
               <span className="block text-red-600">Raises the Standard</span>
             </h2>
           </div>
@@ -90,8 +95,8 @@ export default function MarketComparison() {
           {/* CarCoolie card */}
           <div className="relative z-10 flex-30 overflow-hidden rounded-3xl bg-red-50/30 ring-1 ring-red-200">
             <div className={`flex ${HEADER_H} items-center px-6`}>
-              <span className="text-sm font-bold uppercase tracking-wide text-red-600">
-                CarCoolie
+              <span className="text-sm font-bold uppercase tracking-wide">
+                <BrandMark spaced={false} />
               </span>
             </div>
             {ROWS.map((row, i) => (

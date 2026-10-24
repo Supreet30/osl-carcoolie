@@ -1,4 +1,5 @@
 import { CheckCircle2, FileEdit, FileSearch, PackageCheck } from "lucide-react";
+import BrandMark from "../../../components/BrandMark";
 
 const STEPS = [
   { icon: FileEdit, label: "Step 01", title: "Enter Your Details" },
@@ -42,7 +43,7 @@ export default function ProcessSection() {
             The Process
           </span>
           <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-[#0b1e42] sm:text-5xl">
-            How CarCoolie <span className="text-red-600">Works</span>
+            How <BrandMark spaced={false} /> <span className="text-red-600">Works</span>
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-500">
             From quote to doorstep delivery, we keep your car transportation simple, transparent and

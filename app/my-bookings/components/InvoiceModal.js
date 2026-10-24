@@ -2,6 +2,7 @@
 
 import { X, Printer } from "lucide-react";
 import { formatINR } from "../../services/b2c/lib/pricing";
+import BrandMark from "../../components/BrandMark";
 
 // Printable "invoice" built entirely from data already on the booking —
 // there's no billing/PDF backend here, so "Print" just triggers the
@@ -74,7 +75,7 @@ export default function InvoiceModal({ open, onClose, booking }) {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xl font-extrabold text-[#0b1e42]">
-                OSL <span className="text-red-600">Car Coolie</span>
+                <BrandMark />
               </p>
               <p className="mt-0.5 text-xs text-slate-400">Vehicle Transportation Services</p>
             </div>

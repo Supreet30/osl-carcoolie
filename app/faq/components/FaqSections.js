@@ -35,7 +35,7 @@ const B2C_FAQS = [
   {
     question: "How is payment structured?",
     answer:
-      "Payments are split into milestones — 10% at booking, 50% at the midway checkpoint, and the remaining 40% before final delivery — so you're never paying the full amount upfront.",
+      "Payments are split into three milestones — a Booking Charge (10%) at booking, an Initial Payment (50%) at the midway checkpoint, and the Balance Against Delivery before final delivery — so you're never paying the full amount upfront.",
   },
   {
     question: "What is your cancellation policy?",

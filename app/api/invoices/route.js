@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 
-// Downloadable payment-milestone invoices (10% advance / 50% midway / final
-// balance) — generated on demand from the real `payments` rows rather than
+// Downloadable payment-milestone invoices (Booking Charge / Initial Payment /
+// Balance Against Delivery) — generated on demand from the real `payments` rows rather than
 // stored anywhere, so there's nothing to regenerate or go stale if a charge
 // is added later. Same server-side ownership pattern as
 // select-booking-benefit/route.js: no session cookie reaches this route, so
@@ -26,9 +26,9 @@ const COMPANY = {
 // updateBookingSupabase in bookingStore.js and the admin's mark-final-paid
 // route, both of which split the final payment into these two row types).
 const MILESTONE_META = {
-  advance: { code: "ADV", title: "Advance Payment", types: ["advance"] },
-  midway: { code: "MID", title: "Midway Payment", types: ["midway"] },
-  balance: { code: "BAL", title: "Final Balance Payment", types: ["balance", "charges"] },
+  advance: { code: "ADV", title: "Booking Charge", types: ["advance"] },
+  midway: { code: "MID", title: "Initial Payment", types: ["midway"] },
+  balance: { code: "BAL", title: "Balance Against Delivery", types: ["balance", "charges"] },
 };
 
 async function resolveRequesterId(accessToken) {
@@ -211,9 +211,9 @@ export async function POST(request) {
   const gstPercent = Number(taxRow?.gst_percent ?? 18);
 
   const TYPE_LABEL = {
-    advance: "Advance Payment",
-    midway: "Midway Payment",
-    balance: "Final Balance Payment",
+    advance: "Booking Charge",
+    midway: "Initial Payment",
+    balance: "Balance Against Delivery",
     charges: "Additional Charges (pickup/dropoff/tolls)",
   };
   const lineItems = paymentRows.map((p) => ({ label: TYPE_LABEL[p.type] ?? p.type, amount: Number(p.amount) }));

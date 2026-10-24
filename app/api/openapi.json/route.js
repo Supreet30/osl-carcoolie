@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 const spec = {
   openapi: "3.0.3",
   info: {
-    title: "OSL Carcoolie API",
+    title: "Carcoolie API",
     version: "1.0.0",
-    description: "API documentation for the OSL Carcoolie application.",
+    description: "API documentation for the Carcoolie application.",
   },
   servers: [{ url: "/" }],
   paths: {

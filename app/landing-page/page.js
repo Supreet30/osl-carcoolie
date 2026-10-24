@@ -14,7 +14,7 @@ import Footer from "./components/Footer";
 export const metadata = {
   title: "Car Coolie | Freight That Moves At The Speed Of Now",
   description:
-    "OSL Car Coolie - car carrying and freight logistics solutions that move at the speed of now.",
+    "Car Coolie - car carrying and freight logistics solutions that move at the speed of now.",
 };
 
 export default function LandingPage() {

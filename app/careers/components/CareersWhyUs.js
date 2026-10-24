@@ -1,4 +1,5 @@
 import { HeartHandshake, Shield, TrendingUp } from "lucide-react";
+import BrandMark from "../../components/BrandMark";
 
 const VALUES = [
   {
@@ -27,7 +28,9 @@ export default function CareersWhyUs() {
       />
 
       <div className="relative mx-auto max-w-6xl">
-        <p className="text-sm font-semibold text-red-600">Why Car Coolie</p>
+        <p className="text-sm font-semibold text-red-600">
+          Why <BrandMark />
+        </p>
         <h2 className="mt-2 max-w-2xl text-4xl font-extrabold leading-tight sm:text-5xl">
           <span className="text-[#0b1e42]">A Place To </span>
           <span className="text-red-600">Build, Not Just Work</span>

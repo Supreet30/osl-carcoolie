@@ -51,7 +51,7 @@ export default function VisualsHero() {
           <div className="relative h-80 w-full overflow-hidden rounded-[28px] shadow-xl sm:h-96 lg:h-105">
             <Image
               src="/visuals/002.jpg"
-              alt="OSL Car Coolie carrier fleet lined up at the yard"
+              alt="Car Coolie carrier fleet lined up at the yard"
               fill
               priority
               sizes="(max-width: 1023px) 100vw, 48vw"

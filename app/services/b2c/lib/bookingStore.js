@@ -81,8 +81,8 @@ export const CANCELLATION_REASONS = [
 // statusLabel (a plain lookup, e.g. for a booking-list row's badge, where no
 // one step array is "the" right one to search). A function of the live
 // payment split (from the admin's Payment Settings page) rather than a
-// static object, since the Advance/Midway labels quote the actual
-// percentage — callers that don't have the live split handy fall back to
+// static object, since the Booking Charge/Initial Payment labels quote the
+// actual percentage — callers that don't have the live split handy fall back to
 // PAYMENT_SPLIT (the same 10/50 default the DB row starts with).
 function allStatusLabels(split) {
   return {
@@ -95,7 +95,7 @@ function allStatusLabels(split) {
     docs_sent: "Documents Sent for Review",
     [BOOKING_STATUS.DOCS_REVIEW]: "Documents Under Review",
     [BOOKING_STATUS.QUOTE_SENT]: "Final Quote Generated",
-    [BOOKING_STATUS.ADVANCE_PAID]: `Advance Paid (${split.advancePercent}%)`,
+    [BOOKING_STATUS.ADVANCE_PAID]: `Booking Charge Paid (${split.advancePercent}%)`,
     [BOOKING_STATUS.CONFIRMED]: "Booking Confirmed",
     // Customer-facing label only — the underlying status value stays
     // "car_arrived_at_yard" (see BOOKING_STATUS above), so this is a pure
@@ -103,7 +103,7 @@ function allStatusLabels(split) {
     // payment banners, admin panel, etc. all compare the enum value, never
     // this string).
     [BOOKING_STATUS.CAR_ARRIVED_AT_YARD]: "Received in Yard",
-    [BOOKING_STATUS.MIDWAY_PAID]: `${split.midwayPercent}% Payment Received`,
+    [BOOKING_STATUS.MIDWAY_PAID]: `Initial Payment Received (${split.midwayPercent}%)`,
     [BOOKING_STATUS.LOADED_ON_CARRIER]: "Loaded on Carrier",
     [BOOKING_STATUS.IN_TRANSIT]: "In Transit",
     [BOOKING_STATUS.RECEIVED_AT_DESTINATION_YARD]: "Received at Destination Yard",

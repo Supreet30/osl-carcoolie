@@ -31,43 +31,46 @@ function buildPaymentStages(split, pickupMethod = "driver", dropoffMethod = "dri
   return {
     [BOOKING_STATUS.QUOTE_SENT]: {
       amountFn: (booking) => Math.round(booking.finalQuote * (split.advancePercent / 100)),
-      heading: "Advance Payment",
-      subheading: `Pay a ${split.advancePercent}% advance to move this booking forward. The remaining balance is settled on delivery.`,
-      dueLabel: `Advance Due Now (${split.advancePercent}%)`,
+      heading: "Booking Charge",
+      subheading: `Pay the ${split.advancePercent}% booking charge to move this booking forward. The remaining balance is settled on delivery.`,
+      dueLabel: `Booking Charge Due Now (${split.advancePercent}%)`,
       targetStatus: BOOKING_STATUS.ADVANCE_PAID,
       paidField: "advancePaid",
-      successHeading: "Advance Payment Received",
+      successHeading: "Booking Charge Received",
     },
     [midwayCheckpointStatus]: {
       amountFn: (booking) => Math.round(booking.finalQuote * (split.midwayPercent / 100)),
-      heading: `${split.midwayPercent}% Payment`,
-      subheading: `Pay the ${split.midwayPercent}% checkpoint to keep this booking moving. The remaining balance is settled on delivery.`,
-      dueLabel: `Due Now (${split.midwayPercent}%)`,
+      heading: "Initial Payment",
+      subheading: `Pay the ${split.midwayPercent}% initial payment to keep this booking moving. The remaining balance is settled on delivery.`,
+      dueLabel: `Initial Payment Due Now (${split.midwayPercent}%)`,
       targetStatus: BOOKING_STATUS.MIDWAY_PAID,
       paidField: "midwayPaid",
-      successHeading: `${split.midwayPercent}% Payment Received`,
-      // Unlike the advance (implicitly gated by reaching quote_sent at all),
-      // the booking sits in "confirmed" for a while before this checkpoint
-      // is actually due — this stage only applies once the admin has
-      // explicitly sent the request (see MidwayPaymentCard in the admin panel).
+      successHeading: "Initial Payment Received",
+      // Unlike the booking charge (implicitly gated by reaching quote_sent
+      // at all), the booking sits in "confirmed" for a while before this
+      // checkpoint is actually due — this stage only applies once the admin
+      // has explicitly sent the request (see MidwayPaymentCard in the admin
+      // panel).
       requiresFlag: "midwayRequested",
     },
     [finalLegStatus]: {
       // Not a flat percentage — whatever's actually left of the final quote
-      // once the advance/midway checkpoints and any admin-added charges
-      // (pickup, dropoff, tolls) are accounted for. See remainingBalance in
-      // bookingStore.js's rowToBooking().
+      // once the booking charge/initial payment checkpoints and any
+      // admin-added charges (pickup, dropoff, tolls) are accounted for. See
+      // remainingBalance in bookingStore.js's rowToBooking(). No percentage
+      // is ever shown against this milestone — see dueLabel/heading below.
       amountFn: (booking) => booking.remainingBalance ?? 0,
-      heading: "Final Payment",
-      subheading: "Pay your remaining balance to complete this booking.",
-      dueLabel: "Remaining Balance Due",
+      heading: "Balance Against Delivery",
+      subheading: "Pay your balance against delivery to complete this booking.",
+      dueLabel: "Balance Against Delivery Due",
       // Paying this doesn't move the booking to Delivered by itself — that's
       // a real-world event the admin confirms separately once the vehicle's
-      // actually handed over, same as Advance Paid still needs a dedicated
-      // "Mark Booking Confirmed" click. Status just stays at finalLegStatus.
+      // actually handed over, same as the booking charge still needs a
+      // dedicated "Mark Booking Confirmed" click. Status just stays at
+      // finalLegStatus.
       targetStatus: null,
       paidField: "finalPaid",
-      successHeading: "Final Payment Received",
+      successHeading: "Balance Against Delivery Received",
       requiresFlag: "finalRequested",
     },
   };

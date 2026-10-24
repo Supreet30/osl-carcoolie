@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Globe, Share2 } from "lucide-react";
 import { TABS } from "../../services/data/serviceTabs";
+import BrandMark from "../../components/BrandMark";
 
 // Absolute (not bare-hash) hrefs — this Footer is shared across routes
 // (landing page + contact page), so section links must route back to
@@ -11,9 +12,11 @@ const LINK_GROUPS = [
   {
     title: "Services",
     // Sourced straight from the /services page's own data (serviceTabs.js)
-    // so this list can never drift out of sync with what that page offers.
+    // so this list can never drift out of sync with what that page offers —
+    // each link points at that service's own dedicated page
+    // (/services/[slug], same as the Navbar's Services dropdown).
     links: TABS.flatMap((tab) =>
-      tab.services.map((service) => ({ label: service.title, href: "/services" }))
+      tab.services.map((service) => ({ label: service.title, href: `/services/${service.slug}` }))
     ),
   },
   {
@@ -94,7 +97,7 @@ export default function Footer() {
       </div>
 
       <div className="mx-auto mt-12 max-w-6xl border-t border-white/10 pt-6 text-center text-xs text-slate-400">
-        © {year} OSL Car Coolie. All rights reserved.
+        © {year} <BrandMark onDark />. All rights reserved.
       </div>
     </footer>
   );

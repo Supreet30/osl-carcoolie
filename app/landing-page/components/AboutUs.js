@@ -6,6 +6,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { CheckCircle2 } from "lucide-react";
+import BrandMark from "../../components/BrandMark";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -169,7 +170,7 @@ export default function AboutUs() {
       <div className="mx-auto w-full max-w-7xl shrink-0">
         <p className="text-md font-semibold text-red-600">About Us</p>
         <h2 className="mt-3 text-5xl font-extrabold leading-tight text-[#0b1e42]">
-          Why Customers Choose <span className="text-red-600">Car Coolie</span> for Vehicle
+          Why Customers Choose <BrandMark /> for Vehicle
           Transport
         </h2>
       </div>

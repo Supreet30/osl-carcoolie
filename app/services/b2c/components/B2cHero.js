@@ -91,7 +91,8 @@ function ServiceGapModal({ onClose, onRequestCallback }) {
         </span>
         <h3 className="mt-4 text-lg font-extrabold text-[#0b1e42]">Our Team Will Get Back to You</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          We don&apos;t service this exact route yet. Request a callback and our team will reach out to help.
+          This route is not currently listed on our website. However, our team will contact you to assist with your
+          request, as we can transport cars in this route.
         </p>
         <button
           type="button"

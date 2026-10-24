@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Camera, MapPin } from "lucide-react";
+import BrandMark from "../../components/BrandMark";
 
 export default function WhatSetsApart() {
   return (
@@ -8,7 +9,9 @@ export default function WhatSetsApart() {
         <p className="text-sm font-bold text-red-600">Built Different</p>
         <h2 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
           <span className="text-[#0b1e42]">What Sets </span>
-          <span className="text-red-600">CarCoolie Apart?</span>
+          <span className="text-red-600">
+            <BrandMark spaced={false} /> Apart?
+          </span>
         </h2>
 
         <div className="mt-10 grid gap-6 sm:grid-cols-[7fr_3fr]">

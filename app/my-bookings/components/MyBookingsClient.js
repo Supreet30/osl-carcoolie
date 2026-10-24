@@ -259,7 +259,7 @@ function StatusStepper({ status, statusTimes = {}, inspections = [], split = PAY
           )}
           {refundAmount > 0 || cancellationFee > 0 ? (
             <p className="mt-2 text-sm text-slate-500">
-              Cancellation fee ({CANCELLATION_FEE_PERCENT}% of the advance paid):{" "}
+              Cancellation fee ({CANCELLATION_FEE_PERCENT}% of the booking charge paid):{" "}
               <span className="font-semibold text-[#0b1e42]">{formatINR(cancellationFee)}</span>
               {" · "}
               Refunded: <span className="font-semibold text-green-600">{formatINR(refundAmount)}</span>
@@ -813,13 +813,13 @@ function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
 
       {finalQuote && (
         <PriceRow
-          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Advance Due ({split.advancePercent}%)</span>}
+          label={<span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Booking Charge Due ({split.advancePercent}%)</span>}
           value={formatINR(finalQuote * (split.advancePercent / 100))}
         />
       )}
       {typeof advancePaid === "number" && (
         <PriceRow
-          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Advance Paid</span>}
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Booking Charge Paid</span>}
           value={formatINR(advancePaid)}
         />
       )}
@@ -828,7 +828,9 @@ function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
           label={
             <span className="flex items-center gap-1">
               <CreditCard className="h-3 w-3" />{" "}
-              {booking.midwayRequested ? `${split.midwayPercent}% Payment Due` : `${split.midwayPercent}% Payment (Upcoming)`}
+              {booking.midwayRequested
+                ? `Initial Payment Due (${split.midwayPercent}%)`
+                : `Initial Payment (Upcoming) (${split.midwayPercent}%)`}
             </span>
           }
           value={formatINR(finalQuote * (split.midwayPercent / 100))}
@@ -836,17 +838,18 @@ function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
       )}
       {typeof midwayPaid === "number" && (
         <PriceRow
-          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> {split.midwayPercent}% Payment Paid</span>}
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Initial Payment Paid</span>}
           value={formatINR(midwayPaid)}
         />
       )}
+      {/* No percentage shown here — Balance Against Delivery is whatever's
+          actually left, not a flat quoted slab like the two above. */}
       {finalQuote && typeof midwayPaid === "number" && typeof finalPaid !== "number" && (
         <PriceRow
           label={
             <span className="flex items-center gap-1">
               <CreditCard className="h-3 w-3" />{" "}
-              {booking.finalRequested ? "Final Payment Due" : "Final Payment (Upcoming)"} (
-              {Math.round((((remainingBalance ?? 0) - chargesTotal) / finalQuote) * 100)}%)
+              {booking.finalRequested ? "Balance Against Delivery Due" : "Balance Against Delivery (Upcoming)"}
             </span>
           }
           value={formatINR((remainingBalance ?? 0) - chargesTotal)}
@@ -864,7 +867,7 @@ function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
       )}
       {typeof finalPaid === "number" && (
         <PriceRow
-          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Final Payment Paid</span>}
+          label={<span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="h-3 w-3" /> Balance Against Delivery Paid</span>}
           value={formatINR(finalPaid)}
         />
       )}
@@ -900,7 +903,7 @@ function PriceBreakdownCard({ booking, split = PAYMENT_SPLIT }) {
       {typeof remainingBalance === "number" && (
         <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 p-4">
           <span className="text-xs font-extrabold tracking-wide text-slate-500 uppercase">
-            Remaining Balance{chargesTotal ? " (incl. charges)" : ""}
+            Balance Against Delivery{chargesTotal ? " (incl. charges)" : ""}
           </span>
           <span className="text-sm font-extrabold text-[#0b1e42]">{formatINR(remainingBalance)}</span>
         </div>
@@ -1111,7 +1114,7 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
   const slabs = [
     {
       key: "advance",
-      label: "Advance",
+      label: "Booking Charge",
       percent: `${split.advancePercent}%`,
       amount: advanceDone ? advancePaid : finalQuote * (split.advancePercent / 100),
       status: advanceDone ? "paid" : "due",
@@ -1119,7 +1122,7 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
     },
     {
       key: "midway",
-      label: "Midway",
+      label: "Initial Payment",
       percent: `${split.midwayPercent}%`,
       amount: midwayDone ? midwayPaid : finalQuote * (split.midwayPercent / 100),
       status: midwayDone ? "paid" : advanceDone ? "due" : "upcoming",
@@ -1127,8 +1130,10 @@ function PaymentMilestones({ booking, split = PAYMENT_SPLIT }) {
     },
     {
       key: "final",
-      label: "Balance",
-      percent: `~${split.balancePercent}%`,
+      label: "Balance Against Delivery",
+      // No percentage shown for this one — see PriceRow usage above and the
+      // card rendering below (percent: null is skipped there).
+      percent: null,
       // Charges get their own card below, so this is the finalQuote portion
       // only — finalPaid (once paid) bundles both together, same as
       // bookingStore.js splits it back apart when logging the payment row.
@@ -1282,7 +1287,7 @@ function CancelBookingModal({ booking, onClose, onCancelled }) {
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               This booking hasn&apos;t been confirmed yet, so it&apos;s still eligible for self-serve cancellation.{" "}
               {advancePaid > 0
-                ? `A cancellation fee of ${CANCELLATION_FEE_PERCENT}% of your advance applies — the rest is refunded.`
+                ? `A cancellation fee of ${CANCELLATION_FEE_PERCENT}% of your booking charge applies — the rest is refunded.`
                 : "You haven't paid anything yet, so nothing will be charged."}
             </p>
             <a
@@ -1316,7 +1321,7 @@ function CancelBookingModal({ booking, onClose, onCancelled }) {
             {advancePaid > 0 ? (
               <div className="mt-2 flex flex-col gap-1.5 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Advance Paid</span>
+                  <span className="text-slate-600">Booking Charge Paid</span>
                   <span className="font-semibold text-[#0b1e42]">{formatINR(advancePaid)}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -1537,13 +1542,13 @@ function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) 
           <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Quote</p>
           <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote)}</p>
           <p className="mt-2 text-sm text-slate-300">
-            Reviewed and confirmed by our team. Pay a {split.advancePercent}% advance to lock in your booking.
+            Reviewed and confirmed by our team. Pay the {split.advancePercent}% booking charge to lock in your booking.
           </p>
           <Link
             href={`/payment?bookingId=${booking.id}`}
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
           >
-            Proceed to Payment ({split.advancePercent}% Advance)
+            Proceed to Payment ({split.advancePercent}% Booking Charge)
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -1554,33 +1559,35 @@ function BookingDetailView({ booking, onBookingChange, split = PAYMENT_SPLIT }) 
           <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Next Payment</p>
           <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.finalQuote * (split.midwayPercent / 100))}</p>
           <p className="mt-2 text-sm text-slate-300">
-            Your booking is confirmed. Pay the {split.midwayPercent}% checkpoint to keep your shipment moving to transit.
+            Your booking is confirmed. Pay the {split.midwayPercent}% initial payment to keep your shipment moving to transit.
           </p>
           <Link
             href={`/payment?bookingId=${booking.id}`}
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
           >
-            Proceed to Payment ({split.midwayPercent}%)
+            Proceed to Payment ({split.midwayPercent}% Initial Payment)
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       )}
 
+      {/* No percentage shown against Balance Against Delivery — it's
+          whatever's actually left, not a flat quoted slab. */}
       {booking.status === finalLegStatus &&
         booking.finalQuote &&
         booking.finalRequested &&
         typeof booking.finalPaid !== "number" && (
           <div className="mt-6 rounded-3xl bg-[#0b1220] p-6 text-white sm:p-8">
-            <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Final Payment</p>
+            <p className="text-xs font-bold tracking-wide text-slate-400 uppercase">Balance Against Delivery</p>
             <p className="mt-1 text-3xl font-extrabold">{formatINR(booking.remainingBalance ?? 0)}</p>
             <p className="mt-2 text-sm text-slate-300">
-              Your vehicle is out for delivery. Pay your remaining balance to complete the booking.
+              Your vehicle is out for delivery. Pay your balance against delivery to complete the booking.
             </p>
             <Link
               href={`/payment?bookingId=${booking.id}`}
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700"
             >
-              Proceed to Payment (Final Balance)
+              Proceed to Payment (Balance Against Delivery)
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

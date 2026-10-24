@@ -1,4 +1,5 @@
 import Image from "next/image";
+import BrandMark from "../../components/BrandMark";
 
 const NODES = [
   {
@@ -41,7 +42,10 @@ export default function GrowthChart() {
       <div className="mx-auto max-w-6xl">
         <p className="text-sm font-bold text-red-600">Growth Chart</p>
         <h2 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-          <span className="text-[#0b1e42]">CarCoolie&apos;s Growth Story, </span>
+          <span className="text-[#0b1e42]">
+            <BrandMark spaced={false} />
+            &apos;s Growth Story,{" "}
+          </span>
           <span className="text-red-600">Year by Year</span>
         </h2>
 

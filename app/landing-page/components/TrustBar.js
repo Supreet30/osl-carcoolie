@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useInView } from "motion/react";
 import { Calendar, Car, MapPin, ShieldCheck, Truck } from "lucide-react";
+import BrandMark from "../../components/BrandMark";
 
 const TRUST_STATS = [
   { icon: Calendar, target: 22, decimals: 0, prefix: "", suffix: "+", label: "Years Experience" },
@@ -84,7 +85,9 @@ export default function TrustBar() {
         className="relative mx-auto max-w-6xl text-center"
       >
         <p className="text-xs font-bold tracking-[0.2em] text-red-500 uppercase">Trusted Nationwide</p>
-        <h2 className="mt-3 text-3xl font-extrabold text-white sm:text-4xl">Car Coolie By The Numbers</h2>
+        <h2 className="mt-3 text-3xl font-extrabold text-white sm:text-4xl">
+          <BrandMark onDark /> By The Numbers
+        </h2>
 
         <div className="mt-14 grid grid-cols-2 gap-x-6 gap-y-12 sm:grid-cols-5 sm:gap-y-0 sm:divide-x sm:divide-white/10">
           {TRUST_STATS.map((stat, index) => (

@@ -59,7 +59,7 @@ export default function NewsletterBar() {
           <source media="(min-width: 1024px)" srcSet="/landing-page.png" />
           <img
             src="/mobile.png"
-            alt="OSL Car Coolie - Website Coming Soon"
+            alt="Car Coolie - Website Coming Soon"
             className="w-full h-auto"
           />
         </picture>

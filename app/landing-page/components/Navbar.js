@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LogOut, Settings, Truck, User } from "lucide-react";
 import { TABS } from "../../services/data/serviceTabs";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
@@ -29,13 +30,32 @@ function getAccountInitials(user) {
 // (landing page + contact page), so section links must route back to
 // /landing-page's anchors rather than trying to scroll within whatever
 // page currently renders the Navbar.
+// `activeMatch` lists the path prefixes that should light this link up red
+// (see isLinkActive below) — defaults to just `href` when omitted. Services
+// and Resources need more than that: their dropdown items live at routes
+// that aren't literally under /services or /resources (e.g. the individual
+// /services/[slug] pages still start with /services, but Resources' own
+// items — /blog, /case-studies, /faq — don't start with /resources at all).
 const NAV_LINKS = [
   { label: "Home", href: "/landing-page" },
-  { label: "Services", href: "/services", chevron: true, dropdown: "services" },
-  { label: "Resources", href: "/resources", chevron: true, dropdown: "resources" },
+  { label: "Services", href: "/services", chevron: true, dropdown: "services", activeMatch: ["/services"] },
+  {
+    label: "Resources",
+    href: "/resources",
+    chevron: true,
+    dropdown: "resources",
+    activeMatch: ["/resources", "/blog", "/case-studies", "/faq"],
+  },
   { label: "About Us", href: "/about-us" },
   { label: "Careers", href: "/careers" },
 ];
+
+// Exact match, or a real sub-route (pathname + "/") — not a bare substring
+// match, so e.g. "/services-foo" would never wrongly light up "Services".
+function isLinkActive(pathname, link) {
+  const prefixes = link.activeMatch ?? [link.href];
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 const SERVICES_HEADING = {
   label: "Services",
@@ -135,7 +155,7 @@ function ChevronRight({ className }) {
   );
 }
 
-function ResourcesDropdown({ open }) {
+function ResourcesDropdown({ open, pathname }) {
   return (
     <div
       className={`absolute left-1/2 top-full z-40 w-95 -translate-x-1/2 pt-3 transition-all duration-500 ${
@@ -159,25 +179,41 @@ function ResourcesDropdown({ open }) {
         </div>
 
         <ul className="divide-y divide-slate-100">
-          {RESOURCE_ITEMS.map((item) => (
-            <li key={item.label}>
-              <Link
-                href={item.href}
-                className="group/item flex items-center gap-4 rounded-2xl px-2 py-3 transition-colors hover:bg-slate-50"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
-                    {item.icon}
-                  </svg>
-                </span>
-                <span className="flex-1">
-                  <span className="block text-base font-extrabold text-[#0b1e42]">{item.label}</span>
-                  <span className="block text-sm text-slate-500">{item.description}</span>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover/item:text-red-600" />
-              </Link>
-            </li>
-          ))}
+          {RESOURCE_ITEMS.map((item) => {
+            const active = isLinkActive(pathname, { href: item.href });
+            return (
+              <li key={item.label}>
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`group/item flex items-center gap-4 rounded-2xl px-2 py-3 transition-colors hover:bg-slate-50 ${
+                    active ? "bg-slate-50" : ""
+                  }`}
+                >
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                      active ? "bg-red-600 text-white" : "bg-red-50 text-red-600"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
+                      {item.icon}
+                    </svg>
+                  </span>
+                  <span className="flex-1">
+                    <span className={`block text-base font-extrabold ${active ? "text-red-600" : "text-[#0b1e42]"}`}>
+                      {item.label}
+                    </span>
+                    <span className="block text-sm text-slate-500">{item.description}</span>
+                  </span>
+                  <ChevronRight
+                    className={`h-4 w-4 shrink-0 transition-colors group-hover/item:text-red-600 ${
+                      active ? "text-red-600" : "text-slate-300"
+                    }`}
+                  />
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="mt-1 flex items-center gap-3 rounded-2xl bg-red-50 p-3">
@@ -200,7 +236,7 @@ function ResourcesDropdown({ open }) {
   );
 }
 
-function ServicesDropdown({ open }) {
+function ServicesDropdown({ open, pathname }) {
   return (
     <div
       className={`absolute left-1/2 top-full z-40 w-140 -translate-x-1/2 pt-3 transition-all duration-500 ${
@@ -228,16 +264,22 @@ function ServicesDropdown({ open }) {
                 {group.heading}
               </p>
               <ul className="mt-1">
-                {group.links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="block rounded-xl px-2 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-red-600"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
+                {group.links.map((link) => {
+                  const active = isLinkActive(pathname, link);
+                  return (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        aria-current={active ? "page" : undefined}
+                        className={`block rounded-xl px-2 py-2 text-sm transition-colors hover:bg-slate-50 hover:text-red-600 ${
+                          active ? "bg-slate-50 font-semibold text-red-600" : "text-slate-600"
+                        }`}
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -264,6 +306,7 @@ function ServicesDropdown({ open }) {
 }
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(true);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -379,13 +422,20 @@ export default function Navbar() {
             >
               <Link
                 href={link.href}
-                className="flex items-center gap-1 transition-colors hover:text-red-600"
+                aria-current={isLinkActive(pathname, link) ? "page" : undefined}
+                className={`flex items-center gap-1 transition-colors hover:text-red-600 ${
+                  isLinkActive(pathname, link) ? "text-red-600" : ""
+                }`}
               >
                 {link.label}
                 {link.chevron && <ChevronDown className="h-4 w-4" />}
               </Link>
-              {link.dropdown === "resources" && <ResourcesDropdown open={openDropdown === "resources"} />}
-              {link.dropdown === "services" && <ServicesDropdown open={openDropdown === "services"} />}
+              {link.dropdown === "resources" && (
+                <ResourcesDropdown open={openDropdown === "resources"} pathname={pathname} />
+              )}
+              {link.dropdown === "services" && (
+                <ServicesDropdown open={openDropdown === "services"} pathname={pathname} />
+              )}
             </li>
           ))}
         </ul>
@@ -536,7 +586,8 @@ export default function Navbar() {
                 <Link
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-1 py-1"
+                  aria-current={isLinkActive(pathname, link) ? "page" : undefined}
+                  className={`flex items-center gap-1 py-1 ${isLinkActive(pathname, link) ? "text-red-600" : ""}`}
                 >
                   {link.label}
                   {link.chevron && <ChevronDown className="h-4 w-4" />}

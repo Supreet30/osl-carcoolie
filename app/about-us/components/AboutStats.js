@@ -1,3 +1,5 @@
+import BrandMark from "../../components/BrandMark";
+
 const STATS = [
   { value: "22+", label: "Years Of Excellence" },
   { value: "35L+", label: "Cars Delivered" },
@@ -9,9 +11,11 @@ export default function AboutStats() {
   return (
     <section className="bg-[#0b1e42] px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-5xl text-center">
-        <p className="text-sm font-semibold text-red-500">Car Coolie Logistics in Numbers</p>
+        <p className="text-sm font-semibold text-red-500">
+          <BrandMark onDark /> Logistics in Numbers
+        </p>
         <h2 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">
-          Car Coolie Logistics In Numbers
+          <BrandMark onDark /> Logistics In Numbers
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-base">
           Over 22 years of experience, 35L+ cars delivered, 27+ states covered and an 800+

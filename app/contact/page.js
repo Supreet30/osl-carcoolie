@@ -8,7 +8,7 @@ import ContactInfoBand from "./components/ContactInfoBand";
 export const metadata = {
   title: "Contact Us | Car Coolie",
   description:
-    "Get in touch with OSL Car Coolie for vehicle transport quotes, support, and logistics enquiries.",
+    "Get in touch with Car Coolie for vehicle transport quotes, support, and logistics enquiries.",
 };
 
 export default function ContactPage() {
